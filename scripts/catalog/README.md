@@ -14,7 +14,7 @@ Genera `catalog.json` y los 6 clips por canción (MP3 CBR 128 kbps, sin metadato
 Desde esta carpeta, con `npm run cli -- <subcomando>`:
 
 1. `fetch <playlistUrl>` lista la playlist (`data/work/playlist.json`) y descarga el audio nuevo a `data/work/` (no repite descargas).
-2. `draft` añade a `data/catalog.json` los vídeos nuevos, derivando juego y título del título del vídeo. Nunca pisa entradas existentes.
+2. `draft` añade a `data/catalog.json` los vídeos nuevos, derivando juego y título del título del vídeo. Formatos reconocidos: `Juego - Canción` y `Canción - Pokémon Juego Soundtrack` (o `OST`); el sufijo `Soundtrack`/`OST` se quita del nombre del juego. Nunca pisa entradas existentes: para regenerar un borrador sin revisar, borra `data/catalog.json` antes.
 3. **Revisión manual** de `data/catalog.json`: títulos, juegos, `startSec` (dónde empieza el fragmento), `enabled`. Un "juego" es un grupo de versiones con la misma banda sonora ("Ruby/Sapphire/Emerald" es uno). Las canciones sin juego reconocible quedan con `games: []` y hay que asignarlas a mano: hasta entonces `build`, `validate` y `upload` rechazan el catálogo.
 4. `build` genera `data/out/clips/<clipKey>/<1..6>.mp3` solo para canciones nuevas o cambiadas (`startSec` o fuente) y copia el catálogo a `data/out/catalog/catalog.json`, que es lo que lee el backend con `STORAGE_DRIVER=fs`.
 5. `validate` comprueba que hay 6 clips por canción activa, duraciones (de -30 ms a +60 ms sobre lo esperado: sin cabecera Xing, ffprobe mide ~40-50 ms de más; la cabecera Xing no se reactiva porque sería una huella por canción), ausencia de metadatos y que el tamaño en bytes coincide entre canciones para cada intento.

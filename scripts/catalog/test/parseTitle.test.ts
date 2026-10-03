@@ -46,6 +46,30 @@ describe('parseTitle', () => {
     expect(r.games.length).toBe(1)
   })
 
+  it('SC-PT-05 formato "Cancion - Pokemon Juego Soundtrack": el juego va al final', () => {
+    expect(parseTitle('Littleroot Town - Pokémon Ruby/Sapphire/Emerald Soundtrack')).toEqual({
+      title: 'Littleroot Town',
+      games: ['Pokémon Ruby/Sapphire/Emerald'],
+      needsReview: false,
+    })
+  })
+
+  it('SC-PT-05 juego al final con guion interno en la cancion conserva el titulo completo', () => {
+    expect(parseTitle('Battle! - Wild Pokémon - Pokémon X/Y OST').title).toBe('Battle! - Wild Pokémon')
+  })
+
+  it('SC-PT-05 cancion que menciona Pokemon con juego al final terminado en Soundtrack', () => {
+    expect(parseTitle('Wild Pokémon Battle - Pokémon Ruby/Sapphire/Emerald Soundtrack')).toEqual({
+      title: 'Wild Pokémon Battle',
+      games: ['Pokémon Ruby/Sapphire/Emerald'],
+      needsReview: false,
+    })
+  })
+
+  it('SC-PT-05 si el principio ya parece un juego, se mantiene el orden "Juego - Cancion"', () => {
+    expect(parseTitle('Pokemon X/Y - Lumiose City - Night').games).toEqual(['Pokemon X/Y'])
+  })
+
   it('SC-PT-03 sin separador: titulo completo, juego desconocido, marcado para revision', () => {
     expect(parseTitle('Una cancion sin formato')).toEqual({ title: 'Una cancion sin formato', games: [], needsReview: true })
   })
