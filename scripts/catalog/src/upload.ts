@@ -1,0 +1,66 @@
+import { createHash } from 'node:crypto'
+import { existsSync, readFileSync } from 'node:fs'
+import type { Catalog } from '../../../shared/catalog'
+import { CLIP_SECONDS } from '../../../shared/rules'
+import { clipOutputPath } from './ffmpegArgs'
+
+export interface ObjectStore {
+  list(prefix: string): Promise<Map<string, { md5: string }>>
+  put(key: string, body: Buffer): Promise<void>
+  delete(key: string): Promise<void>
+}
+
+const CLIPS_PREFIX = 'clips/'
+const CATALOG_KEY = 'catalog/catalog.json'
+
+const md5Of = (body: Buffer) => createHash('md5').update(body).digest('hex')
+
+/**
+ * Valida, sube solo los clips nuevos o cambiados (por md5: con CBR el tamano es siempre igual) y por
+ * ultimo catalog.json, de modo que el catalogo nunca apunta a clips sin subir. Con `prune`, borra
+ * despues los clips remotos que ya no pertenecen a ninguna cancion activa. Nunca toca data/work/.
+ * OJO: el backend conserva el catalogo viejo en memoria hasta reiniciarse, asi que `prune` debe
+ * ejecutarse DESPUES de reiniciarlo (si no, puede servir clips ya borrados -> STORAGE_ERROR).
+ */
+export async function runUpload(options: {
+  catalog: Catalog
+  outDir: string
+  store: ObjectStore
+  validate: () => Promise<{ ok: boolean; errors: string[] }>
+  prune?: boolean
+}): Promise<{ uploaded: string[]; deleted: string[] }> {
+  const validation = await options.validate()
+  if (!validation.ok) {
+    throw new Error(`La validacion ha fallado, no se sube nada:\n${validation.errors.join('\n')}`)
+  }
+
+  const remote = await options.store.list(CLIPS_PREFIX)
+  const uploaded: string[] = []
+  const wantedKeys = new Set<string>()
+
+  for (const song of options.catalog.songs.filter((candidate) => candidate.enabled)) {
+    for (let clipNumber = 1; clipNumber <= CLIP_SECONDS.length; clipNumber++) {
+      const key = `${CLIPS_PREFIX}${song.clipKey}/${clipNumber}.mp3`
+      wantedKeys.add(key)
+      const localFile = clipOutputPath(options.outDir, song.clipKey, clipNumber)
+      if (!existsSync(localFile)) throw new Error(`Falta el clip local ${key}`)
+      const body = readFileSync(localFile)
+      if (remote.get(key)?.md5 === md5Of(body)) continue
+      await options.store.put(key, body)
+      uploaded.push(key)
+    }
+  }
+
+  await options.store.put(CATALOG_KEY, Buffer.from(JSON.stringify(options.catalog)))
+  uploaded.push(CATALOG_KEY)
+
+  const deleted: string[] = []
+  if (options.prune) {
+    for (const key of remote.keys()) {
+      if (!key.startsWith(CLIPS_PREFIX) || wantedKeys.has(key)) continue
+      await options.store.delete(key)
+      deleted.push(key)
+    }
+  }
+  return { uploaded, deleted }
+}

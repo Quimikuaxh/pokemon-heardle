@@ -1,0 +1,94 @@
+export interface RateLimitConfig {
+  global: number
+  createGame: number
+  action: number
+  clips: number
+  perGame: number
+}
+
+export interface Config {
+  port: number
+  nodeEnv: string
+  allowedOrigin: string
+  gameTokenSecret: string
+  dailySeed: string
+  storageDriver: 'fs' | 's3'
+  storageDir: string
+  storageBucket?: string
+  storageS3Endpoint?: string
+  storageS3Region?: string
+  storageS3AccessKeyId?: string
+  storageS3SecretAccessKey?: string
+  clipTicketTtlSec: number
+  clipCacheMb: number
+  trustProxy: number
+  rateLimit: RateLimitConfig
+}
+
+type Env = Record<string, string | undefined>
+
+const MIN_SECRET_BYTES = 32
+
+function readInt(env: Env, name: string, fallback: number, min = 0): number {
+  const raw = env[name]
+  if (raw === undefined || raw === '') return fallback
+  const value = Number(raw)
+  if (!Number.isInteger(value) || value < min) throw new Error(`${name} debe ser un entero >= ${min}`)
+  return value
+}
+
+function requireValue(env: Env, name: string): string {
+  const value = env[name]
+  if (!value) throw new Error(`Falta la variable de entorno ${name}`)
+  return value
+}
+
+// Los mensajes de error nombran la variable, nunca su valor.
+export function loadConfig(env: Env): Config {
+  const gameTokenSecret = requireValue(env, 'GAME_TOKEN_SECRET')
+  if (Buffer.from(gameTokenSecret, 'base64').length < MIN_SECRET_BYTES) {
+    throw new Error(`GAME_TOKEN_SECRET debe tener al menos ${MIN_SECRET_BYTES} bytes en base64`)
+  }
+  const dailySeed = requireValue(env, 'DAILY_SEED')
+
+  const storageDriver = env.STORAGE_DRIVER ?? 'fs'
+  if (storageDriver !== 'fs' && storageDriver !== 's3') {
+    throw new Error('STORAGE_DRIVER debe ser "fs" o "s3"')
+  }
+  if (storageDriver === 's3') {
+    for (const name of [
+      'STORAGE_BUCKET',
+      'STORAGE_S3_ENDPOINT',
+      'STORAGE_S3_REGION',
+      'STORAGE_S3_ACCESS_KEY_ID',
+      'STORAGE_S3_SECRET_ACCESS_KEY',
+    ]) {
+      requireValue(env, name)
+    }
+  }
+
+  return {
+    port: readInt(env, 'PORT', 3002),
+    nodeEnv: env.NODE_ENV ?? 'development',
+    allowedOrigin: env.ALLOWED_ORIGIN || 'http://localhost:5173',
+    gameTokenSecret,
+    dailySeed,
+    storageDriver,
+    storageDir: env.STORAGE_DIR || '../scripts/catalog/data/out',
+    storageBucket: env.STORAGE_BUCKET,
+    storageS3Endpoint: env.STORAGE_S3_ENDPOINT,
+    storageS3Region: env.STORAGE_S3_REGION,
+    storageS3AccessKeyId: env.STORAGE_S3_ACCESS_KEY_ID,
+    storageS3SecretAccessKey: env.STORAGE_S3_SECRET_ACCESS_KEY,
+    clipTicketTtlSec: readInt(env, 'CLIP_TICKET_TTL_SEC', 60),
+    clipCacheMb: readInt(env, 'CLIP_CACHE_MB', 32),
+    trustProxy: readInt(env, 'TRUST_PROXY', 1),
+    rateLimit: {
+      global: readInt(env, 'RATE_LIMIT_GLOBAL', 120, 1),
+      createGame: readInt(env, 'RATE_LIMIT_CREATE_GAME', 20, 1),
+      action: readInt(env, 'RATE_LIMIT_ACTION', 40, 1),
+      clips: readInt(env, 'RATE_LIMIT_CLIPS', 30, 1),
+      perGame: readInt(env, 'RATE_LIMIT_PER_GAME', 12, 1),
+    },
+  }
+}

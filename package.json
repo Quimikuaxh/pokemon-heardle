@@ -1,0 +1,16 @@
+{
+  "name": "pokemon-heardle",
+  "private": true,
+  "version": "0.0.0",
+  "scripts": {
+    "install:all": "npm install && npm --prefix shared install && npm --prefix backend install && npm --prefix frontend install && npm --prefix scripts/catalog install",
+    "test": "npm --prefix shared test && npm --prefix backend test && npm --prefix scripts/catalog test && npm --prefix frontend test",
+    "typecheck": "npm --prefix shared run typecheck && npm --prefix backend run typecheck && npm --prefix scripts/catalog run typecheck",
+    "build": "npm run typecheck && npm --prefix frontend run build",
+    "dev": "concurrently -n backend,frontend -c blue,green \"npm --prefix backend run dev\" \"npm --prefix frontend run dev\"",
+    "e2e": "npm --prefix e2e test"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  }
+}

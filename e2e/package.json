@@ -1,0 +1,19 @@
+{
+  "name": "pokemon-heardle-e2e",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "fixtures": "node scripts/generate-fixtures.mjs",
+    "test": "playwright test",
+    "test:chromium": "playwright test --project=chromium",
+    "browsers": "playwright install chromium firefox webkit",
+    "test:no-webkit": "playwright test --project=chromium --project=firefox"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.55.0",
+    "@types/node": "^25.5.0",
+    "lamejs": "^1.2.1",
+    "typescript": "^5.9.0"
+  }
+}

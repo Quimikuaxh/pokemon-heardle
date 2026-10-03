@@ -1,0 +1,21 @@
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+
+# Entorno: secretos fuera del repo (el ejemplo si se versiona)
+.env
+.env.*
+!.env.example
+
+# Originales, clips y catalogo local: nunca al repo (REQUISITOS 4, ARQUITECTURA 12)
+scripts/catalog/data/
+*.mp3
+!e2e/fixtures/**/*.mp3
+
+# E2E
+e2e/test-results/
+e2e/playwright-report/
+
+# E2E: caches de Vite por instancia
+e2e/.vite-cache-*/

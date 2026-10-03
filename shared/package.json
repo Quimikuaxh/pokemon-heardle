@@ -1,0 +1,16 @@
+{
+  "name": "pokemon-heardle-shared",
+  "private": true,
+  "version": "0.0.0",
+  "description": "TS puro sin dependencias de runtime; se importa por ruta relativa. Aqui solo viven sus tests.",
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^25.5.0",
+    "typescript": "^6.0.2",
+    "vitest": "^4.1.10"
+  }
+}
