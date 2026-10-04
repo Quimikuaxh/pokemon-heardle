@@ -778,6 +778,7 @@ Interfaz:
 | FE-SRC-14 | unit | Marcado por `songId` | Dos del mismo juego | Solo la intentada | DEC-18 | M |
 | FE-SRC-15 | unit | Tras skip no se marca; tras guess se añade | - | Correcto | DEC-18 | M |
 | FE-SRC-16 [NUEVO] | unit | Juego y texto a la vez: "ruby town" devuelve las canciones de Ruby con "town"; "ruby twinleaf" no devuelve nada | `mkCatalog()` | Según caso | DEC-17 | A |
+| FE-SRC-17 [NUEVO] | unit | Teclado en el buscador: ↓ sin activa va a la primera, ↑ sin activa a la última, ambas dan la vuelta; la opción activa se desplaza a la vista (`scrollIntoView({block:"nearest"})`) | `mkCatalog()`, búsqueda "town" | Opción activa y scroll correctos | RQ §6 (accesibilidad) | M |
 | FE-SHR-01 [RETIRADO] | - | Retirado: compartir/estadísticas eliminados (decisión 2026-10-04, ver §0.1) | - | - | - | - |
 | FE-SHR-02 [RETIRADO] | - | Retirado: compartir/estadísticas eliminados (decisión 2026-10-04, ver §0.1) | - | - | - | - |
 | FE-SHR-03 [RETIRADO] | - | Retirado: compartir/estadísticas eliminados (decisión 2026-10-04, ver §0.1) | - | - | - | - |

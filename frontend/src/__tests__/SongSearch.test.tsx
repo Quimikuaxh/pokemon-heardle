@@ -57,6 +57,38 @@ describe('components/SongSearch', () => {
     expect(onSelect).not.toHaveBeenCalled()
   })
 
+  it('FE-SRC-17 flechas: abajo empieza por la primera, arriba por la ultima y ambas dan la vuelta', () => {
+    const { type, input } = setup()
+    type('town')
+    const options = () => screen.getAllByRole('option')
+    const active = () => options().find((o) => o.getAttribute('aria-selected') === 'true')?.textContent
+    fireEvent.keyDown(input, { key: 'ArrowUp' })
+    expect(active()).toBe(options()[options().length - 1].textContent)
+    fireEvent.keyDown(input, { key: 'ArrowDown' })
+    expect(active()).toBe(options()[0].textContent)
+    fireEvent.keyDown(input, { key: 'ArrowDown' })
+    expect(active()).toBe(options()[1].textContent)
+    fireEvent.keyDown(input, { key: 'ArrowUp' })
+    expect(active()).toBe(options()[0].textContent)
+  })
+
+  it('FE-SRC-17 la opcion activa por teclado se desplaza a la vista (scrollIntoView nearest)', () => {
+    const scrollIntoView = vi.fn()
+    const original = Element.prototype.scrollIntoView
+    Element.prototype.scrollIntoView = scrollIntoView
+    try {
+      const { type, input } = setup()
+      type('town')
+      fireEvent.keyDown(input, { key: 'ArrowDown' })
+      fireEvent.keyDown(input, { key: 'ArrowDown' })
+      expect(scrollIntoView).toHaveBeenCalledTimes(2)
+      expect(scrollIntoView).toHaveBeenLastCalledWith({ block: 'nearest' })
+      expect(scrollIntoView.mock.contexts.at(-1)).toBe(screen.getAllByRole('option')[1])
+    } finally {
+      Element.prototype.scrollIntoView = original
+    }
+  })
+
   it('FE-SRC-13 una cancion intentada sigue visible al buscar su titulo', () => {
     const { type } = setup(['rse-oldale-town'])
     type('oldale town')

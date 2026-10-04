@@ -1,4 +1,4 @@
-import { useId, useMemo, useState } from 'react'
+import { useEffect, useId, useMemo, useState } from 'react'
 import type { KeyboardEvent } from 'react'
 import type { PublicCatalog } from '../../../shared/api'
 import { searchSongs } from '../game/search'
@@ -26,6 +26,12 @@ export function SongSearch({ catalog, guesses, disabled = false, readOnly = fals
   const selectable = results.filter((song) => !attempted.has(song.id))
   const isOpen = query.trim().length > 0
 
+  // La opcion activa por teclado siempre queda visible dentro de la lista con scroll.
+  useEffect(() => {
+    if (!activeId) return
+    document.getElementById(`${listId}-${activeId}`)?.scrollIntoView?.({ block: 'nearest' })
+  }, [activeId, listId])
+
   const choose = (songId: string) => {
     if (disabled || readOnly || attempted.has(songId)) return
     onSelect(songId)
@@ -39,7 +45,8 @@ export function SongSearch({ catalog, guesses, disabled = false, readOnly = fals
       if (selectable.length === 0) return
       const current = selectable.findIndex((song) => song.id === activeId)
       const step = event.key === 'ArrowDown' ? 1 : -1
-      const next = (current + step + selectable.length) % selectable.length
+      const next =
+        current === -1 ? (step === 1 ? 0 : selectable.length - 1) : (current + step + selectable.length) % selectable.length
       setActiveId(selectable[next].id)
     } else if (event.key === 'Enter') {
       event.preventDefault()
