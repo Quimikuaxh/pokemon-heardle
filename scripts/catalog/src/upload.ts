@@ -1,7 +1,6 @@
 import { createHash } from 'node:crypto'
 import { existsSync, readFileSync } from 'node:fs'
 import type { Catalog } from '../../../shared/catalog'
-import { CLIP_SECONDS } from '../../../shared/rules'
 import { clipOutputPath } from './ffmpegArgs'
 
 export interface ObjectStore {
@@ -11,6 +10,7 @@ export interface ObjectStore {
 }
 
 const CLIPS_PREFIX = 'clips/'
+const remoteClipKey = (clipKey: string) => `${CLIPS_PREFIX}${clipKey}.mp3`
 const CATALOG_KEY = 'catalog/catalog.json'
 
 const md5Of = (body: Buffer) => createHash('md5').update(body).digest('hex')
@@ -39,16 +39,14 @@ export async function runUpload(options: {
   const wantedKeys = new Set<string>()
 
   for (const song of options.catalog.songs.filter((candidate) => candidate.enabled)) {
-    for (let clipNumber = 1; clipNumber <= CLIP_SECONDS.length; clipNumber++) {
-      const key = `${CLIPS_PREFIX}${song.clipKey}/${clipNumber}.mp3`
-      wantedKeys.add(key)
-      const localFile = clipOutputPath(options.outDir, song.clipKey, clipNumber)
-      if (!existsSync(localFile)) throw new Error(`Falta el clip local ${key}`)
-      const body = readFileSync(localFile)
-      if (remote.get(key)?.md5 === md5Of(body)) continue
-      await options.store.put(key, body)
-      uploaded.push(key)
-    }
+    const key = remoteClipKey(song.clipKey)
+    wantedKeys.add(key)
+    const localFile = clipOutputPath(options.outDir, song.clipKey)
+    if (!existsSync(localFile)) throw new Error(`Falta el clip local ${key}; ejecuta build`)
+    const body = readFileSync(localFile)
+    if (remote.get(key)?.md5 === md5Of(body)) continue
+    await options.store.put(key, body)
+    uploaded.push(key)
   }
 
   await options.store.put(CATALOG_KEY, Buffer.from(JSON.stringify(options.catalog)))

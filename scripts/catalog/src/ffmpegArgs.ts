@@ -23,8 +23,12 @@ export function masterArgs(options: { input: string; startSec: number; output: s
   ]
 }
 
-export function clipArgs(options: { input: string; seconds: number; output: string }): string[] {
-  const fadeStart = Math.max(0, options.seconds - FADE_OUT_SECONDS)
+/**
+ * UN clip de 16 s por cancion (DEC-44): MP3 CBR sin bit reservoir (cada trama es autocontenida, asi un prefijo
+ * cortado en limite de trama no arrastra audio posterior) y con el unico fundido de 50 ms al final del fichero.
+ * El fundido de cada intento lo hace el navegador (DEC-45).
+ */
+export function clipArgs(options: { input: string; output: string }): string[] {
   return [
     '-y',
     '-fflags',
@@ -32,13 +36,15 @@ export function clipArgs(options: { input: string; seconds: number; output: stri
     '-i',
     options.input,
     '-t',
-    String(options.seconds),
+    String(MASTER_SECONDS),
     '-af',
-    `afade=t=out:st=${Number(fadeStart.toFixed(3))}:d=${FADE_OUT_SECONDS}`,
+    `afade=t=out:st=${Number((MASTER_SECONDS - FADE_OUT_SECONDS).toFixed(3))}:d=${FADE_OUT_SECONDS}`,
     '-c:a',
     'libmp3lame',
     '-b:a',
     '128k',
+    '-reservoir',
+    '0',
     '-ac',
     '2',
     '-ar',
@@ -53,6 +59,6 @@ export function clipArgs(options: { input: string; seconds: number; output: stri
   ]
 }
 
-export function clipOutputPath(outDir: string, clipKey: string, clipNumber: number): string {
-  return join(outDir, clipKey, `${clipNumber}.mp3`)
+export function clipOutputPath(outDir: string, clipKey: string): string {
+  return join(outDir, `${clipKey}.mp3`)
 }

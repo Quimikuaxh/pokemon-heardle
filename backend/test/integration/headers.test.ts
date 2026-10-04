@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach } from 'vitest'
 import { startTestApp, closeAllTestApps, codeOf } from '../helpers/app'
-import { makeClip, CLIP_SECONDS } from '../helpers/fixtures'
+import { makeClip, OFFSETS } from '../helpers/fixtures'
 
 afterEach(closeAllTestApps)
 
@@ -16,7 +16,8 @@ describe('GET /api/clips/:ticket', () => {
   it('BE-HDR-01 Content-Type audio/mpeg y Content-Length real', async () => {
     const { app, g } = await gameC()
     const r = await app.clip(g.json.clipUrl)
-    expect([r.status, r.headers.get('content-type'), r.headers.get('content-length')]).toEqual([200, 'audio/mpeg', String(r.raw.length)])
+    expect([r.status, r.headers.get('content-type'), r.headers.get('content-length')]).toEqual([200, 'audio/mpeg', String(OFFSETS[0])])
+    expect(r.raw.length).toBe(OFFSETS[0])
   })
 
   it('BE-HDR-01 Cache-Control no-store, private', async () => {
@@ -41,12 +42,13 @@ describe('GET /api/clips/:ticket', () => {
   it('BE-HDR-06 Range en /clips: 200 completo, sin 206', async () => {
     const { app, g } = await gameC()
     const r = await app.clip(g.json.clipUrl, { Range: 'bytes=0-99' })
-    expect([r.status, r.raw.length]).toEqual([200, CLIP_SECONDS[0] * 16000])
+    expect([r.status, r.raw.length, r.raw.equals(makeClip(C_KEY).subarray(0, OFFSETS[0]))]).toEqual([200, OFFSETS[0], true])
   })
 
-  it('BE-HDR-06 If-None-Match en /clips: 200 completo, sin 304', async () => {
+  it('BE-HDR-06 If-None-Match en /clips: 200 con el prefijo completo, sin 304', async () => {
     const { app, g } = await gameC()
-    expect((await app.clip(g.json.clipUrl, { 'If-None-Match': '*' })).status).toBe(200)
+    const r = await app.clip(g.json.clipUrl, { 'If-None-Match': '*' })
+    expect([r.status, r.raw.length]).toEqual([200, OFFSETS[0]])
   })
 
   it('BE-HDR-07 segunda peticion al mismo ticket -> 410 CLIP_TICKET_USED', async () => {
@@ -84,28 +86,44 @@ describe('GET /api/clips/:ticket', () => {
     expect(codeOf(await app.clip('/api/clips/' + g.json.token))).toBe('CLIP_TICKET_INVALID')
   })
 
-  it('BE-HDR-10 el clip se sirve sin transformar y no empieza por ID3', async () => {
+  it('BE-HDR-10 el cuerpo es exactamente fichero.subarray(0, offset) y no hay ID3 ni Xing/Info', async () => {
     const { app, g } = await gameC()
     const r = await app.clip(g.json.clipUrl)
-    expect([r.raw.subarray(0, 3).toString('latin1') === 'ID3', r.raw.equals(makeClip(C_KEY, 1))]).toEqual([false, true])
+    expect(r.raw.equals(makeClip(C_KEY).subarray(0, OFFSETS[0]))).toBe(true)
+    expect(r.raw.subarray(0, 3).toString('latin1')).not.toBe('ID3')
+    expect(r.raw.includes(Buffer.from('Xing'))).toBe(false)
+    expect(r.raw.includes(Buffer.from('Info'))).toBe(false)
   })
 
-  it('BE-HDR-11 y BE-TKT-11 el intento N sirve el clip N+1: duracion CLIP_SECONDS[N] (tamano = s*16000)', async () => {
+  it('BE-HDR-11 y BE-TKT-11 el intento N sirve exactamente CLIP_BYTE_OFFSETS[N] bytes (16.300 ... 256.626)', async () => {
     const { app, g } = await gameC()
     let view = g.json
+    const sizes: number[] = []
     for (let n = 0; n < 6; n++) {
       const r = await app.clip(view.clipUrl)
-      expect(r.raw.length, `intento ${n}`).toBe(CLIP_SECONDS[n] * 16000)
-      expect(r.raw.equals(makeClip(C_KEY, n + 1)), `contenido intento ${n}`).toBe(true)
+      sizes.push(r.raw.length)
+      expect(r.headers.get('content-length'), `intento ${n}`).toBe(String(OFFSETS[n]))
       if (n < 5) view = (await app.skip(view.token)).json
+    }
+    expect(sizes).toEqual(OFFSETS)
+  })
+
+  it('BE-HDR-11 cada offset servido cae en una cabecera de trama (FF FB) del fichero', async () => {
+    const { app, g } = await gameC()
+    let view = g.json
+    for (let n = 0; n < 5; n++) {
+      const full = makeClip(C_KEY)
+      expect([full[OFFSETS[n]], full[OFFSETS[n] + 1]], `offset ${n}`).toEqual([0xff, 0xfb])
+      expect((await app.clip(view.clipUrl)).raw.length).toBe(OFFSETS[n])
+      view = (await app.skip(view.token)).json
     }
   })
 
-  it('BE-TKT-09 con 2 resultados el ticket emitido es del intento 3 (a=2): clip de 4 s', async () => {
+  it('BE-TKT-09 con 2 resultados el ticket emitido es del intento 3 (a=2): prefijo de 64.365 bytes', async () => {
     const { app, g } = await gameC()
     const s1 = await app.skip(g.json.token)
     const s2 = await app.skip(s1.json.token)
-    expect((await app.clip(s2.json.clipUrl)).raw.length).toBe(4 * 16000)
+    expect((await app.clip(s2.json.clipUrl)).raw.length).toBe(OFFSETS[2])
   })
 
   it('BE-TKT-10 no hay clipUrl en partida terminada (ganada)', async () => {
@@ -125,6 +143,40 @@ describe('GET /api/clips/:ticket', () => {
     })
     const r = await app.clip(g.json.clipUrl)
     expect([r.status, codeOf(r), r.text.includes('secret-internal-path')]).toEqual([502, 'STORAGE_ERROR', false])
+  })
+
+  it('BE-HDR-12 el ticket NO se consume: tras recuperarse el almacen el mismo ticket funciona (200 con el prefijo)', async () => {
+    let failing = true
+    const { app, g } = await gameC({
+      wrapStore: (inner: any) => ({
+        getCatalog: () => inner.getCatalog(),
+        getClip: async (k: string) => {
+          if (failing) throw new Error('bucket caido')
+          return inner.getClip(k)
+        },
+      }),
+    })
+    expect((await app.clip(g.json.clipUrl)).status).toBe(502)
+    failing = false
+    const retry = await app.clip(g.json.clipUrl)
+    expect([retry.status, retry.raw.length]).toEqual([200, OFFSETS[0]])
+  })
+
+  it('BE-HDR-12 formato invalido del clip (tamano distinto) tambien es 502 STORAGE_ERROR sin consumir el ticket', async () => {
+    let broken = true
+    const { app, g } = await gameC({
+      wrapStore: (inner: any) => ({
+        getCatalog: () => inner.getCatalog(),
+        getClip: async (k: string) => {
+          const good = await inner.getClip(k)
+          return broken ? good.subarray(0, good.length - 1) : good
+        },
+      }),
+    })
+    const bad = await app.clip(g.json.clipUrl)
+    expect([bad.status, codeOf(bad)]).toEqual([502, 'STORAGE_ERROR'])
+    broken = false
+    expect((await app.clip(g.json.clipUrl)).status).toBe(200)
   })
 })
 

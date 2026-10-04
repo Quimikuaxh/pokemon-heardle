@@ -31,6 +31,10 @@ export class LruCache {
     this.totalBytes += value.length
   }
 
+  delete(key: string): void {
+    this.remove(key)
+  }
+
   private remove(key: string): void {
     const existing = this.entries.get(key)
     if (existing === undefined) return

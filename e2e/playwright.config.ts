@@ -1,7 +1,7 @@
 import { defineConfig, devices } from '@playwright/test'
 import type { PlaywrightTestConfig } from '@playwright/test'
 import { join } from 'node:path'
-import { DAILY_SEED, E2E_DIR, GAME_TOKEN_SECRET, VARIANTS, baseUrl } from './support/env.ts'
+import { DAILY_SEED, E2E_DIR, GAME_TOKEN_SECRET, VARIANTS, X_STORE_COPY, baseUrl } from './support/env.ts'
 import type { Variant } from './support/env.ts'
 
 const noLimits = {
@@ -29,7 +29,7 @@ const servers = (Object.keys(VARIANTS) as Variant[]).flatMap((name): Server[] =>
         GAME_TOKEN_SECRET,
         DAILY_SEED,
         STORAGE_DRIVER: 'fs',
-        STORAGE_DIR: join(E2E_DIR, 'fixtures', v.store),
+        STORAGE_DIR: v.store === 'X' ? X_STORE_COPY : join(E2E_DIR, 'fixtures', v.store),
         ALLOWED_ORIGIN: baseUrl(name),
         ...v.env,
       },
@@ -47,6 +47,8 @@ const servers = (Object.keys(VARIANTS) as Variant[]).flatMap((name): Server[] =>
 
 // E2E-44: matriz de navegadores reducida a los casos de humo, fuga e intento repetido.
 const CROSS_BROWSER = /E2E-(01|02|26|45|50|54)_/
+// E2E-74 (fundido) y E2E-76 no aplican a Firefox; WebKit lo ejecuta ademas de Chromium.
+const WEBKIT_ONLY_EXTRA = /E2E-(01|02|26|45|50|54|74)_/
 
 export default defineConfig({
   testDir: './tests',
@@ -63,7 +65,7 @@ export default defineConfig({
   projects: [
     { name: 'chromium', use: { ...devices['Desktop Chrome'] }, grepInvert: /@mobile/ },
     { name: 'firefox', use: { ...devices['Desktop Firefox'] }, grep: CROSS_BROWSER },
-    { name: 'webkit', use: { ...devices['Desktop Safari'] }, grep: CROSS_BROWSER },
+    { name: 'webkit', use: { ...devices['Desktop Safari'] }, grep: WEBKIT_ONLY_EXTRA },
     { name: 'webkit-iphone', use: { ...devices['iPhone 13'] }, grep: /@mobile/ },
   ],
 })

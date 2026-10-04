@@ -1,6 +1,6 @@
 # Pokemon Heardle - Arquitectura
 
-Estado: version inicial implementada (main). Iteracion `feature/admin-catalogo` (DEC-36 a DEC-43, seccion 6.1; DEC-27 retirada) definida; sin preguntas abiertas. Requisitos en `REQUISITOS.md` (las decisiones de su seccion 9 no se reabren aqui).
+Estado: version inicial implementada (main). Iteracion `feature/admin-catalogo` (DEC-36 a DEC-43, seccion 6.1; DEC-27 retirada) definida. Cambio "un solo clip por cancion" (DEC-44) y fundido en el navegador (DEC-45) definidos; sin preguntas abiertas. Requisitos en `REQUISITOS.md` (las decisiones de su seccion 9 no se reabren aqui).
 Las preguntas de la version inicial (credencial del bucket; buscador y "juego acertado") se confirmaron el 2026-10-03.
 
 ## 1. Vision general
@@ -10,7 +10,7 @@ Las preguntas de la version inicial (credencial del bucket; buscador y "juego ac
  React + Vite + TS                  Node + TS + Express 5                    Storage, bucket PRIVADO `heardle-audio`
  ┌──────────────────┐  HTTPS/JSON   ┌─────────────────────────────┐  S3 API  ┌──────────────────────────────┐
  │ UI juego         │ ────────────▶ │ /api/games  (token cifrado) │ ───────▶ │ catalog/catalog.json         │
- │ localStorage:    │               │ /api/clips/:ticket (audio)  │          │ clips/<clipKey>/<1..6>.mp3   │
+ │ localStorage:    │               │ /api/clips/:ticket (audio)  │          │ clips/<clipKey>.mp3          │
  │ filtro, token,   │ ◀──────────── │ catalogo en memoria         │          └──────────────────────────────┘
  │ partida diaria   │  audio/mpeg   │ cache LRU de clips          │                         ▲
  └──────────────────┘               └─────────────────────────────┘                         │ upload
@@ -19,7 +19,7 @@ Las preguntas de la version inicial (credencial del bucket; buscador y "juego ac
 ```
 
 - Sin base de datos. El estado de cada partida viaja en un **token cifrado y autenticado** (AES-256-GCM) que solo el servidor puede leer.
-- El audio se precorta offline (6 clips por cancion) y se sirve solo a traves del backend, con URL de un solo uso.
+- El audio se precorta offline (un clip de 16 s por cancion, servido por prefijos, DEC-44) y se sirve solo a traves del backend, con URL de un solo uso.
 - El backend carga `catalog.json` del bucket al arrancar y lo mantiene en memoria.
 
 ## 2. Estructura del repositorio (monorepo, sin workspaces, como claude-test)
@@ -31,7 +31,7 @@ pokemon-heardle/
   shared/                     TS puro sin dependencias, importado por ruta relativa
     api.ts                    DTOs de la API (peticiones, respuestas, codigos de error)
     catalog.ts                tipos de catalog.json + validador (lo usan backend y script)
-    rules.ts                  constantes de juego: CLIP_SECONDS = [1,2,4,7,11,16], MAX_ATTEMPTS = 6
+    rules.ts                  constantes de juego: CLIP_SECONDS = [1,2,4,7,11,16], MAX_ATTEMPTS = 6, y del formato del clip unico: CLIP_FRAME_COUNTS, CLIP_BYTE_OFFSETS, CLIP_TOTAL_BYTES (DEC-44)
     date.ts                   fecha de hoy en Europe/Madrid (la usan backend y frontend, DEC-09 y AR 7)
   backend/
     package.json tsconfig.json vitest.config.ts Dockerfile (opcional, portabilidad)
@@ -75,17 +75,17 @@ Justificacion: GCM es un cifrado de flujo, la longitud del cifrado = longitud de
 
 DEC-04: **URL de clip de un solo uso mediante ticket cifrado + registro en memoria de tickets usados.**
 Alternativa: enviar el token en un POST y devolver el audio (sin URL de un solo uso).
-Justificacion: cumple literalmente el requisito 2. El ticket (cifrado, padding fijo, TTL 60 s) contiene `clipKey`, numero de intento y nonce. El nonce usado se guarda en memoria hasta su expiracion; si Render reinicia se pierde, pero el TTL acota la ventana. El cliente pide un ticket nuevo via `POST /api/games/state` si lo necesita.
+Justificacion: cumple literalmente el requisito 2. El ticket (cifrado, padding fijo, TTL 60 s) contiene `clipKey`, numero de intento y nonce; el numero de intento decide que prefijo del clip unico se sirve (DEC-44). El nonce usado se guarda en memoria hasta su expiracion; si Render reinicia se pierde, pero el TTL acota la ventana. El cliente pide un ticket nuevo via `POST /api/games/state` si lo necesita.
 
 DEC-05: **El frontend descarga el clip con `fetch` a un Blob y lo reproduce desde `URL.createObjectURL`.**
 Alternativa: `<audio src="/api/clips/...">` directo.
 Justificacion: Safari iOS hace varias peticiones Range sobre un `<audio src>`, lo que rompe una URL de un solo uso. Con Blob hay una sola peticion, se puede repetir el clip sin red y se muestra un indicador de carga. El clip se precarga en cuanto empieza el intento, de modo que `audio.play()` se llama sincronamente dentro del gesto del usuario (requisito de autoplay en iOS).
 
-DEC-06: **Clips MP3 CBR 128 kbps estereo, 44.1 kHz, sin ID3 ni cabecera Xing/LAME, normalizados con `loudnorm`.**
+DEC-06: **Un clip MP3 por cancion: 16 s, CBR 128 kbps estereo, 44.1 kHz, sin ID3 ni cabecera Xing/LAME, sin bit reservoir (`-reservoir 0`), normalizado con `loudnorm`; el intento N se sirve como prefijo del fichero (DEC-44).**
 Alternativas: Opus/WebM (sin soporte en iOS antiguos), AAC/M4A (contenedor con mas metadatos), MP3 VBR.
-Justificacion: MP3 es universal. CBR hace que el tamano del clip dependa solo de su duracion, no de la cancion; con VBR el `Content-Length` seria una huella por cancion. El script **verifica** que todos los clips de un mismo intento tienen exactamente el mismo tamano en bytes y falla si no. Presupuesto: ~660 KB por cancion (ver DEC-16). Descartado: 64 kbps mono (~330 KB/cancion): el usuario prioriza la calidad del audio sobre el espacio.
+Justificacion: MP3 es universal. CBR hace que el tamano dependa solo de la duracion, no de la cancion; con VBR el `Content-Length` seria una huella por cancion. Con el clip unico la garantia se mantiene por construccion: todos los ficheros miden `CLIP_TOTAL_BYTES` y cada intento se corta en el mismo offset (DEC-44); `validate` lo verifica. Presupuesto: ~250 KB por cancion (ver DEC-16). Descartado: 64 kbps mono (~330 KB/cancion): el usuario prioriza la calidad del audio sobre el espacio.
 
-DEC-07: **Nombres en el bucket opacos**: `clips/<clipKey>/<n>.mp3`, con `clipKey` = 16 hex aleatorios generados una vez por cancion y fijos en `catalog.json`.
+DEC-07: **Nombres en el bucket opacos**: `clips/<clipKey>.mp3` (antes `clips/<clipKey>/<n>.mp3`, DEC-44), con `clipKey` = 16 hex aleatorios generados una vez por cancion y fijos en `catalog.json`.
 Justificacion: el cliente nunca ve rutas, pero si el bucket se hiciera publico por error los nombres no delatarian la cancion. Bucket dedicado `heardle-audio` dentro del proyecto Supabase de claude-test (decision cerrada en REQUISITOS 9).
 
 DEC-08: **Acceso al bucket con claves S3 de Supabase Storage** (protocolo S3-compatible de Supabase; cliente `@aws-sdk/client-s3` apuntando al endpoint de Supabase, sin cuenta ni servicios de AWS). Bucket privado `heardle-audio` en el MISMO proyecto Supabase del Team Builder (claude-test). Confirmado por el usuario.
@@ -114,9 +114,9 @@ DEC-14: **Arranque en frio sin keep-alive**. Al abrir la web el frontend llama u
 DEC-15: **Validacion de entrada manual** en `http/validate.ts` (como claude-test, sin zod): payloads pequenos y fijos.
 
 DEC-16: **Originales y clips viven en local; al bucket solo van los clips** (y `catalog.json`, que el backend necesita para arrancar).
-Carpeta local ignorada en git: `scripts/catalog/data/` (`work/` originales descargados, `out/clips/` clips generados, `catalog.json`). Los originales nunca se suben.
-Estimacion: 6 clips = 41 s a 128 kbps = ~660 KB por cancion. 500 canciones = ~330 MB. El 1 GB de Storage del plan free se comparte con el Team Builder (que hoy no usa Storage; su BD tiene cuota aparte), asi que el techo practico es ~1500 canciones.
-Egress de Supabase (plan free, ~5 GB/mes, verificar en el panel): solo se consume cuando el backend lee un clip que no esta en su cache LRU (arranques en frio y canciones del modo ilimitado). Peor caso ~660 KB por partida sin cache = ~7.500 partidas/mes sin cache antes de agotarlo. El trafico backend -> navegador cuenta contra el ancho de banda de Render (100 GB/mes en free), no contra Supabase.
+Carpeta local ignorada en git: `scripts/catalog/data/` (`work/` originales descargados, `out/clips/<clipKey>.mp3` clips generados, `catalog.json`). Los originales nunca se suben.
+Estimacion: un clip de 16 s a 128 kbps = 256.626 bytes (~250 KB) por cancion (DEC-44; antes 6 clips, ~645 KB). Hoy 268 canciones activas = ~67 MB (antes 169 MB); 500 canciones = ~125 MB. El 1 GB de Storage del plan free se comparte con el Team Builder (que hoy no usa Storage; su BD tiene cuota aparte), asi que el techo practico es ~4000 canciones.
+Egress de Supabase (plan free, ~5 GB/mes, verificar en el panel): solo se consume cuando el backend lee un clip que no esta en su cache LRU (arranques en frio y canciones del modo ilimitado). Peor caso ~250 KB por partida sin cache (el backend descarga el fichero entero una vez y corta en memoria) = ~20.000 partidas/mes sin cache antes de agotarlo. El trafico backend -> navegador cuenta contra el ancho de banda de Render (100 GB/mes en free), no contra Supabase.
 
 DEC-17: **Buscador**: cada opcion es una cancion y muestra sus juegos. El texto se parte en palabras y CADA palabra debe aparecer en el titulo de la cancion o en el nombre de alguno de sus juegos (sin distinguir mayusculas ni acentos, texto literal): "ruby battle" encuentra los combates de Ruby/Sapphire/Emerald. Implementado una sola vez en `shared/search.ts` (`matchesAllWords`) y usado por el juego y por el admin (que ademas busca en el titulo del video). Descartado: buscar la consulta completa como una subcadena, porque no permite combinar juego y titulo ("ruby battle" no encontraba nada; peticion del usuario 2026-10-04). Muestra SIEMPRE el catalogo completo, independientemente del filtro y de si ya se acerto el juego. Confirmado por el usuario.
 Alternativas descartadas: una opcion por par (cancion, juego) enviando `gameId`; limitar al pool del filtro (con un solo juego filtrado el feedback de juego seria siempre "acertado" y la lista daria pistas).
@@ -134,13 +134,13 @@ Justificacion: el mismo orden canonico que el diario hace los tests determinista
 DEC-21: **Tipos del token**: `iat` y `exp` en segundos epoch (enteros); `r` y `q` son arrays de strings. Un `q` mal formado (no array, elemento que no es `clipKey` de 16 hex, longitud > `r.length`) o con un `clipKey` que ya no esta en el catalogo -> `TOKEN_INVALID`.
 Justificacion: segundos bastan para caducidades de horas y acortan el payload; tratar igual `k` y `q` frente a canciones retiradas evita estados a medias en `ALREADY_GUESSED`.
 
-DEC-22: **Fallo del almacen al servir un clip: el ticket NO queda consumido.** El nonce se marca como usado solo despues de obtener los bytes del clip (cache o bucket); si falla, `502 STORAGE_ERROR` y el cliente reintenta con el mismo ticket mientras no caduque.
+DEC-22: **Fallo del almacen al servir un clip: el ticket NO queda consumido.** El nonce se marca como usado solo despues de obtener y comprobar los bytes del clip (cache o bucket; la comprobacion de formato de DEC-44 cuenta como fallo del almacen); si falla, `502 STORAGE_ERROR` y el cliente reintenta con el mismo ticket mientras no caduque.
 Alternativa descartada: consumir el ticket al recibir la peticion (un fallo transitorio de Supabase obligaria a pedir ticket nuevo via `/games/state` sin motivo).
 
 DEC-23: **`upload` incremental por md5.** `ObjectStore.list(prefix)` devuelve `{ key, md5 }` por objeto; un clip se sube si no existe o si su md5 local difiere.
-Justificacion: el tamano no sirve (CBR: todos los clips de un intento pesan igual, DEC-06). En S3 el `ETag` es el md5 solo en subidas de una parte; los clips (<300 KB) se suben siempre con un `PutObject` simple. Riesgo: verificar en el primer `upload` real que el `ETag` de Supabase S3 coincide con el md5 local; si no, `upload` subiria todo cada vez (correcto pero lento).
+Justificacion: el tamano no sirve (todos los clips miden `CLIP_TOTAL_BYTES`, DEC-44). Clave por cancion: `clips/<clipKey>.mp3`. En S3 el `ETag` es el md5 solo en subidas de una parte; los clips (<300 KB) se suben siempre con un `PutObject` simple. Riesgo: verificar en el primer `upload` real que el `ETag` de Supabase S3 coincide con el md5 local; si no, `upload` subiria todo cada vez (correcto pero lento).
 
-DEC-24: **Rutas del script**: `outDir` de `build`, `validate`, `upload` y `clipOutputPath` = `scripts/catalog/data/out/clips` (`<outDir>/<clipKey>/<n>.mp3`). En local, `STORAGE_DIR` del backend apunta a `scripts/catalog/data/out`.
+DEC-24: **Rutas del script**: `outDir` de `build`, `validate`, `upload` y `clipOutputPath` = `scripts/catalog/data/out/clips` (`<outDir>/<clipKey>.mp3`, DEC-44). En local, `STORAGE_DIR` del backend apunta a `scripts/catalog/data/out`.
 
 DEC-25: **Definicion de "juego" en el catalogo** (decision de producto del usuario): un juego es el grupo de versiones que comparten banda sonora ("Ruby / Sapphire / Emerald" es UN juego); un remake con banda sonora distinta es un juego aparte ("Omega Ruby / Alpha Sapphire"). Cada cancion lista todos los juegos en los que aparece.
 Alternativas descartadas: cada version por separado (inflaria el filtro y el feedback de juego fallaria entre versiones con la misma OST); agrupar por generacion (mezcla bandas sonoras distintas).
@@ -204,6 +204,54 @@ Decisiones de implementacion (la opcion mas simple): con la partida terminada la
 
 DEC-43: **Sin estadisticas** (iteracion admin-catalogo, decision del usuario: no las quiere). Se eliminan `game/stats.ts`, `StatsPanel` y las claves `heardle:stats:daily` y `heardle:stats:unlimited`; al arrancar, el frontend borra esas claves si existen (limpieza idempotente de datos que ya nadie lee). Se mantiene `daily:<date>` (`DailyRecord`), necesario para no repetir el diario.
 Alternativa descartada: mantener racha y distribucion.
+
+DEC-44: **Un solo clip de 16 s por cancion; el backend sirve al intento N el prefijo del fichero, cortado en limite de trama en un offset constante.** (Decision del usuario para reducir almacenamiento: de ~645 KB a ~250 KB por cancion.)
+- Formato: MPEG-1 Layer III, 128 kbps CBR, 44.1 kHz, estereo, sin ID3 ni trama Xing/Info, `-reservoir 0`. Cada trama codifica 1152 muestras y mide 417 o 418 bytes segun el bit de padding; el patron de padding de LAME depende solo del numero de trama, no del audio.
+- Comprobado (2026-10-04) con 4 fuentes distintas (tono, ruido rosa, silencio, cancion real) y con los fixtures de lamejs: 614 tramas, 256.626 bytes y offsets de trama identicos byte a byte. `-reservoir 0` no cambia la disposicion de tramas.
+- Retardo del codificador: el audio aparece desplazado 1105 muestras (576 + 529; medido por alineacion con la fuente). Por eso los clips actuales miden +40-50 ms.
+- Corte: `frames(N) = floor((N * 44100 + 1105) / 1152)` para N < 16; para N = 16, el fichero entero (614 tramas; lo que pasa de 16 s es relleno del codificador, el master acaba en 16 s). Con `floor` el prefijo acaba hasta 24 ms por debajo de N (de ~1 a 24 segun el intento, ver la tabla), nunca por encima. `ceil` daria hasta 26 ms de audio real posterior.
+  **Limitacion aceptada por el usuario**: el analisis hacia delante de LAME (psicoacustico y cambio de tipo de bloque) hace que la ultima o las dos ultimas tramas del prefijo dependan de audio posterior al corte; con un decodificador manipulado se pueden recuperar unos ~12 ms, y en reproduccion normal apenas son perceptibles. Alternativa descartada por el usuario: `frames(N) = floor((N*44100 - 576)/1152)`, que elimina esa fuga a costa de 40-59 ms menos de audio por intento. Se mantiene `CLIP_FRAME_COUNTS` tal cual. Tampoco es audio, pero conviene saberlo: el `loudnorm` dinamico de `masterArgs` hace que la ganancia dependa de ~3 s posteriores (una pista de sonoridad, no audio); ya ocurria con 6 clips.
+
+| Intento | N s | Tramas | Bytes (prefijo) | Audio real |
+|---|---|---|---|---|
+| 1 | 1 | 39 | 16.300 | 993,7 ms |
+| 2 | 2 | 77 | 32.182 | 1986,4 ms |
+| 3 | 4 | 154 | 64.365 | 3997,8 ms |
+| 4 | 7 | 268 | 112.013 | 6975,8 ms |
+| 5 | 11 | 422 | 176.378 | 10998,6 ms |
+| 6 | 16 | 614 | 256.626 | 16000 ms + relleno |
+
+- Donde viven: constantes en `shared/rules.ts` (`CLIP_FRAME_COUNTS`, `CLIP_BYTE_OFFSETS`, `CLIP_TOTAL_BYTES`), junto a la formula y un test que las recalcula a partir del patron de tramas. `validate` las comprueba en cada fichero y el backend hace una comprobacion barata en tiempo de ejecucion.
+  Descartadas: calcularlas en `build` y guardarlas en el catalogo (son iguales para todas las canciones; un valor por cancion invitaria a divergencias y, si difiriera, seria una huella); calcularlas en el backend parseando cada fichero (CPU en Render para un resultado constante).
+- `-reservoir 0`: con el bit reservoir (por defecto en LAME) los datos de la trama k+1 empiezan hasta ~500 bytes antes, dentro de la trama k; medido: 613 de 614 tramas lo usan. Un prefijo llevaria trozos de audio posterior al corte. Sin reservoir cada trama es autocontenida. Coste medido en musica real: SNR 19,85 -> 19,83 dB (despreciable; en ruido rosa sintetico, -1,5 dB).
+- Backend: `ClipStore.getClip(clipKey)` devuelve el fichero entero (`clips/<clipKey>.mp3`); la cache LRU guarda un fichero por cancion (`CLIP_CACHE_MB` = 32 da para ~130 canciones). Antes de servir comprueba `length === CLIP_TOTAL_BYTES` y que en TODOS los offsets intermedios (los de cualquier intento, no solo el del intento pedido; 5 comparaciones, coste constante) hay cabecera de trama (`0xFFFB`): un fichero con un offset roto es incorrecto sea cual sea el intento y falla pronto y entero (BE-CLP-03). La comprobacion va en la ruta `/clips`, no en los stores, y si la lectura es invalida, la ruta hace `store.evict(clipKey)` para que no quede en la cache (un fichero invalido cacheado se serviria como 502 para siempre y la cancion del dia no se expulsaria nunca) y la siguiente peticion vuelve a leer del almacen; si no, `STORAGE_ERROR` sin consumir el ticket (DEC-22). Responde `subarray(0, CLIP_BYTE_OFFSETS[attempt])`, con las mismas cabeceras de seccion 5 (`Content-Length` = offset, sin `ETag`, `no-store`, sin `Accept-Ranges`).
+- Fundido de salida: el fichero solo lleva el fundido de 50 ms al final de los 16 s (master). El de cada intento lo hace el navegador (DEC-45).
+- Alternativa descartada: mantener 6 ficheros por cancion (~645 KB/cancion, 169 MB hoy; 2,6 veces mas almacenamiento y egress por fallo de cache).
+- Compatibilidad y despliegue: el formato de `catalog.json` no cambia, y los dos layouts del bucket conviven porque usan claves distintas. Por eso no hay codigo de compatibilidad y basta con este orden:
+  1. `build`: genera `out/clips/<clipKey>.mp3` y borra el directorio antiguo `out/clips/<clipKey>/` de esa cancion.
+  2. `upload` sin `--prune`: sube los ficheros nuevos y el catalogo. El backend antiguo sigue funcionando con las claves antiguas.
+  3. Desplegar el backend nuevo. Render despliega solo al hacer push a `main`, asi que el merge va DESPUES del paso 2. Un backend nuevo sin los ficheros nuevos daria `STORAGE_ERROR` en todos los clips.
+  4. `upload --prune`: borra todo lo que hay bajo `clips/` y no es `clips/<clipKey>.mp3` de una cancion activa, incluidas las carpetas antiguas.
+  Descartado: un backend capaz de leer los dos layouts (codigo temporal que habria que retirar; el orden de despliegue ya lo hace innecesario).
+
+DEC-45: **Fundido de salida de 50 ms en el navegador con Web Audio: `decodeAudioData` del Blob + `AudioBufferSourceNode` -> `GainNode` -> `destination`.** Se aplica a los 6 intentos por igual; en el de 16 s se suma al fundido que ya trae el fichero, que no hace dano y deja el codigo sin casos especiales. Decision del usuario: hacerlo ya, sin esperar a la prueba real.
+Funcionamiento en `ClipPlayer` (la interfaz publica `prepare/play/stop/subscribe/dispose` no cambia):
+- `prepare`: descarga el Blob una sola vez (DEC-05) y lo decodifica con `decodeAudioData` en un `AudioContext` unico por `ClipPlayer`, creado de forma perezosa. Fuera del gesto nace `suspended`, lo que esta permitido: decodificar no necesita un contexto activo. Solo se guarda el `AudioBuffer` del intento actual (16 s estereo float32 = ~5,6 MB como maximo) y el anterior se suelta.
+- `play` (sincrono, dentro del gesto, como ya exige DEC-05):
+  - Si el contexto no esta `running`, llama a `ctx.resume()`. En iOS desbloquea el audio si se llama dentro del gesto.
+  - Crea un `AudioBufferSourceNode` nuevo (son de un solo uso) y un `GainNode`, con `t0 = ctx.currentTime` y `d = buffer.duration`.
+  - Programa la ganancia: `setValueAtTime(1, t0)`, `setValueAtTime(1, t0 + d - 0.05)`, `linearRampToValueAtTime(0, t0 + d)`.
+  - Llama a `source.start(t0)`. Reproducir otra vez antes de que acabe para la fuente anterior y empieza de cero, como hoy.
+- Progreso: `positionSec = min(ctx.currentTime - t0, d)` en el bucle `requestAnimationFrame` que ya existe; `source.onended` emite `playing: false`. La barra (DEC-42) no cambia.
+- Suspension e interrupciones: si el contexto deja de estar `running` mientras suena (iOS lo interrumpe por llamadas o al pasar a segundo plano), se escucha `statechange`, se emite `playing: false` y se para. El siguiente `play()` vuelve a llamar a `resume()` dentro del gesto. `stop()` (p. ej. al abrir la cancion completa) para la fuente. `dispose()` cierra el contexto.
+- iOS y el interruptor de silencio: Web Audio en iOS respeta el interruptor y `<audio>` no. Para no quedar mudo con el interruptor activado, se fija `navigator.audioSession.type = 'playback'` donde exista (Safari 16.4 y posteriores). Hay que verificarlo a mano en un iPhone.
+- Fallback: si no hay `AudioContext`/`webkitAudioContext` o `decodeAudioData` falla, ese clip se reproduce por la ruta actual (`<audio>` con objectURL, sin fundido, corte seco). Se decide en `prepare`, no en `play`, para no perder el gesto. Si `resume()` falla, se emite `playing: false`; la persona puede volver a pulsar.
+- Inyeccion para tests: `ClipPlayerDeps.createAudioContext?: () => AudioContextLike | null` (`null` fuerza el fallback) junto al `createAudio` actual.
+Alternativas descartadas:
+- `MediaElementAudioSourceNode` sobre el `<audio>` actual: el fundido habria que programarlo estimando cuando acaba el `<audio>` con un reloj distinto (`currentTime` del elemento frente al del contexto). Eso da errores de decenas de ms, y Safari ha tenido fallos de silencio con `createMediaElementSource` sobre objectURL.
+- Aceptar el corte seco: decision del usuario.
+- Fundidos dentro del fichero antes de cada corte: meterian bajadas de volumen audibles a mitad de los intentos siguientes.
+- Fundido cambiando `audio.volume`: en iOS `volume` es de solo lectura.
 
 ## 4. Modelo de partida
 
@@ -285,6 +333,7 @@ Errores:
 | 404 | `NOT_FOUND` | ruta inexistente |
 
 Respuestas de `/clips`:
+- Cuerpo: prefijo del clip unico hasta `CLIP_BYTE_OFFSETS[intento]` (DEC-44).
 - Cabeceras: `Content-Type: audio/mpeg`, `Content-Length`, `Cache-Control: no-store, private`, `X-Content-Type-Options: nosniff`. Sin `ETag`, `Last-Modified`, `Content-Disposition` ni `Accept-Ranges`.
 - `app.set('etag', false)` y `app.disable('x-powered-by')` en toda la app: comprobado que Express 5 anade por defecto `ETag: W/"<hash del cuerpo>"` a un Buffer, lo que seria una huella del clip.
 - Respuestas JSON de `/games/*` tambien con `Cache-Control: no-store`.
@@ -323,9 +372,9 @@ Script `scripts/catalog` (TS con `tsx`), subcomandos idempotentes:
 1. `fetch <playlistUrl>`: `yt-dlp --flat-playlist -J` para listar; descarga `bestaudio` a `data/work/<youtubeId>.*` con `--download-archive` (no repite descargas).
 2. `draft`: mide con `ffprobe` la duracion de las fuentes descargadas que aun no tienen `source.durationSec` y desactiva las cortas (DEC-40); fusiona en `catalog.json` los videos nuevos (por `youtubeId`), con titulo/juego derivados del titulo del video (`parseTitle.ts`), `startSec: 0`, `reviewed: false`, `clipKey` aleatorio; si el titulo no permite deducir el juego, `games: []` (DEC-26). **Nunca sobrescribe entradas existentes** (conserva la revision manual).
 3. Revision en el admin local (`npm run cli -- admin`, seccion 6.1) o a mano en `catalog.json`.
-4. `build`: por cancion activa, `ffmpeg -ss startSec -t 16` -> `loudnorm` -> master de 16 s; de el, 6 clips `0..N` s con fundido de salida de 50 ms, MP3 CBR 128k estereo (`-b:a 128k`), `-map_metadata -1 -id3v2_version 0 -write_xing 0 -fflags +bitexact`, salida a `data/out/clips/<clipKey>/<n>.mp3`. Solo recompila si cambian `startSec` o el fuente. Antes de cortar mide la fuente; si es corta la desactiva, la registra en el catalogo y sigue con las demas sin fallar (DEC-40).
-5. `validate`: esquema; 6 clips por cancion; duracion por `ffprobe` entre −30 ms y +60 ms de la esperada (sin cabecera Xing ffprobe mide ~40-50 ms de mas); tamano en bytes identico entre canciones para cada intento (DEC-06); sin etiquetas de metadatos (`ffprobe -show_format`). Falla con codigo != 0.
-6. `upload`: ejecuta `validate`, sube clips nuevos/cambiados (por md5, DEC-23) (nunca los originales de `data/work/`) y por ultimo `catalog.json` (asi el catalogo nunca apunta a clips no subidos). `--prune` borra clips huerfanos. Tras subir, reiniciar el backend en Render para recargar el catalogo.
+4. `build`: por cancion activa, `ffmpeg -ss startSec -t 16` -> `loudnorm` -> master de 16 s; de el, UN clip de 16 s (MP3 CBR 128k estereo, `-reservoir 0`, `-map_metadata -1 -id3v2_version 0 -write_xing 0 -fflags +bitexact`, fundido de 50 ms al final de los 16 s) en `data/out/clips/<clipKey>.mp3`, y borra el directorio antiguo `data/out/clips/<clipKey>/` si existe (DEC-44). Solo recompila si cambian `startSec` o la fuente; un clip con el layout antiguo cuenta como no compilado. Antes de cortar mide la fuente; si es corta la desactiva, la registra en el catalogo y sigue con las demas sin fallar (DEC-40).
+5. `validate`: esquema; un clip por cancion activa; tamano exacto `CLIP_TOTAL_BYTES`; recorrido de cabeceras de trama: 614 tramas, todas MPEG-1 L3 128k 44.1k estereo, la primera sin Xing/Info y sin ID3; cada offset de `CLIP_BYTE_OFFSETS` es limite de trama; `main_data_begin == 0` en todas las tramas (sin reservoir); duracion por `ffprobe` del fichero entero dentro de la tolerancia actual; sin etiquetas de metadatos. Asi la garantia "mismo tamano por intento entre canciones" se comprueba por construccion. Falla con codigo != 0.
+6. `upload`: ejecuta `validate`, sube los clips nuevos o cambiados (`clips/<clipKey>.mp3`, por md5, DEC-23), nunca los originales de `data/work/`, y por ultimo `catalog.json`, para que el catalogo nunca apunte a clips no subidos. `--prune` borra todo lo que hay bajo `clips/` y no es el clip de una cancion activa (incluidas las carpetas `clips/<clipKey>/` antiguas); en la migracion se ejecuta despues de desplegar el backend nuevo (DEC-44). Tras subir, reiniciar el backend en Render para recargar el catalogo.
 
 Toda escritura de `catalog.json` (draft, build, admin) pasa por `catalogStore.update` (DEC-37).
 
@@ -395,6 +444,7 @@ Filtros y busqueda en la UI (en cliente, sobre `/api/catalog`): juego, activadas
 - (RETIRADO: compartir resultado, DEC-27; estadisticas, DEC-43.) `ResultPanel` muestra la solucion y el boton de la cancion completa (DEC-41).
 - Buscador segun DEC-17, filtrado en cliente sobre `/catalog`.
 - Tailwind 4, modo oscuro por `prefers-color-scheme`, responsive. Interfaz en espanol sin i18n (un solo idioma).
+- Reproduccion con fundido de 50 ms via Web Audio y fallback a `<audio>` (DEC-45).
 - Barra de reproduccion (DEC-42): `ClipProgressBar({ clipSeconds, unlockedSec, positionSec, playing })`. `ClipPlayer` amplia su interfaz con `subscribe(listener) -> unsubscribe`, que emite `{ playing, positionSec }` con `requestAnimationFrame` mientras suena y al parar/terminar.
 - Cancion completa al terminar (DEC-41): componente `FullSongEmbed({ youtubeId })` dentro de `ResultPanel`, renderizado solo cuando `status !== 'playing'` y existe `solution`. Muestra el boton "Escuchar la cancion completa"; el iframe se crea al pulsarlo y en ese momento se para el clip.
 
@@ -423,7 +473,7 @@ Rate-limit (valores por defecto, ajustables por env):
 ## 9. Rendimiento
 
 - Catalogo en memoria (indice por id y por juego); seleccion diaria O(pool).
-- Cache LRU de clips en memoria limitada por bytes (`CLIP_CACHE_MB`, defecto 32): los clips de la cancion del dia se piden muchas veces. Render free tiene 512 MB.
+- Cache LRU de clips en memoria limitada por bytes (`CLIP_CACHE_MB`, defecto 32): un fichero de ~250 KB por cancion (DEC-44); la cancion del dia se pide muchas veces. Cortar un prefijo es un `subarray`, sin copia ni CPU apreciable. Render free tiene 512 MB.
 - Clips pequenos (16-260 KB); sin transcodificacion en servidor (decision cerrada).
 - Arranque: descarga de `catalog.json` antes de `listen`; si falla, se escucha igualmente, `/health` devuelve 503 y se reintenta en segundo plano con backoff.
 
@@ -465,31 +515,34 @@ Unitarios backend (vitest):
 - `catalog` (ilimitado): pool por filtro, filtro vacio, juego inexistente, pool de 1.
 - `token`: ida y vuelta; un byte alterado -> invalido; caducado -> invalido; **longitud identica para ids de cancion de distinta longitud y para 0..6 resultados**; el token no contiene en claro id, titulo ni `clipKey`; token no valido como ticket y viceversa.
 - `engine`: H/G/M/S; cancion en varios juegos (interseccion); 6.o fallo -> perdida; accion tras fin -> `GAME_OVER`; cancion repetida -> `ALREADY_GUESSED` sin consumir intento ni cambiar el token.
-- `tickets`: un solo uso; caducidad; el indice corresponde al intento actual; la duracion servida para el intento N es `CLIP_SECONDS[N]`.
+- `tickets`: un solo uso; caducidad; el indice corresponde al intento actual.
+- Frontend `ClipPlayer` con `AudioContext` simulado (DEC-45): decodifica en `prepare` y no en `play`; `play` llama a `resume()` si esta suspendido y a `source.start` de forma sincrona; programacion exacta de la ganancia (1 hasta `d - 0.05`, rampa a 0 en `d`); fuente nueva en cada `play` y la anterior parada; posicion desde `ctx.currentTime` limitada a `d`; `onended` y `statechange` a `interrupted`/`suspended` emiten `playing: false`; `stop` y `dispose` (cierra el contexto); fallback a `<audio>` sin `AudioContext` o si `decodeAudioData` rechaza; `audioSession.type = 'playback'` cuando existe.
+- Clip unico (DEC-44): `shared/rules` recalcula `CLIP_FRAME_COUNTS`/`CLIP_BYTE_OFFSETS` con la formula y el patron de tramas; el backend sirve exactamente `CLIP_BYTE_OFFSETS[i]` bytes por intento y que el cuerpo es prefijo del fichero; un fichero de tamano distinto o sin cabecera de trama en un offset -> `502 STORAGE_ERROR` sin consumir ticket; la cache guarda una entrada por cancion (clave `clipKey`) y la reutiliza en todos los intentos; `isValidClipLocation` sin numero de clip.
 - `shared/catalog`: validador con casos invalidos (ids duplicados, juego inexistente, `clipKey` mal formado, `youtubeId` fuera de formato, `durationSec` invalido, cancion activa y corta).
 - `engine`/vista: `solution.youtubeId` presente al ganar y al perder, ausente en partidas en curso.
 
 Integracion backend (vitest, `createApp` + `app.listen(0)` + `fetch`, como claude-test; `FsClipStore` con catalogo y clips de prueba):
 - Flujo completo ganar/perder/skip; recuperacion con `/games/state`; errores de la tabla de la seccion 5; 429 con `Retry-After`.
 - **Prueba de fuga**: durante una partida completa, se serializan todas las respuestas (cuerpo y cabeceras) antes del final y se comprueba que no aparecen id, titulo, `clipKey`, `youtubeId` ni nombre de fichero de la cancion objetivo. Tras terminar, `youtubeId` aparece SOLO dentro de `solution`; `/catalog` no lo contiene nunca.
-- Cabeceras de `/clips`: sin ETag, con `no-store`; segunda peticion al mismo ticket -> 410.
+- Cabeceras de `/clips`: sin ETag, con `no-store`, `Content-Length` = offset del intento e igual entre canciones; segunda peticion al mismo ticket -> 410.
 
 Frontend (vitest + Testing Library + jsdom):
 - Sin compartir ni estadisticas (DEC-27, DEC-43): limpieza de las claves `stats:*` antiguas; filtro solo visible en ilimitado y vacio deshabilita empezar; apertura del diario sin llamada a la API si ya esta terminado; buscador deshabilita canciones ya intentadas; hook de arranque en frio con temporizadores falsos; recuperacion con `TOKEN_INVALID`; `ClipProgressBar` (posicion de marcas, zona desbloqueada por intento, limite del cabezal); `ClipPlayer.subscribe` con un audio falso; `FullSongEmbed` ausente en juego; al terminar, boton sin iframe hasta pulsarlo; tras pulsar, URL `youtube-nocookie` y `referrerpolicy`.
 
-Script (vitest): `parseTitle`, fusion de `draft` (no pisa entradas revisadas), construccion de argumentos de ffmpeg (funciones puras). Iteracion admin-catalogo, siempre con `--data-dir` en un directorio temporal:
+Script (vitest): clip unico (DEC-44): `clipArgs` con `-reservoir 0` y salida `<clipKey>.mp3`; `build` borra el layout antiguo; `validate` rechaza tamano distinto, offset que no es limite de trama, trama con `main_data_begin != 0`, primera trama Xing/Info, ID3; `upload --prune` borra las carpetas antiguas y no el clip nuevo. `parseTitle`, fusion de `draft` (no pisa entradas revisadas), construccion de argumentos de ffmpeg (funciones puras). Iteracion admin-catalogo, siempre con `--data-dir` en un directorio temporal:
 - `catalogStore`: escritura atomica (un fallo a mitad deja el original intacto), operaciones encoladas, `.bak` solo en la primera escritura.
 - Regla de cancion corta en el limite exacto (`startSec + 16 + 0.1`), desactivacion en `draft`/`build` sin tocar otros campos ni activar nada, `validate` con cancion activa y corta.
 - Handlers del admin: `PATCH` de cada campo, `TOO_SHORT`, juego inexistente o duplicado, crear/renombrar juego sin cambiar id, `403` sin token y con `Host` ajeno, audio por id (no por ruta), `Range` (`bytes=0-`, `bytes=a-b`, sufijo, fuera de rango -> 416), `youtubeId` con `-` inicial.
 - `admin-ui` (vitest + Testing Library): modulo puro de filtros/busqueda, edicion de titulo y juegos, bloqueo de activar cancion corta, obtencion del token via `/api/session`; `PATCH` con `startSec` -> ignorado/rechazado. `validate` se ejecuta contra fixtures si ffmpeg esta instalado; si no, se marca omitido.
 
-E2E (Playwright en `e2e/`, backend con driver `fs` y fixtures de tonos senoidales generados con ffmpeg y versionados, sin copyright):
+E2E (Playwright en `e2e/`, backend con driver `fs` y fixtures de tonos senoidales versionados, sin copyright). Con DEC-44 `generate-fixtures.ts` (lamejs) genera un `clips/<clipKey>.mp3` de 16 s por cancion y comprueba que coincide con `CLIP_TOTAL_BYTES` y con los offsets (comprobado: lamejs produce la misma disposicion de tramas que ffmpeg/LAME). lamejs no permite desactivar el reservoir: los fixtures lo usan, y el chequeo `main_data_begin == 0` es solo de `validate` del script, no del backend. Duracion por intento en E2E (`HTMLMediaElement.duration`, incluye el retardo de 1105 muestras): 1,0188 / 2,0114 / 4,0229 / 7,0008 / 11,0237 / 16,0392 s, es decir, entre N y N + 40 ms. El audio real queda entre N - 24 ms y N:
 - Partida ganada, perdida y con skips; feedback de juego acertado/fallado; revelacion final y bloqueo posterior.
 - Recarga en mitad de partida; diario ya jugado (sin `POST /games`); diario igual en dos navegadores; ilimitado: filtro vacio, pool de una cancion, cambio de filtro a mitad; cancion ya intentada no seleccionable.
 - Fuga: recoger todas las respuestas de red y el `localStorage` antes de terminar y buscar el titulo/id objetivo (criterio 1).
 - Arranque en frio simulado (`page.route` devuelve 503 / retrasa `/health`): la UI muestra carga y se recupera (criterio 8).
 - Viewport movil (iPhone, WebKit) y `colorScheme: 'dark'`.
 - Barra de reproduccion visible al reproducir, con la zona desbloqueada creciendo con cada intento.
+- Fundido (DEC-45): con un script de inicio que envuelve `GainNode.gain.linearRampToValueAtTime` y `decodeAudioData` se comprueba que cada `play` programa la rampa a 0 al final del buffer; las duraciones por intento se leen del `AudioBuffer` decodificado (ya no del `HTMLMediaElement`). El escaneo de fugas sigue cubriendo los bytes del clip por red. Una prueba con Web Audio deshabilitado (script de inicio que borra `AudioContext`) cubre el fallback. En WebKit/Linux el desbloqueo de iOS y el interruptor de silencio solo se aproximan: verificacion manual en iPhone.
 - Al terminar (ganar y perder) aparece el boton y el iframe solo tras pulsarlo; antes de pulsar no hay iframe ni peticiones a `youtube-nocookie.com` (interceptadas con `page.route` para no depender de YouTube).
 - Admin (opcional, Playwright contra `npm run cli -- admin --data-dir <tmp>`): editar, filtrar y oir con seek.
 
@@ -510,6 +563,7 @@ E2E (Playwright en `e2e/`, backend con driver `fs` y fixtures de tonos senoidale
 - **yt-dlp** cambia a menudo por cambios de YouTube: fijar version en el README y actualizar cuando falle.
 - **`trust proxy`** mal configurado haria que todas las peticiones compartan IP en el rate-limit o permitiria falsear la IP; probar en Render con `X-Forwarded-For`.
 - **Cambio de catalogo a mitad de dia** cambia la cancion diaria de partidas nuevas (DEC-09); ahora afecta a cualquier alta o baja en el catalogo, no solo a un juego concreto.
+- **Clip unico (DEC-44)**: si un cambio de version de ffmpeg/LAME alterase el patron de tramas o el retardo, `validate` fallaria (tamano u offsets) antes de subir nada; habria que recalcular las constantes. El orden de despliegue de la migracion es obligatorio (backend nuevo antes de subir los ficheros nuevos -> todos los clips fallan).
 - **Embed de YouTube**: videos retirados, privados o con el embed desactivado muestran el error de YouTube; no se detecta de antemano (fuera de alcance comprobarlo en `validate`, requiere red).
 - **Escritura concurrente del catalogo entre procesos** (admin + `draft`/`build`): ventana de milisegundos sin bloqueo (DEC-37).
 - **Tickets usados en memoria**: tras un reinicio un ticket aun no caducado (<= 60 s) podria reutilizarse una vez mas; impacto nulo (mismo clip del mismo intento).
@@ -520,4 +574,4 @@ Admin desplegado o con login, borrado y fusion de juegos en el admin, oir los 6 
 
 ## Preguntas abiertas
 
-Ninguna. Las de la iteracion admin-catalogo se cerraron el 2026-10-04: `startSec` no editable en el admin (6.1), embed al pulsar (DEC-41), UI del admin con React + Vite (DEC-38).
+Ninguna. P1 (fundido con clip unico) cerrada el 2026-10-04: fundido en el navegador con Web Audio (DEC-45).

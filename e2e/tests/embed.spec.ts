@@ -1,5 +1,7 @@
 import { test, expect } from '../support/test.ts'
-import { TRACK_AUDIO, stubYoutube } from '../support/youtube.ts'
+import { stubYoutube } from '../support/youtube.ts'
+import { INSTRUMENT_WEBAUDIO } from '../support/webaudio.ts'
+import type { WebAudioLog } from '../support/webaudio.ts'
 import { RECORD_AUDIO_SRC, expectNoLeak } from '../support/leak.ts'
 import { MULTI, ONLY_D, dailyTargetR, madridToday, nonTargets } from '../support/oracle.ts'
 import { M_SONGS } from '../fixtures/catalogs.ts'
@@ -127,9 +129,12 @@ async function expectNoShareNorStats(page: import('@playwright/test').Page) {
   expect(html).not.toMatch(/Estad[ií]sticas|Distribuci[oó]n de aciertos/)
 }
 
+const wa = <T>(page: import('@playwright/test').Page, pick: (log: WebAudioLog) => T): Promise<T> =>
+  page.evaluate(`(${pick.toString()})(window.__wa)`) as Promise<T>
+
 test.describe('Cancion completa - catalogo R', () => {
   test.beforeEach(async ({ page }) => {
-    await page.addInitScript(TRACK_AUDIO)
+    await page.addInitScript(INSTRUMENT_WEBAUDIO)
     await page.addInitScript(RECORD_AUDIO_SRC)
   })
 
@@ -157,7 +162,8 @@ test.describe('Cancion completa - catalogo R', () => {
     }
     await d.ready() // intento 6: clip de 16 s
     await d.playButton.click()
-    await expect.poll(() => page.evaluate(() => (window as any).__played.some((a: HTMLMediaElement) => !a.paused))).toBe(true)
+    await expect.poll(() => wa(page, (log) => log.starts.length)).toBe(1)
+    expect(await wa(page, (log) => log.stops), 'el clip suena: aun sin stop()').toBe(0)
     await d.guess(target.title)
     await expect(d.resultHeading).toBeVisible()
 
@@ -169,7 +175,7 @@ test.describe('Cancion completa - catalogo R', () => {
     await expect(frame).toHaveAttribute('allow', 'encrypted-media; picture-in-picture; fullscreen')
     await expect.poll(() => hits.length).toBe(1)
     expect(hits[0]).toContain('youtube-nocookie.com')
-    expect(await page.evaluate(() => (window as any).__played.every((a: HTMLMediaElement) => a.paused)), 'clip detenido').toBe(true)
+    await expect.poll(() => wa(page, (log) => log.stops), 'clip detenido al abrir el embed').toBeGreaterThanOrEqual(1)
   })
 
   test('E2E-60_should_expose_the_youtube_id_only_in_the_response_that_ends_the_game', async ({ app, page, net }) => {

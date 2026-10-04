@@ -1,6 +1,9 @@
 // Catalogos sinteticos de E2E (TEST_PLAN 3 y 6). Ningun dato real: titulos y juegos inventados.
 // Los usan el generador de fixtures (node) y los tests (Playwright); no importar nada de produccion.
 
+/** Escalon de frecuencia entre segundos consecutivos del clip (E2E-76: tono distinto por segundo). */
+export const STEP_HZ = 250
+
 export interface FixtureSong {
   id: string
   title: string

@@ -54,6 +54,158 @@ El usuario retira compartir resultado y estadísticas (REQUISITOS §9, ARQUITECT
 
 Matriz §5: las filas "RQ §3 Estadísticas", "RQ §3 Compartir" y "CA-6" quedan sin efecto; la cobertura de la retirada es FE-NOF-01..04, FE-DRC-01..02 y E2E-73.
 
+### 0.2 Clip único de 16 s (DEC-44) y fundido con Web Audio (DEC-45)
+
+Prevalece sobre las filas anteriores con el mismo ID. Fuentes: ARQUITECTURA.md (DEC-06/07/22/23/24/44/45, §5 `/clips`, §6 pasos 4-6, §7, §9, §11) y REQUISITOS.md (§9, criterio 2: "hasta 24 ms menos por el corte en límite de trama MP3, nunca más").
+
+Datos de referencia (DEC-44): `CLIP_FRAME_COUNTS=[39,77,154,268,422,614]`; `CLIP_BYTE_OFFSETS=[16300,32182,64365,112013,176378,256626]`; `CLIP_TOTAL_BYTES=256626`; `frames(N)=floor((N*44100+1105)/1152)` para N<16 y 614 para N=16. Bytes tras k tramas = `floor(k*144*128000/44100)`.
+Datos de referencia (DEC-45): rampa de ganancia con `setValueAtTime(1,t0)`, `setValueAtTime(1,t0+d-0.05)`, `linearRampToValueAtTime(0,t0+d)`, con `d = buffer.duration`.
+
+**Retirados:** SC-FF-02 (args de 6 clips por intento; sustituido por SC-CLP-01..03) y SC-FF-06 (fundido por intento dentro del fichero; sustituido por FE-WA-05).
+
+**Modificados — shared, script y backend**
+
+| ID | Nivel | Descripción | Precondiciones | Resultado esperado | Cubre | P |
+|---|---|---|---|---|---|---|
+| SH-RUL-01 | unit | `CLIP_SECONDS=[1,2,4,7,11,16]`, `MAX_ATTEMPTS=6`, y `shared/rules.ts` exporta `CLIP_FRAME_COUNTS`, `CLIP_BYTE_OFFSETS` y `CLIP_TOTAL_BYTES` (6, 6 y 1 valores) | - | Exactos y de longitud coherente con `CLIP_SECONDS` | RQ §3, DEC-44 | A |
+| SC-FF-03 | unit | Args del clip único sin metadatos y sin reservoir: `-map_metadata -1 -id3v2_version 0 -write_xing 0 -fflags +bitexact -reservoir 0` | - | Todos presentes | DEC-06, DEC-44 | A |
+| SC-FF-04 | unit | Ruta de salida `data/out/clips/<clipKey>.mp3` (sin subdirectorio ni número); no contiene id ni título | - | Correcta | DEC-07, DEC-24, DEC-44 | A |
+| SC-BU-01 | unit | Recompila solo si cambian `startSec` o la fuente; un clip con el layout antiguo (`<clipKey>/<n>.mp3` sin `<clipKey>.mp3`) cuenta como no compilado | Manifest simulado y layout antiguo | Recompila el antiguo; no el ya migrado | AR §6, DEC-44 | M |
+| SC-VA-01 | unit | `validate` falla con: `<clipKey>.mp3` ausente en una canción activa, catálogo inválido, o `enabled` con `games: []`; con el layout antiguo y sin fichero nuevo también falla | Dir sintético | Código != 0 con mensaje que nombra la canción | AR §6, DEC-44 | A |
+| SC-VA-02 | unit | Tamaño distinto de `CLIP_TOTAL_BYTES` (más corto, más largo, 0 bytes) | Ficheros sintéticos | Falla y nombra canción y bytes | DEC-06, DEC-44 | A |
+| SC-VA-03 | unit | Fichero de exactamente `CLIP_TOTAL_BYTES` con 614 tramas válidas y patrón 417/418 | MP3 sintético válido | Pasa | DEC-06, DEC-44 | A |
+| SC-VA-04 | unit | `ffprobe` simulado sobre el fichero entero: tolerancia −30/+60 ms respecto a 16 s | Mock | −29 y +59 pasan; −31 y +61 fallan | CA-2, DEC-44 | A |
+| SC-VA-06 | unit (cond.) | `validate` real contra un clip generado con ffmpeg (`-reservoir 0`, 128k, 44,1 kHz estéreo, `-write_xing 0`) | ffmpeg presente | 256.626 B, 614 tramas, offsets en límite de trama; skip explícito sin ffmpeg | AR §11, DEC-44 | M |
+| SC-UP-04 | unit | Sube solo `clips/<clipKey>.mp3` nuevos o con md5 distinto; el primer `upload` tras migrar sube todos y el segundo ninguno | Remoto parcial y con layout antiguo | Diferencia correcta; idempotente | DEC-23, DEC-44 | M |
+| SC-UP-05 | unit | `--prune` borra todo bajo `clips/` que no sea `clips/<clipKey>.mp3` de una canción activa (carpetas antiguas incluidas); sin el flag no borra nada; nunca toca `catalog/catalog.json` | Remoto con layouts mezclados | Solo clips activos y catálogo | AR §6, DEC-44 | A |
+| SC-UP-06 | unit | `upload` no sube clips de canciones desactivadas y el catálogo subido las mantiene `enabled:false` | Corta desactivada | 0 claves de esa canción | DEC-40, DEC-44 | M |
+| BE-TKT-11 | unit | El intento N sirve el prefijo `CLIP_BYTE_OFFSETS[N]` del clip único | Clip único de fixture | 16.300 / 32.182 / 64.365 / 112.013 / 176.378 / 256.626 bytes | CA-2, DEC-44 | A |
+| BE-HDR-01 | unit (int) | Cabeceras de `GET /clips/:ticket` | Ticket válido | `audio/mpeg`, `Content-Length` = `CLIP_BYTE_OFFSETS[intento]`, `no-store, private`, `nosniff` | AR §5, DEC-44 | A |
+| BE-HDR-06 | unit (int) | `Range` e `If-None-Match` en `/clips` | Ticket válido | 200 con el prefijo completo (sin 206/304) | DEC-05, DEC-44 | M |
+| BE-HDR-10 | unit (int) | El cuerpo es exactamente `fichero.subarray(0, offset)`; sin ID3 ni Xing/Info | Fixture | Prefijo idéntico | DEC-06, DEC-44 | M |
+| BE-HDR-11 | unit (int) | Tamaño servido = `CLIP_BYTE_OFFSETS[N]` exacto y cada offset cae en cabecera de trama | Clip único | Coincide en los 6 intentos | CA-2, DEC-44 | A |
+| BE-HDR-12 | unit (int) | Fallo del almacén o formato inválido del clip: 502 `STORAGE_ERROR` sin detalles; el ticket NO se consume y un reintento funciona si el almacén se recupera | Store que falla una vez | 502, luego 200 con el mismo ticket | DEC-22, DEC-44 | A |
+| BE-LEAK-08 | unit (int) | `Content-Length` de clips y tamaño de `GameView` iguales entre objetivos para el mismo intento (por construcción) | Dos canciones | Iguales | DEC-03, DEC-06, DEC-44 | A |
+| BE-STO-03 | unit | `FsClipStore.getClip(clipKey)` lee `clips/<clipKey>.mp3`; sin path traversal | `clipKey` `../`, `a/b`, vacío | Rechaza claves fuera de `[0-9a-f]{16}` | DEC-07, DEC-44 | A |
+| BE-STO-04 | unit | `S3ClipStore.getClip(clipKey)` con cliente simulado | Mock | `GetObject` con `clips/<clipKey>.mp3`; error -> `STORAGE_ERROR`; nunca la clave antigua | DEC-08, DEC-44 | M |
+| BE-STO-05 | unit | La caché guarda un fichero por canción y lo reutiliza en los 6 intentos | Spy | 1 lectura para los 6 intentos | AR §9, DEC-44 | M |
+
+**Modificados — frontend**
+
+| ID | Nivel | Descripción | Precondiciones | Resultado esperado | Cubre | P |
+|---|---|---|---|---|---|---|
+| FE-AUD-01 | unit | `prepare`: un solo `fetch` del Blob por intento y una decodificación aunque se repita el clip | `AudioContext` simulado | 1 petición y 1 decodificación | DEC-05, DEC-45 | A |
+| FE-AUD-02 | unit | `play()` síncrono en el gesto: `ctx.resume()` si no está `running` y `source.start` en la misma pila (sin `await` previo), también con `subscribe` activo | Contexto `suspended` | `resume` y `start` antes de terminar el handler | DEC-05, DEC-45, DEC-42 | A |
+| FE-AUD-03 | unit | Clip 410/404 en `prepare`: pide `state`, reintenta una vez; sin `AudioBuffer` a medias | Mock | Recupera; un reintento | DEC-04 | M |
+| FE-AUD-04 | unit | Limpieza al cambiar de intento o desmontar: se suelta el `AudioBuffer` anterior; `revokeObjectURL` solo en el fallback `<audio>` | Spy | Sin referencias ni URLs sin revocar | DEC-05, DEC-45 | B |
+| FE-PLY-01 | unit | Emisiones por frame `{playing:true, positionSec}` con `min(ctx.currentTime - t0, d)` (Web Audio) o `audio.currentTime` (fallback) | Contexto y audio falsos | Posición correcta en ambas rutas | DEC-42, DEC-45 | A |
+| FE-PLY-02 | unit | Al terminar (`onended`), parar o interrumpirse emite `{playing:false}` y detiene el rAF; en fallback igual con `ended`/`pause` | - | Emisión final y 0 frames | DEC-42, DEC-45 | A |
+| FE-PLY-05 | unit | Sin reproducción no hay rAF activo (tampoco tras `onended` ni con contexto suspendido) | Spy rAF | 0 frames | DEC-42 | M |
+| FE-PLY-06 | unit | Repetir crea una fuente nueva y reinicia desde 0 (la anterior se para) | - | `positionSec` desde 0 | DEC-42, DEC-45 | M |
+| FE-PLY-07 | unit | Cambio de intento: `{playing:false, positionSec:0}`, listeners siguen y se suelta el buffer anterior | - | Coherente | DEC-42, DEC-45 | M |
+| FE-PLY-10 | unit | `stop()` para la fuente, emite `{playing:false}` y no cierra el contexto; `dispose()` sí lo cierra | - | Estado final correcto | DEC-41, DEC-45 | A |
+
+**Modificados — E2E**
+
+| ID | Nivel | Módulo | Descripción | Precondiciones | Resultado esperado | Cubre | P |
+|---|---|---|---|---|---|---|---|
+| E2E-03 | e2e | Diario | Skips alargan el clip 1->2->4->7->11->16 s; duración leída del `AudioBuffer` decodificado (script de inicio que envuelve `decodeAudioData`) | Fixtures con clip único | ≈ 1,0188 / 2,0114 / 4,0229 / 7,0008 / 11,0237 / 16,0392 s; N ≤ duración ≤ N + 0,05 s | CA-2, DEC-44, DEC-45 | A |
+| E2E-29 | e2e | Fuga | `/fixtures/...`, `/clips/<clipKey>.mp3` y `/clips/<clipKey>/1.mp3` no accesibles desde frontend ni backend | - | 404 | RQ §2, DEC-07 | M |
+| E2E-30 | e2e | Fuga | Un `GET /clips/<ticket>` por intento; el cuerpo del intento N mide `CLIP_BYTE_OFFSETS[N]` y es prefijo del N+1 | Interceptar red | Tamaños 16.300 … 256.626 | CA-2, DEC-44 | A |
+| E2E-38 | e2e | Móvil | WebKit iPhone: flujo completo; `AudioContext` pasa de `suspended` a `running` tras el primer tap y suena en ese gesto | `iPhone 13` | Sin errores de autoplay | CA-8, DEC-45 | A |
+| E2E-41 | e2e | Audio | Sin autoplay antes del gesto: contexto `suspended` y ningún `source.start` hasta el clic | Script que registra `start`/`resume` | 0 arranques previos | RQ §6, DEC-45 | M |
+| E2E-42 | e2e | Audio | Repetir el clip sin red ni nueva decodificación | Contar red y `decodeAudioData` | 0 adicionales | DEC-05, DEC-45 | M |
+| E2E-52 | e2e | Barra | El cabezal avanza (sigue a `ctx.currentTime`), no supera la zona desbloqueada y queda en reposo al terminar | Intento 3 (4 s) | Monótono, ≤ tope, parado | DEC-42, DEC-45 | A |
+
+**Nuevos — shared (`shared/rules.ts`)**
+
+| ID | Nivel | Descripción | Precondiciones | Resultado esperado | Cubre | P |
+|---|---|---|---|---|---|---|
+| SH-RUL-02 | unit | Valores exactos de las constantes | - | Los de la referencia | DEC-44 | A |
+| SH-RUL-03 | unit | Recalcular tramas con `floor((N*44100+1105)/1152)` (N<16) y 614 para N=16 | - | = `CLIP_FRAME_COUNTS` | DEC-44 | A |
+| SH-RUL-04 | unit | Recalcular offsets desde el patrón 417/418 construido en el test, sin importar la fórmula de producción | - | = `CLIP_BYTE_OFFSETS`; límites de trama; total correcto | DEC-44 | A |
+| SH-RUL-05 | unit | Invariantes: offsets crecientes, último = total; para N<16 el audio real queda por debajo de N, de ~1 a 24 ms; con `ceil` se rebasaría N | - | Cumple | DEC-44, CA-2 | A |
+| SH-RUL-06 | unit | Un solo origen de las constantes: backend, `validate` y `generate-fixtures` las importan de `shared/rules` (sin literales duplicados fuera de tests) | Análisis estático | Sin duplicados | DEC-44, DEC-12 | M |
+
+**Nuevos — script de catálogo**
+
+| ID | Nivel | Descripción | Precondiciones | Resultado esperado | Cubre | P |
+|---|---|---|---|---|---|---|
+| SC-CLP-01 | unit | `clipArgs`: un clip, `-t 16`, 128k CBR, estéreo, 44100 Hz, `-reservoir 0`, salida `<clipKey>.mp3` | - | Args exactos; nada por intento | DEC-44 | A |
+| SC-CLP-02 | unit | El único fundido del fichero es el de 50 ms al final (`afade=t=out:st=15.95:d=0.05`) | - | Un solo `afade` | DEC-44, DEC-45 | A |
+| SC-CLP-03 | unit | Args seguros: sin shell, rutas absolutas, `youtubeId` que empieza por `-` | Título y ruta hostiles | Sin inyección | AR §8 | M |
+| SC-CLP-04 | unit | `build` borra `out/clips/<clipKey>/` antiguo tras generar el nuevo, solo de las canciones reconstruidas | Layouts antiguo y nuevo | Correcto | DEC-44 | A |
+| SC-CLP-05 | unit | Si la generación falla, el directorio antiguo no se borra | ffmpeg simulado que falla | Antiguo intacto, código != 0 | DEC-44 | A |
+| SC-CLP-06 | unit | `validate` recorre cabeceras: 614 tramas MPEG-1 Layer III 128 kbps 44,1 kHz estéreo | MP3 sintético | Pasa; MPEG-2, otro bitrate o mono -> falla | DEC-44 | A |
+| SC-CLP-07 | unit | `validate`: cada offset es límite de trama; patrón de padding desplazado falla | MP3 sintético alterado | Falla nombrando el offset | DEC-44 | A |
+| SC-CLP-08 | unit | `validate`: `main_data_begin == 0` en todas las tramas | Trama con reservoir | Falla nombrando la trama | DEC-44 | A |
+| SC-CLP-09 | unit | `validate`: primera trama Xing/Info o ID3 al inicio | Cada caso | Falla | DEC-06, DEC-44 | A |
+| SC-CLP-10 | unit | `validate` con solo el layout antiguo | Dir antiguo | Falla pidiendo `build` | DEC-44 | M |
+| SC-CLP-11 | unit | Migración: `upload` sin prune sube los nuevos y deja los antiguos; `upload --prune` borra los antiguos | Remoto mezclado | Estado tras cada paso | DEC-44 | A |
+| SC-CLP-12 | unit | Un clip que no cumple `validate` impide todo `upload` | 1 corrupto entre 5 | 0 subidas | AR §6, DEC-44 | A |
+
+**Nuevos — backend (`unit (int)` salvo indicación)**
+
+| ID | Nivel | Descripción | Precondiciones | Resultado esperado | Cubre | P |
+|---|---|---|---|---|---|---|
+| BE-CLP-01 | unit (int) | Partida completa: cada respuesta es `subarray(0, CLIP_BYTE_OFFSETS[i])` y prefijo de la siguiente | Clip único | Prefijos encadenados | DEC-44, CA-2 | A |
+| BE-CLP-02 | unit (int) | Fichero de tamaño distinto de `CLIP_TOTAL_BYTES` | Store erróneo | 502 `STORAGE_ERROR`; ticket no consumido | DEC-22, DEC-44 | A |
+| BE-CLP-03 | unit (int) | Longitud correcta pero sin cabecera de trama en algún offset | Corrupto en el 3.º offset | 502 sin consumir ticket; el test documenta si se valida todo el fichero o solo el offset del intento | DEC-22, DEC-44 | A |
+| BE-CLP-04 | unit (int) | Un fichero válido en caché no se revalida tramo a tramo en cada petición | Spy | Coste constante | DEC-44, AR §9 | M |
+| BE-CLP-05 | unit (int) | Caché por canción: 1 lectura por partida; LRU con `CLIP_CACHE_MB` pequeño | Spy | Correcto | AR §9, DEC-44 | A |
+| BE-CLP-06 | unit (int) | `getClip(clipKey)` es la única operación de audio; se rechaza `clips/<clipKey>/<n>.mp3` | - | Solo `clips/<clipKey>.mp3` | DEC-44, DEC-07 | A |
+| BE-CLP-07 | unit (int) | El backend arranca con un store solo con el layout nuevo | Fixture nuevo | `/health` 200; canciones servidas | DEC-44 | M |
+| BE-CLP-08 | unit (int) | Backend nuevo contra bucket sin los ficheros nuevos | `clips/` vacío | 502 en `/clips` sin consumir ticket; `/health` y `/catalog` 200 | DEC-44, DEC-22 | M |
+| BE-CLP-09 | unit (int) | Sin fuga por longitud ni bytes posteriores al offset | Dos canciones distintas | Longitud igual; ningún byte posterior | CA-1, CA-2, DEC-44 | A |
+| BE-CLP-10 | unit | Fixtures de lamejs: 614 tramas, 256.626 B, offsets en límite, sin ID3/Xing; `main_data_begin == 0` no se exige (lamejs no desactiva el reservoir) | Fixtures | Cumplen | DEC-44 | A |
+| BE-CLP-11 | unit (int) | El 6.º intento sirve el fichero entero, idéntico | - | Igual byte a byte | DEC-44 | A |
+| BE-CLP-12 | unit (int) | `CLIP_CACHE_MB=32` ≈ 130 canciones; la 131.ª expulsa la más antigua | Fixtures sintéticos | Correcto | AR §9, DEC-44 | M |
+
+**Nuevos — frontend `ClipPlayer` con Web Audio (`AudioContext` simulado)**
+
+| ID | Nivel | Descripción | Precondiciones | Resultado esperado | Cubre | P |
+|---|---|---|---|---|---|---|
+| FE-WA-01 | unit | Un `AudioContext` por `ClipPlayer`, creado perezosamente en el primer `prepare` y reutilizado | `createAudioContext` inyectado | 1 instancia; 0 antes de `prepare` | DEC-45 | A |
+| FE-WA-02 | unit | `prepare` decodifica y no llama a `resume()` | Contexto `suspended` | `resume` 0 veces | DEC-45 | A |
+| FE-WA-03 | unit | `play` con contexto `suspended`: `resume()` y `start(t0)` síncronos | - | Misma pila | DEC-45, DEC-05 | A |
+| FE-WA-04 | unit | `play` con contexto `running` no llama a `resume` | - | 0 llamadas | DEC-45 | M |
+| FE-WA-05 | unit | Ganancia exacta (referencia DEC-45) en los 6 intentos, sin caso especial para 16 s; `d < 0.05` sin tiempos negativos | Buffers de 1,0188 … 16,0392 s y de 0,03 s | Llamadas y tiempos exactos | DEC-45 | A |
+| FE-WA-06 | unit | Cada `play` crea fuente y `GainNode` nuevos; la anterior se para y desconecta | Dos `play` | 2 fuentes; 1.ª parada | DEC-45 | A |
+| FE-WA-07 | unit | `positionSec = min(ctx.currentTime - t0, d)`, nunca negativa ni mayor que `d` | `currentTime` simulado | Acotada | DEC-45, DEC-42 | A |
+| FE-WA-08 | unit | `onended` emite `playing:false` y detiene el rAF; con `stop()` previo no se emite dos veces | - | Una emisión | DEC-45 | A |
+| FE-WA-09 | unit | Contexto pasa a `interrupted`/`suspended` mientras suena: emite `playing:false`, para la fuente y el siguiente `play()` vuelve a llamar a `resume()` | Evento simulado | Correcto | DEC-45 | A |
+| FE-WA-10 | unit | `resume()` rechaza: `playing:false`, sin excepción; un segundo clic reintenta | - | Coherente | DEC-45 | M |
+| FE-WA-11 | unit | `dispose()` cierra el contexto una vez, idempotente, sin emisiones posteriores; `stop()` no lo cierra | - | Cierre único | DEC-45 | A |
+| FE-WA-12 | unit | Solo se conserva el `AudioBuffer` del intento actual | Inspección | 1 buffer vivo | DEC-45 | M |
+| FE-WA-13 | unit | Sin `AudioContext` (`createAudioContext` → `null`): `<audio>` + objectURL, corte seco; `play` sigue síncrono | - | 0 usos de Web Audio | DEC-45, DEC-05 | A |
+| FE-WA-14 | unit | Solo `webkitAudioContext`: se usa y funciona igual | - | Igual que FE-WA-01..07 | DEC-45 | M |
+| FE-WA-15 | unit | `decodeAudioData` rechaza: ese clip va por `<audio>`; el siguiente vuelve a intentar Web Audio | Falla una vez | Clip 1 fallback; clip 2 Web Audio | DEC-45 | A |
+| FE-WA-16 | unit | Carrera en `prepare` (A y luego B): el resultado tardío de A se descarta | Retardos invertidos | Suena B | DEC-45 | M |
+| FE-WA-17 | unit | `navigator.audioSession.type = 'playback'` si existe; sin él no falla | Con y sin | Correcto | DEC-45 | M |
+| FE-WA-18 | unit | Interfaz pública de `ClipPlayer` sin cambios; `ClipProgressBar` no cambia | Tipos y render | Sin cambios de API | DEC-45, DEC-42 | M |
+| FE-WA-19 | unit | Nada se emite ni queda registrado tras `dispose` o desmontar | Eventos tras dispose | 0 emisiones | DEC-45 | M |
+
+**Nuevos — E2E**
+
+| ID | Nivel | Módulo | Descripción | Precondiciones | Resultado esperado | Cubre | P |
+|---|---|---|---|---|---|---|---|
+| E2E-74 | e2e | Fundido | Envolviendo `GainNode` y `decodeAudioData`: cada `play` (6 intentos) programa 1 hasta `t0+d-0.05` y rampa a 0 en `t0+d` | Chromium y WebKit | 6 rampas coherentes | DEC-45 | A |
+| E2E-75 | e2e | Fallback | Sin `AudioContext` ni `webkitAudioContext`: partida completa con `<audio>`, barra con `audio.currentTime`, sin errores en consola | Script de inicio | Flujo completo | DEC-45, CA-8 | A |
+| E2E-76 | e2e | Corte | Fixtures con un tono distinto por segundo: los últimos 10 ms del buffer del intento N tienen el tono del segundo N, no del N+1 (FFT en página) | Tonos escalonados | Correcto en los 5 primeros intentos | CA-2, DEC-44 | M |
+| E2E-77 | e2e | Audio | Un fetch y una decodificación por intento (también al repetir o cambiar de pestaña); el fichero completo no se pide antes del intento 6 | Contadores | Conteos correctos; bytes ≤ offset | DEC-44, DEC-45 | A |
+| E2E-78 | e2e | Errores | Fixture alterado en un offset: 502, la UI muestra "No se pudo cargar el audio. Reintentar" y permite reintentar sin consumir ticket; reparado el fichero, el mismo ticket da 200 (sin caché envenenada) | Fixture corrupto | Sin crash; reintento | DEC-44, DEC-22, DEC-28 | M |
+| E2E-79 | e2e | iOS | `statechange` a `interrupted` durante la reproducción: barra y botón en reposo; el siguiente clic reanuda | WebKit con contexto controlado | UI coherente | DEC-45 | M |
+
+**Matriz §5:** "RQ §3 / CA-2" += SH-RUL-02..06, SC-CLP-01..12, BE-CLP-01..12, BE-HDR-11, E2E-03, 30, 76; "RQ §2" += BE-CLP-09, E2E-29, 76; nueva fila "DEC-44 clip único" = SH-RUL-01..06, SC-FF-03/04, SC-BU-01, SC-VA-01..04/06, SC-UP-04..06, SC-CLP-01..12, BE-TKT-11, BE-HDR-01/06/10..12, BE-LEAK-08, BE-STO-03..05, BE-CLP-01..12, E2E-29, 30, 76, 78; nueva fila "DEC-45 fundido" = FE-AUD-01..04, FE-PLY-01/02/05..07/10, FE-WA-01..19, E2E-38, 41, 42, 52, 74, 75, 77, 79; "CA-8" += E2E-75, 79; "RQ §6 (iOS)" += FE-WA-03/09/10/17, E2E-79.
+
+**Riesgos (complementan §7):**
+1. Verificación manual en iPhone real: desbloqueo del `AudioContext`, interruptor de silencio con `navigator.audioSession.type='playback'` (Safari ≥ 16.4), llamadas y segundo plano. WebKit en Linux solo lo aproxima.
+2. Orden de despliegue obligatorio (DEC-44): `build` → `upload` sin `--prune` → merge a `main` (Render) → `upload --prune`. Un backend nuevo sin ficheros nuevos da 502 en todos los clips (BE-CLP-08). No verificable en CI; está en `DESARROLLO.md`.
+3. Los fixtures de lamejs usan reservoir: `main_data_begin == 0` solo lo garantiza `validate` (SC-CLP-08).
+4. Un cambio de versión de ffmpeg/LAME que altere el patrón de tramas o el retardo (1105 muestras) lo detecta `validate` antes de subir; habría que recalcular las constantes.
+5. E2E-03 usa un rango de duración porque cada navegador puede recortar el retardo del codificador de forma distinta.
+6. Resuelto (DEC-44, BE-CLP-03): el backend valida el tamano y los 5 offsets intermedios de cualquier intento, un fallo de formato no consume el ticket y la lectura invalida se expulsa de la cache (la siguiente peticion relee del almacen).
+
 ## 1. Alcance
 
 Dentro:
@@ -339,11 +491,11 @@ Detección y desactivación en `draft` y `build`:
 | SC-DR-08 [NUEVO] | unit | Fuente corta nueva: entrada con `enabled:false`, `durationSec` guardada, aviso en consola, **código de salida 0**; no activa nunca nada por sí mismo (una larga queda en el `enabled` por defecto) | Fuentes de 7,4 s y 40 s | Corta desactivada; larga como el resto | DEC-40, RQ §4 | A |
 | SC-DR-09 [NUEVO] | unit | `draft` con fuente no medible (ffprobe falla) deja `durationSec` ausente y avisa; no desactiva ni falla | Mock | Catálogo sin cambios de `enabled` | DEC-40 | M |
 | SC-FF-01 | unit | Args master: `-ss startSec -t 16`, `loudnorm` | - | Esperados | AR §6 | A |
-| SC-FF-02 | unit | Args clips para N en `CLIP_SECONDS` | - | `-t N`, fundido 50 ms, `-b:a 128k`, estéreo, 44100 | CA-2, DEC-06 | A |
+| SC-FF-02 [RETIRADO, ver §0.2] | unit | Args clips para N en `CLIP_SECONDS` | - | `-t N`, fundido 50 ms, `-b:a 128k`, estéreo, 44100 | CA-2, DEC-06 | A |
 | SC-FF-03 | unit | Args sin metadatos | - | `-map_metadata -1 -id3v2_version 0 -write_xing 0 -fflags +bitexact` | DEC-06 | A |
 | SC-FF-04 | unit | Salida `data/out/clips/<clipKey>/<n>.mp3` (n=1..6) | - | Correcta, sin id ni título | DEC-07, DEC-24 | A |
 | SC-FF-05 | unit | Args seguros ante rutas con espacios/comillas/`;` | - | Sin inyección | AR §8 | M |
-| SC-FF-06 | unit | Fundido en clip de 1 s sin negativos | - | `st >= 0` | DEC-06 | M |
+| SC-FF-06 [RETIRADO, ver §0.2] | unit | Fundido en clip de 1 s sin negativos | - | `st >= 0` | DEC-06 | M |
 | SC-BU-01 | unit | Recompila solo si cambian `startSec` o fuente | Manifest simulado | Correcto | AR §6 | M |
 | SC-BU-02 [MOD] | unit | `build` ignora `enabled:false` (incluidas las cortas ya desactivadas) | - | No genera sus clips ni mide | AR §6 | M |
 | SC-BU-03 [NUEVO] | unit | `build` mide SIEMPRE la fuente antes de cortar (incluso con `durationSec` guardada y distinta); si la medida real dice corta, desactiva la canción con `catalogStore.update` y actualiza `durationSec` | Catálogo con `durationSec` desfasada | Canción desactivada, medida real guardada | DEC-40 | A |

@@ -1,8 +1,13 @@
 import { test, expect } from '../support/test.ts'
+import { INSTRUMENT_WEBAUDIO } from '../support/webaudio.ts'
 
 const SECONDS = [1, 2, 4, 7, 11, 16]
 
 test.describe('Barra de reproduccion (DEC-42)', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(INSTRUMENT_WEBAUDIO)
+  })
+
   test('E2E-50_should_show_segmented_bar_with_marks_at_the_clip_durations', async ({ app }) => {
     const d = app.daily
     await app.goto()
@@ -53,6 +58,13 @@ test.describe('Barra de reproduccion (DEC-42)', () => {
 
     await d.playButton.click()
     await expect(bar).toHaveAttribute('data-playing', 'true')
+    // El cabezal sigue a ctx.currentTime: posicion = currentTime - inicio de la fuente (+-0,15 s).
+    const drift = await app.page.evaluate((valuenow) => {
+      const log = (window as any).__wa
+      const start = log.starts[log.starts.length - 1]
+      return Math.abs(log.contexts[0].currentTime - start.when - valuenow)
+    }, await position())
+    expect(drift, 'desvio entre cabezal y ctx.currentTime').toBeLessThanOrEqual(0.3)
     const samples: number[] = []
     for (let i = 0; i < 3; i++) {
       await app.page.waitForTimeout(450)

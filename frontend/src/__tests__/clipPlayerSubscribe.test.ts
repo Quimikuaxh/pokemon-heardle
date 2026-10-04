@@ -42,6 +42,7 @@ function setup() {
     createObjectURL: vi.fn(() => `blob:${++n}`),
     revokeObjectURL: vi.fn(),
     createAudio: vi.fn(() => audio as unknown as HTMLAudioElement),
+    createAudioContext: () => null, // ruta de reserva <audio> (DEC-45)
     requestFrame: frames.requestFrame,
     cancelFrame: frames.cancelFrame,
   }
@@ -51,7 +52,7 @@ function setup() {
 
 const last = (fn: ReturnType<typeof vi.fn>) => fn.mock.calls.at(-1)?.[0]
 
-describe('ClipPlayer.subscribe', () => {
+describe('ClipPlayer.subscribe (ruta de reserva <audio>)', () => {
   it('FE-PLY-01 al reproducir, el listener recibe { playing:true, positionSec } con audio.currentTime en cada frame', async () => {
     const { player, audio, frames } = setup()
     const fn = vi.fn()

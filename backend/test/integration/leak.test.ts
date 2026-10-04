@@ -293,4 +293,21 @@ describe('BE-LEAK fuga de la cancion objetivo', () => {
     expect(Object.keys(redeemed).sort()).toEqual(['attempt', 'clipKey', 'nonce'])
     expect(JSON.stringify(redeemed)).not.toContain(C_YT)
   })
+
+  it('BE-LEAK-08 [MOD] el Content-Length de cada intento es identico entre dos canciones (por construccion, CLIP_BYTE_OFFSETS)', async () => {
+    const app = await startTestApp({ randomInt: () => 0 })
+    const lengths: string[][] = []
+    for (const filter of [['C'], ['D']]) {
+      const g = await app.createUnlimited(filter)
+      let view = g.json
+      const row: string[] = []
+      for (let n = 0; n < 6; n++) {
+        row.push(String((await app.clip(view.clipUrl)).headers.get('content-length')))
+        if (n < 5) view = (await app.skip(view.token)).json
+      }
+      lengths.push(row)
+    }
+    expect(lengths[0]).toEqual(lengths[1])
+    expect(lengths[0]).toEqual(['16300', '32182', '64365', '112013', '176378', '256626'])
+  })
 })

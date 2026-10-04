@@ -49,9 +49,9 @@
  *   deriveStatus(p): 'playing'|'won'|'lost'
  *   buildGameView(p, index, { token, clipUrl? }): GameView
  *
- * storage/ClipStore.ts       interface ClipStore { getCatalog(): Promise<unknown>; getClip(clipKey, n /*1..6*\/): Promise<Buffer> }
- * storage/FsClipStore.ts     new FsClipStore(rootDir)   (rootDir/catalog/catalog.json, rootDir/clips/<clipKey>/<n>.mp3)
- * storage/S3ClipStore.ts     new S3ClipStore({ client: { send(cmd) }, bucket })  (Key 'clips/<clipKey>/<n>.mp3', 'catalog/catalog.json')
+ * storage/ClipStore.ts       interface ClipStore { getCatalog(): Promise<unknown>; getClip(clipKey): Promise<Buffer> }  // fichero entero (DEC-44)
+ * storage/FsClipStore.ts     new FsClipStore(rootDir)   (rootDir/catalog/catalog.json, rootDir/clips/<clipKey>.mp3)
+ * storage/S3ClipStore.ts     new S3ClipStore({ client: { send(cmd) }, bucket })  (Key 'clips/<clipKey>.mp3', 'catalog/catalog.json')
  * storage/LruCache.ts        new LruCache(maxBytes): get(key), set(key, Buffer), has(key), bytes
  * storage/CachedClipStore.ts new CachedClipStore(inner: ClipStore, cache: LruCache)
  *

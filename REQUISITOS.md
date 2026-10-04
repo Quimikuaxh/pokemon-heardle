@@ -11,6 +11,7 @@ Juego web estilo Heardle: adivinar la cancion de un juego de Pokemon a partir de
 - El backend sirve solo el audio del intento actual (0 a N s), sin ID3 ni nombres reveladores, con URL opaca de un solo uso.
 - La validacion (cancion correcta + juego correcto) se hace en servidor. La solucion se revela solo al terminar la partida.
 - Limitacion aceptada: no se puede impedir Shazam ni grabar la salida de audio.
+- Limitacion aceptada: el prefijo servido en cada intento puede incluir, en sus 1-2 ultimas tramas, rastro de audio posterior al corte por el analisis hacia delante del codificador MP3 (~12 ms recuperables con un decodificador manipulado). Alternativa descartada: retrasar el corte 40-59 ms por intento. Ver DEC-44 en ARQUITECTURA.md.
 
 ## 3. Mecanica
 - Estandar Heardle: 6 intentos, fragmentos de 1/2/4/7/11/16 s (una duracion por intento), boton Skip (consume intento y alarga fragmento), buscador con autocompletado de canciones. Sin compartir resultado ni estadisticas (retirados, seccion 9).
@@ -47,7 +48,7 @@ Juego web estilo Heardle: adivinar la cancion de un juego de Pokemon a partir de
 
 ## 7. Criterios de aceptacion
 1. En DevTools (codigo, red, almacenamiento) no aparece la cancion objetivo antes de terminar la partida.
-2. Intento N reproduce exactamente la duracion definida; un fragmento no revela audio posterior.
+2. Intento N reproduce la duracion definida (hasta 24 ms menos por el corte en limite de trama MP3, nunca mas); un fragmento no revela audio posterior, salvo la limitacion aceptada de que las ultimas 1-2 tramas del prefijo dependen del analisis hacia delante del codificador (~12 ms recuperables con un decodificador manipulado; ver DEC-44 en ARQUITECTURA.md).
 3. Fallo con juego correcto muestra feedback de juego acertado; con juego incorrecto, lo indica.
 4. El mismo dia da la misma cancion en diario para todas las personas, sin filtro.
 5. En ilimitado, filtro vacio no permite empezar; pool con una sola cancion funciona.
@@ -69,7 +70,7 @@ Juego web estilo Heardle: adivinar la cancion de un juego de Pokemon a partir de
 - **Repo GitHub privado.** Reduce el riesgo de copyright. Audios y catalogo van igualmente al `.gitignore`: privado hoy no garantiza privado manana.
 - **Audio en bucket privado del MISMO proyecto Supabase que claude-test.** Evita la pausa por inactividad de un proyecto aparte y no consume el 2.o proyecto gratuito. Descartado: proyecto Supabase nuevo (el plan free lo pausa tras 1 semana de inactividad).
 - **Acceso al bucket con claves S3 de Supabase Storage** (protocolo S3-compatible de Supabase, sin AWS; se generan en Storage -> S3 Access Keys). Solo dan acceso a Storage. Descartado: `service_role` (acceso total al proyecto, incluida la BD del Team Builder).
-- **Originales y clips en local, en carpeta gitignorada de pokemon-heardle; al bucket solo se suben los clips** (MP3 CBR 128 kbps, ~660 KB/cancion con 6 clips, ~330 MB para 500 canciones; descartado 64 kbps mono porque el usuario prioriza calidad) y el `catalog.json` que necesita el backend. El 1 GB free se comparte con el Team Builder; ver estimacion y egress en ARQUITECTURA.md (DEC-16).
+- **Originales y clips en local, en carpeta gitignorada de pokemon-heardle; al bucket solo se suben los clips** (MP3 CBR 128 kbps; un unico clip de 16 s por cancion, ~250 KB, ~125 MB para 500 canciones; descartado 64 kbps mono porque el usuario prioriza calidad) y el `catalog.json` que necesita el backend. El 1 GB free se comparte con el Team Builder; ver estimacion y egress en ARQUITECTURA.md (DEC-16).
 - **Buscador: cada opcion es una cancion (mostrando sus juegos); busca por titulo de cancion O nombre de juego; muestra SIEMPRE todo el catalogo**, independientemente del filtro y de haber acertado el juego. Juego acertado = la cancion elegida comparte algun juego con la objetivo. Descartado: opciones por par (cancion, juego) y limitar el buscador al pool del filtro (daria pistas y dejaria sin sentido el feedback de juego).
 - **Diario comun sin filtro; filtro solo en ilimitado** (cambio del 2026-10-03). El usuario quiere un diario comun y comparable. Descartado: filtro en ambos modos con una cancion del dia por combinacion de filtro.
 - **Intento repetido no permitido** (buscador lo bloquea, servidor lo rechaza sin consumir intento). Descartado: aceptarlo consumiendo intento.
@@ -83,6 +84,8 @@ Juego web estilo Heardle: adivinar la cancion de un juego de Pokemon a partir de
 - **Embed de la cancion completa solo al pulsar un boton.** Descartado: carga automatica al terminar (peticiones a YouTube al reabrir un diario terminado y mas datos en movil).
 - **Canciones cortas: desactivacion automatica con marca, no fallo.** Descartado: que `validate` falle (bloqueaba el flujo por temas que simplemente no sirven).
 - **Cancion completa al terminar via embed de YouTube.** Descartado: servir el tema completo o un fragmento largo propio (~1,5 GB para 500 canciones, supera el 1 GB gratis de Supabase).
+- **Un solo clip de 16 s por cancion**: el servidor sirve en cada intento el inicio del fichero hasta la duracion del intento, sin recodificar. Motivo: reducir almacenamiento (de ~645 KB a ~250 KB por cancion; 169 MB -> ~67 MB con 268 canciones). Descartado: 6 ficheros por cancion. Detalle tecnico en ARQUITECTURA.md (DEC-44).
+- **Fundido de salida (~50 ms) de cada fragmento hecho en el navegador (Web Audio)**, implementado ya. Descartados: aceptar el corte seco; fundidos dentro del fichero (bajadas de volumen audibles a mitad de intentos posteriores). Detalle en ARQUITECTURA.md (DEC-45).
 - **Clips precortados, no ffmpeg al vuelo.** La instancia free de Render tiene poca CPU/RAM; cortar por peticion la tumbaria. El script de catalogo genera los clips por intento. Descartado: recorte en servidor.
 - **Render free compartido con el Team Builder.** El plan free da 750 h/mes por workspace; ambos backends duermen tras 15 min de inactividad. RIESGO: si ambos estan despiertos a la vez, el consumo suma y puede agotar las horas. REQUISITO: NO anadir keep-alive ni pings periodicos; solo se despierta con trafico real (la UI muestra carga ante el arranque en frio).
 - **Backend portable.** Sin dependencias especificas de Render (solo Node estandar, variables de entorno, Dockerfile opcional) para poder migrarlo. Descartado: Koyeb, porque exige tarjeta y el usuario no quiere tarjeta obligatoria.

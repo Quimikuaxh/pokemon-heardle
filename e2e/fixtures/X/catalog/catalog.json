@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "generatedAt": "2026-10-03T12:00:00Z",
+  "games": [
+    {
+      "id": "A",
+      "name": "Pokemon Game Alpha"
+    }
+  ],
+  "songs": [
+    {
+      "id": "mono-song-only1",
+      "title": "Lonely Obelisk",
+      "games": [
+        "A"
+      ],
+      "clipKey": "aaaaaaaaaaaaaaaa",
+      "startSec": 7,
+      "enabled": true,
+      "reviewed": true,
+      "source": {
+        "youtubeId": "ytaaaaaaaaa",
+        "videoTitle": "Video original de Lonely Obelisk (OST)",
+        "durationSec": 60
+      }
+    }
+  ]
+}

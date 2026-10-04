@@ -1,6 +1,7 @@
 // `build` ejecutado por runCli con --data-dir temporal; ffprobe y ffmpeg simulados (deps.run).
+import { spawnSync } from 'node:child_process'
 import { describe, it, expect } from 'vitest'
-import { existsSync, readdirSync } from 'node:fs'
+import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { catalogOf, fakeRunner, io, makeDataDir, readCatalog, song, runCliSafe } from './helpers/data'
 
@@ -11,11 +12,12 @@ const OFF = song({ id: 'off-one', clipKey: '4444444444444444', youtubeId: 'OOOOO
 
 const sources = { LLLLLLLLLL1: {}, LLLLLLLLLL2: {}, SSSSSSSSSS1: {}, OOOOOOOOOO1: {} }
 const build = (dir: string, runner = fakeRunner({}, 100), out = io()) => runCliSafe(['build', '--data-dir', dir], out, { run: runner.run })
-const clipsOf = (dir: string, key: string) => {
-  const d = join(dir, 'out', 'clips', key)
-  return existsSync(d) ? readdirSync(d).sort() : []
-}
-const SIX = ['1.mp3', '2.mp3', '3.mp3', '4.mp3', '5.mp3', '6.mp3']
+/** Ficheros generados para una cancion en out/clips: el clip unico <clipKey>.mp3 (DEC-44) y, si lo hay, el directorio antiguo. */
+const clipFile = (dir: string, key: string) => join(dir, 'out', 'clips', `${key}.mp3`)
+const hasClip = (dir: string, key: string) => existsSync(clipFile(dir, key))
+const oldDir = (dir: string, key: string) => join(dir, 'out', 'clips', key)
+const clipsOf = (dir: string, key: string) => (hasClip(dir, key) ? ['mp3'] : [])
+const ONE = ['mp3']
 
 describe('build: canciones cortas (DEC-40)', () => {
   it('SC-BU-04 una corta activa y otras largas: genera las largas, desactiva la corta, avisa y sale con 0', async () => {
@@ -23,7 +25,7 @@ describe('build: canciones cortas (DEC-40)', () => {
     const out = io()
     const code = await build(dir, fakeRunner({ SSSSSSSSSS1: 7.4 }, 120), out)
     expect(code).toBe(0)
-    expect([clipsOf(dir, L1.clipKey), clipsOf(dir, L2.clipKey), clipsOf(dir, SH.clipKey)]).toEqual([SIX, SIX, []])
+    expect([clipsOf(dir, L1.clipKey), clipsOf(dir, L2.clipKey), clipsOf(dir, SH.clipKey)]).toEqual([ONE, ONE, []])
     const short = readCatalog(dir).songs.find((s: any) => s.id === 'short-one')
     expect([short.enabled, short.source.durationSec]).toEqual([false, 7.4])
     expect(out.text()).toMatch(/cort/i)
@@ -109,5 +111,117 @@ describe('build: canciones cortas (DEC-40)', () => {
     await build(dir, runner)
     const file = runner.calls.find((c) => c.command === 'ffprobe')!.args.at(-1)!
     expect([file.startsWith('/'), file.startsWith('-')]).toEqual([true, false])
+  })
+
+  it('SC-CLP-01 build genera UN solo fichero por cancion (out/clips/<clipKey>.mp3) y ninguna carpeta <clipKey>/', async () => {
+    const dir = makeDataDir({ catalog: catalogOf([L1]), sources })
+    await build(dir, fakeRunner({}, 120))
+    expect([hasClip(dir, L1.clipKey), existsSync(oldDir(dir, L1.clipKey))]).toEqual([true, false])
+  })
+
+  it('SC-CLP-01 la segunda invocacion de ffmpeg (clip) usa clipArgs de 16 s y la salida <clipKey>.mp3', async () => {
+    const dir = makeDataDir({ catalog: catalogOf([L1]), sources })
+    const runner = fakeRunner({}, 120)
+    await build(dir, runner)
+    const clipCall = runner.ffmpegCalls().find((c) => c.args.at(-1)!.endsWith(`${L1.clipKey}.mp3`))!
+    expect(clipCall.args).toContain('-reservoir')
+    expect(runner.ffmpegCalls().length).toBe(2) // master + un unico clip (antes eran 1 + 6)
+  })
+
+  it('SC-CLP-04 build borra el directorio antiguo out/clips/<clipKey>/ tras generar el nuevo (y no el de otras canciones)', async () => {
+    const dir = makeDataDir({ catalog: catalogOf([L1]), sources })
+    mkdirSync(oldDir(dir, L1.clipKey), { recursive: true })
+    writeFileSync(join(oldDir(dir, L1.clipKey), '1.mp3'), 'antiguo')
+    mkdirSync(oldDir(dir, 'ffffffffffffffff'), { recursive: true }) // de una cancion que no se reconstruye
+    await build(dir, fakeRunner({}, 120))
+    expect(existsSync(oldDir(dir, L1.clipKey))).toBe(false)
+    expect(hasClip(dir, L1.clipKey)).toBe(true)
+    expect(existsSync(oldDir(dir, 'ffffffffffffffff'))).toBe(true)
+  })
+
+  it('SC-CLP-04 una cancion desactivada conserva su carpeta antigua (no se reconstruye ni se toca)', async () => {
+    const dir = makeDataDir({ catalog: catalogOf([L1, OFF]), sources })
+    mkdirSync(oldDir(dir, OFF.clipKey), { recursive: true })
+    writeFileSync(join(oldDir(dir, OFF.clipKey), '1.mp3'), 'antiguo')
+    await build(dir, fakeRunner({}, 120))
+    expect(existsSync(join(oldDir(dir, OFF.clipKey), '1.mp3'))).toBe(true)
+  })
+
+  it('SC-CLP-04 el layout antiguo sin fichero nuevo cuenta como no compilado: se regenera aunque el manifest este al dia', async () => {
+    const dir = makeDataDir({ catalog: catalogOf([L1]), sources })
+    const first = fakeRunner({}, 120)
+    await build(dir, first) // genera y escribe el manifest
+    rmSync(clipFile(dir, L1.clipKey)) // se queda "sin fichero nuevo"
+    mkdirSync(oldDir(dir, L1.clipKey), { recursive: true })
+    writeFileSync(join(oldDir(dir, L1.clipKey), '1.mp3'), 'antiguo')
+    const second = fakeRunner({}, 120)
+    await build(dir, second)
+    expect([hasClip(dir, L1.clipKey), existsSync(oldDir(dir, L1.clipKey)), second.ffmpegCalls().length]).toEqual([true, false, 2])
+  })
+
+  it('SC-CLP-05 si la generacion falla, el directorio antiguo no se borra y el codigo de salida es != 0', async () => {
+    const dir = makeDataDir({ catalog: catalogOf([L1]), sources })
+    mkdirSync(oldDir(dir, L1.clipKey), { recursive: true })
+    writeFileSync(join(oldDir(dir, L1.clipKey), '1.mp3'), 'antiguo')
+    const base = fakeRunner({}, 120)
+    const failing = async (command: string, args: string[], options?: any) => {
+      if (command === 'ffmpeg' && args.at(-1)!.endsWith('.mp3')) throw Object.assign(new Error('ffmpeg: encoder error'), { code: 1 })
+      return base.run(command, args, options)
+    }
+    const out = io()
+    const code = await runCliSafe(['build', '--data-dir', dir], out, { run: failing })
+    expect(code).not.toBe(0)
+    expect(existsSync(join(oldDir(dir, L1.clipKey), '1.mp3'))).toBe(true)
+    expect(hasClip(dir, L1.clipKey)).toBe(false)
+  })
+
+  it('SC-CLP-05 un clip a medias (ffmpeg fallo despues de escribir) no se deja como bueno', async () => {
+    const dir = makeDataDir({ catalog: catalogOf([L1]), sources })
+    const base = fakeRunner({}, 120)
+    const failing = async (command: string, args: string[], options?: any) => {
+      if (command === 'ffmpeg' && args.at(-1)!.endsWith('.mp3')) {
+        await base.run(command, args, options) // escribe el fichero
+        throw new Error('ffmpeg murio a mitad')
+      }
+      return base.run(command, args, options)
+    }
+    expect(await runCliSafe(['build', '--data-dir', dir], io(), { run: failing })).not.toBe(0)
+    expect(hasClip(dir, L1.clipKey)).toBe(false)
+  })
+
+  it('SC-CLP-03 youtubeId que empieza por "-": el master y el clip usan rutas absolutas para ffmpeg', async () => {
+    const dash = song({ id: 'dash', clipKey: '9999999999999999', youtubeId: '-BRQ_XVwg-M' })
+    const dir = makeDataDir({ catalog: catalogOf([dash]), sources: { '-BRQ_XVwg-M': {} } })
+    const runner = fakeRunner({}, 120)
+    await build(dir, runner)
+    for (const call of runner.ffmpegCalls()) {
+      const input = call.args[call.args.indexOf('-i') + 1]
+      expect([input.startsWith('/'), call.args.at(-1)!.startsWith('/')]).toEqual([true, true])
+    }
+  })
+})
+
+describe('build: limpieza de restos', () => {
+  it('SC-CLP-05 un directorio .tmp-<pid> huerfano de un build interrumpido se borra al empezar y no toca otros ficheros', async () => {
+    const dir = makeDataDir({ catalog: catalogOf([L1]), sources })
+    const clips = join(dir, 'out', 'clips')
+    const deadPid = spawnSync(process.execPath, ['-e', '0']).pid // proceso ya terminado
+    const orphan = `.tmp-${deadPid}`
+    mkdirSync(join(clips, orphan), { recursive: true })
+    writeFileSync(join(clips, orphan, `${L1.clipKey}.mp3`), 'a medias')
+    writeFileSync(join(clips, 'ffffffffffffffff.mp3'), 'otra cancion')
+    await build(dir, fakeRunner({}, 120))
+    expect(existsSync(join(clips, orphan))).toBe(false)
+    expect(existsSync(join(clips, 'ffffffffffffffff.mp3'))).toBe(true)
+    expect(hasClip(dir, L1.clipKey)).toBe(true)
+  })
+
+  it('SC-CLP-05 no borra el .tmp-<pid> de un proceso vivo (otro build en marcha) y si el de nombre sin pid', async () => {
+    const dir = makeDataDir({ catalog: catalogOf([L1]), sources })
+    const clips = join(dir, 'out', 'clips')
+    mkdirSync(join(clips, `.tmp-${process.ppid}`), { recursive: true })
+    mkdirSync(join(clips, '.tmp-abc'), { recursive: true })
+    await build(dir, fakeRunner({}, 120))
+    expect([existsSync(join(clips, `.tmp-${process.ppid}`)), existsSync(join(clips, '.tmp-abc'))]).toEqual([true, false])
   })
 })

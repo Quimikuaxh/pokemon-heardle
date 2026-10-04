@@ -498,7 +498,7 @@ describe('Catalogo cambiante y no disponible', () => {
           if (failing) throw new Error('bucket caido')
           return inner.getCatalog()
         },
-        getClip: (k: string, n: number) => inner.getClip(k, n),
+        getClip: (k: string) => inner.getClip(k),
       }),
     })
     const down = await app.get('/api/health')
@@ -521,7 +521,7 @@ describe('Catalogo cambiante y no disponible', () => {
         getCatalog: async () => {
           throw new Error('bucket caido')
         },
-        getClip: (k: string, n: number) => inner.getClip(k, n),
+        getClip: (k: string) => inner.getClip(k),
       }),
     })
     const r = await app.createDaily()

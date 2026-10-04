@@ -1,9 +1,8 @@
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync, readFileSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, renameSync, rmSync, statSync, writeFileSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { tooShort, validateCatalog } from '../../../shared/catalog'
 import type { Catalog, Song } from '../../../shared/catalog'
-import { CLIP_SECONDS } from '../../../shared/rules'
 import { startAdminServer } from './admin/server'
 import type { AdminServer, AdminServerOptions } from './admin/server'
 import { songsToBuild } from './build'
@@ -230,6 +229,28 @@ async function measureAndDisableShort(paths: DataPaths, run: Runner, io: Io): Pr
   })
 }
 
+function isProcessAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code !== 'ESRCH' // EPERM: existe pero es de otro usuario
+  }
+}
+
+/**
+ * Un build interrumpido (kill, corte) deja .tmp-<pid> en out/clips. Se borran los de procesos que ya no existen y
+ * los sin pid legible; el de otro build en marcha no se toca.
+ */
+function removeOrphanStagingDirs(clipsDir: string): void {
+  if (!existsSync(clipsDir)) return
+  for (const name of readdirSync(clipsDir)) {
+    if (!name.startsWith('.tmp-')) continue
+    const pid = /^\d+$/.test(name.slice('.tmp-'.length)) ? Number(name.slice('.tmp-'.length)) : null
+    if (pid === null || !isProcessAlive(pid)) rmSync(join(clipsDir, name), { recursive: true, force: true })
+  }
+}
+
 async function build(paths: DataPaths, run: Runner, io: Io): Promise<void> {
   if (!existsSync(paths.catalog)) throw new Error(`No existe ${paths.catalog}. Ejecuta "draft" primero.`)
   const measuredCatalog = await measureAndDisableShort(paths, run, io)
@@ -237,30 +258,35 @@ async function build(paths: DataPaths, run: Runner, io: Io): Promise<void> {
   if (!validation.ok) throw new Error(`catalog.json no es valido:\n${validation.errors.join('\n')}`)
 
   const manifest: BuildManifest = existsSync(paths.manifest) ? JSON.parse(readFileSync(paths.manifest, 'utf8')) : {}
-  const pending = songsToBuild(measuredCatalog, manifest, (song) => sourceFingerprint(song, paths))
+  const pending = songsToBuild(
+    measuredCatalog,
+    manifest,
+    (song) => sourceFingerprint(song, paths),
+    (song) => existsSync(clipOutputPath(paths.clips, song.clipKey)),
+  )
   const scratch = mkdtempSync(join(tmpdir(), 'heardle-build-'))
+  // El clip se codifica en un directorio temporal del mismo disco y se mueve al final: un ffmpeg que falla a
+  // mitad no deja un <clipKey>.mp3 a medias que parezca bueno.
+  const stagingDir = join(paths.clips, `.tmp-${process.pid}`)
+  removeOrphanStagingDirs(paths.clips)
   try {
     for (const song of pending) {
       const source = findSourceFile(paths.work, song.source.youtubeId)!
       const master = join(scratch, `${song.clipKey}.wav`)
       await run('ffmpeg', masterArgs({ input: source, startSec: song.startSec, output: master }))
-      mkdirSync(join(paths.clips, song.clipKey), { recursive: true })
-      for (let clipNumber = 1; clipNumber <= CLIP_SECONDS.length; clipNumber++) {
-        await run(
-          'ffmpeg',
-          clipArgs({
-            input: master,
-            seconds: CLIP_SECONDS[clipNumber - 1],
-            output: clipOutputPath(paths.clips, song.clipKey, clipNumber),
-          }),
-        )
-      }
+      mkdirSync(stagingDir, { recursive: true })
+      const staged = clipOutputPath(stagingDir, song.clipKey)
+      await run('ffmpeg', clipArgs({ input: master, output: staged }))
+      renameSync(staged, clipOutputPath(paths.clips, song.clipKey))
+      // El layout antiguo (<clipKey>/<n>.mp3) solo se borra cuando el fichero nuevo ya existe (DEC-44).
+      rmSync(join(paths.clips, song.clipKey), { recursive: true, force: true })
       manifest[song.clipKey] = { startSec: song.startSec, source: sourceFingerprint(song, paths) }
       writeJson(paths.manifest, manifest)
       io.log(`Generado: ${song.id}`)
     }
   } finally {
     rmSync(scratch, { recursive: true, force: true })
+    rmSync(stagingDir, { recursive: true, force: true })
   }
   // El backend con STORAGE_DRIVER=fs lee <STORAGE_DIR>/catalog/catalog.json y <STORAGE_DIR>/clips/...
   mkdirSync(dirname(paths.localStoreCatalog), { recursive: true })

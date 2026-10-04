@@ -9,7 +9,9 @@ import { TicketService } from '../game/tickets'
 import { decryptToken, encryptToken } from '../game/token'
 import type { TokenPayload } from '../game/token'
 import { madridDate } from '../../../shared/date'
+import { CLIP_BYTE_OFFSETS } from '../../../shared/rules'
 import type { ClipStore } from '../storage/ClipStore'
+import { isValidClipFile } from '../storage/clipFormat'
 import { errors } from './errors'
 import { FixedWindowLimiter, ipRateLimit } from './rateLimit'
 import { parseCreateGame, parseGuess, parseToken } from './validate'
@@ -152,9 +154,15 @@ export function createApiRouter(deps: RouteDeps): Router {
       const { clipKey, attempt } = tickets.redeem(ticket)
       let clip: Buffer
       try {
-        clip = await store.getClip(clipKey, attempt + 1)
+        const file = await store.getClip(clipKey)
+        if (!isValidClipFile(file)) {
+          // Una lectura invalida no debe quedar en la cache: la proxima peticion vuelve a leer del almacen.
+          store.evict?.(clipKey)
+          throw new Error('formato de clip invalido')
+        }
+        clip = file.subarray(0, CLIP_BYTE_OFFSETS[attempt])
       } catch {
-        // El fallo es nuestro, no del cliente: el ticket sigue valido para reintentar.
+        // El fallo es nuestro (almacen o fichero mal formado), no del cliente: el ticket sigue valido (DEC-22).
         tickets.release(ticket)
         throw errors.storage()
       }

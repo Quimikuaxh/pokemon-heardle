@@ -11,12 +11,13 @@ function setup(over: Record<string, unknown> = {}) {
     createObjectURL: vi.fn(() => `blob:${++n}`),
     revokeObjectURL: vi.fn(),
     createAudio: vi.fn(() => audio),
+    createAudioContext: () => null, // ruta de reserva <audio> (DEC-45): la ruta Web Audio se prueba en clipPlayerWebAudio.test.ts
     ...over,
   }
   return { player: createClipPlayer(deps as any), deps, audio }
 }
 
-describe('audio/clipPlayer', () => {
+describe('audio/clipPlayer (ruta de reserva <audio>, FE-WA-13)', () => {
   it('FE-AUD-01 descarga el clip a Blob, crea un objectURL y lo asigna al audio', async () => {
     const { player, deps, audio } = setup()
     await player.prepare('/api/clips/a', 'k0')

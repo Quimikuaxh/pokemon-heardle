@@ -1,10 +1,13 @@
-import { createHash, createHmac } from 'node:crypto'
+import { createHmac } from 'node:crypto'
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { buildMp3 } from '../../../shared/test/helpers/mp3'
 
 export const CLIP_SECONDS = [1, 2, 4, 7, 11, 16]
-export const BYTES_PER_SEC = 16000 // MP3 CBR 128 kbps
+/** Referencia DEC-44 escrita a mano en el test (NO importa shared/rules): bytes del prefijo que se sirve en cada intento. */
+export const OFFSETS = [16300, 32182, 64365, 112013, 176378, 256626]
+export const TOTAL_BYTES = 256626
 
 export interface FixtureSong {
   id: string
@@ -82,34 +85,22 @@ export function enabledSorted(catalog: CatalogFixture): FixtureSong[] {
   return catalog.songs.filter((s) => s.enabled).sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
 }
 
-/** Clip sintetico: no empieza por ID3, tamano exacto = segundos * 16000, contenido unico por (cancion, n). */
-export function makeClip(clipKey: string, n: number, sizeOverride?: number): Buffer {
-  const size = sizeOverride ?? CLIP_SECONDS[n - 1] * BYTES_PER_SEC
-  const out = Buffer.alloc(size)
-  out[0] = 0xff
-  out[1] = 0xfb
-  out[2] = 0x90
-  out[3] = 0x00
-  let off = 4
-  let counter = 0
-  while (off < size) {
-    const h = createHash('sha256').update(`${clipKey}:${n}:${counter++}`).digest()
-    const take = Math.min(h.length, size - off)
-    h.copy(out, off, 0, take)
-    off += take
-  }
-  return out
+/**
+ * Clip unico sintetico (DEC-44): 614 tramas MPEG-1 L3 128 kbps 44,1 kHz estereo, patron 417/418, main_data_begin=0,
+ * 256.626 bytes, sin ID3 ni Xing. Generado por shared/test/helpers/mp3 (independiente de las constantes de produccion).
+ * Los datos de cada cancion son distintos (semilla = clipKey); las cabeceras son iguales.
+ */
+export function makeClip(clipKey: string, options?: Parameters<typeof buildMp3>[1]): Buffer {
+  return buildMp3(clipKey, options)
 }
 
-/** Escribe un almacen driver `fs` en un directorio temporal nuevo. Devuelve su ruta. */
+/** Escribe un almacen driver `fs` en un directorio temporal nuevo (layout nuevo: clips/<clipKey>.mp3). */
 export function writeStore(catalog: unknown, songs: Array<{ clipKey: string }>): string {
   const dir = mkdtempSync(join(tmpdir(), 'heardle-store-'))
   mkdirSync(join(dir, 'catalog'), { recursive: true })
   writeFileSync(join(dir, 'catalog', 'catalog.json'), JSON.stringify(catalog))
-  for (const s of songs) {
-    mkdirSync(join(dir, 'clips', s.clipKey), { recursive: true })
-    for (let n = 1; n <= 6; n++) writeFileSync(join(dir, 'clips', s.clipKey, `${n}.mp3`), makeClip(s.clipKey, n))
-  }
+  mkdirSync(join(dir, 'clips'), { recursive: true })
+  for (const s of songs) writeFileSync(join(dir, 'clips', `${s.clipKey}.mp3`), makeClip(s.clipKey))
   return dir
 }
 

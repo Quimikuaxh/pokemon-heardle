@@ -15,10 +15,10 @@ export class FsClipStore implements ClipStore {
     }
   }
 
-  async getClip(clipKey: string, clipNumber: number): Promise<Buffer> {
-    if (!isValidClipLocation(clipKey, clipNumber)) throw errors.storage()
+  async getClip(clipKey: string): Promise<Buffer> {
+    if (!isValidClipLocation(clipKey)) throw errors.storage()
     try {
-      return await readFile(join(this.rootDir, 'clips', clipKey, `${clipNumber}.mp3`))
+      return await readFile(join(this.rootDir, 'clips', `${clipKey}.mp3`))
     } catch {
       throw errors.storage()
     }

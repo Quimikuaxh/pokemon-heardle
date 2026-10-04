@@ -1,15 +1,8 @@
 import { test, expect } from '../support/test.ts'
-import { MULTI, dailyTargetR, nonTargets } from '../support/oracle.ts'
-
-const COUNT_PLAY = () => {
-  const original = HTMLMediaElement.prototype.play
-  ;(window as any).__plays = 0
-  HTMLMediaElement.prototype.play = function (this: HTMLMediaElement) {
-    ;(window as any).__plays++
-    return original.call(this)
-  }
-}
-const plays = (page: import('@playwright/test').Page) => page.evaluate(() => (window as any).__plays as number)
+import { dailyTargetR } from '../support/oracle.ts'
+import { INSTRUMENT_WEBAUDIO } from '../support/webaudio.ts'
+import type { WebAudioLog } from '../support/webaudio.ts'
+import type { Page } from '@playwright/test'
 
 test.describe('Tema', () => {
   for (const [scheme, background, color] of [
@@ -69,29 +62,43 @@ test.describe('Movil 375x667', () => {
 
 test.describe('Audio', () => {
   test.beforeEach(async ({ page }) => {
-    await page.addInitScript(COUNT_PLAY)
+    await page.addInitScript(INSTRUMENT_WEBAUDIO)
   })
+  const log = (page: Page) =>
+    page.evaluate(() => {
+      const wa = (window as any).__wa as WebAudioLog
+      return { decodes: wa.decodes, starts: wa.starts.length, resumes: wa.resumes, states: wa.contexts.map((c) => c.state) }
+    })
 
-  test('E2E-41_should_not_play_before_the_user_gesture', async ({ app, page }) => {
+  test('E2E-41_should_not_start_audio_before_the_user_gesture', async ({ app, page }) => {
     await app.goto()
     await app.daily.ready()
     await page.waitForTimeout(500)
-    expect(await plays(page), 'play() antes del clic').toBe(0)
+    const before = await log(page)
+    expect(before.starts, 'source.start() antes del clic').toBe(0)
+    expect(before.resumes, 'resume() antes del clic').toBe(0)
+    expect(before.states.length).toBeGreaterThan(0)
+    // Playwright (Chromium y WebKit) desactiva la politica de autoplay: el contexto nace "running", asi que
+    // "suspended" no es verificable aqui; si lo es que nada arranca antes del gesto (0 start, 0 resume).
     await app.daily.playButton.click()
-    await expect.poll(() => plays(page)).toBe(1)
+    await expect.poll(async () => (await log(page)).starts).toBe(1)
+    await expect.poll(async () => (await log(page)).states).toEqual(['running'])
   })
 
-  test('E2E-42_should_replay_the_current_clip_without_new_requests', async ({ app, page, net }) => {
+  test('E2E-42_should_replay_the_current_clip_without_new_requests_or_decodes', async ({ app, page, net }) => {
     await app.goto()
     await app.daily.ready()
     await net.settle()
     expect(net.clips()).toHaveLength(1)
+    const decodes = (await log(page)).decodes
+    expect(decodes).toBe(1)
     await app.daily.playButton.click()
     await app.daily.playButton.click()
     await app.daily.playButton.click()
-    await expect.poll(() => plays(page)).toBe(3)
+    await expect.poll(async () => (await log(page)).starts).toBe(3)
     await net.settle()
     expect(net.clips(), 'peticiones de clip tras repetir').toHaveLength(1)
+    expect((await log(page)).decodes, 'decodificaciones tras repetir').toBe(decodes)
   })
 })
 

@@ -11,12 +11,15 @@ export class CachedClipStore implements ClipStore {
     return this.inner.getCatalog()
   }
 
-  async getClip(clipKey: string, clipNumber: number): Promise<Buffer> {
-    const cacheKey = `${clipKey}/${clipNumber}`
-    const cached = this.cache.get(cacheKey)
+  evict(clipKey: string): void {
+    this.cache.delete(clipKey)
+  }
+
+  async getClip(clipKey: string): Promise<Buffer> {
+    const cached = this.cache.get(clipKey)
     if (cached) return cached
-    const clip = await this.inner.getClip(clipKey, clipNumber)
-    this.cache.set(cacheKey, clip)
+    const clip = await this.inner.getClip(clipKey)
+    this.cache.set(clipKey, clip)
     return clip
   }
 }

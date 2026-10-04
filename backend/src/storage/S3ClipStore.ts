@@ -25,10 +25,10 @@ export class S3ClipStore implements ClipStore {
     }
   }
 
-  async getClip(clipKey: string, clipNumber: number): Promise<Buffer> {
-    if (!isValidClipLocation(clipKey, clipNumber)) throw errors.storage()
+  async getClip(clipKey: string): Promise<Buffer> {
+    if (!isValidClipLocation(clipKey)) throw errors.storage()
     try {
-      return await this.readObject(`clips/${clipKey}/${clipNumber}.mp3`)
+      return await this.readObject(`clips/${clipKey}.mp3`)
     } catch {
       throw errors.storage()
     }

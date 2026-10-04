@@ -79,7 +79,7 @@ export async function expectNoLeak(page: Page, net: NetLog, target: FixtureSong,
     if (name === 'audioSrcs') continue
     expect(countIn(value as string, needles), `${name} contiene datos de la objetivo`).toEqual([])
   }
-  expect(storage.audioSrcs.length, 'se ha asignado algun src de audio').toBeGreaterThan(0)
+  // Con Web Audio no hay <audio>; si la ruta de reserva asigna un src, debe ser un blob opaco.
   for (const src of storage.audioSrcs) {
     expect(src.startsWith('blob:'), `src de audio opaco: ${src}`).toBe(true)
     expect(countIn(src, needles)).toEqual([])
