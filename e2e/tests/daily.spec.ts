@@ -1,5 +1,5 @@
 import { test, expect } from '../support/test.ts'
-import { EMOJI, LABEL, dailyTargetR, madridToday, nonTargets, outcomeOf, tamper, gamesText } from '../support/oracle.ts'
+import { LABEL, dailyTargetR, madridToday, nonTargets, outcomeOf, tamper, gamesText } from '../support/oracle.ts'
 
 test.describe('Diario - catalogo R', () => {
   test('E2E-02_should_lose_daily_after_six_attempts_mixing_skips_and_misses', async ({ app }) => {
@@ -26,30 +26,27 @@ test.describe('Diario - catalogo R', () => {
     await expect(d.search).toHaveCount(0)
     await expect(d.skipButton).toHaveCount(0)
     await expect(d.playButton).toHaveCount(0)
-    await d.openStats()
-    await expect(d.root.getByRole('list', { name: 'Distribución de aciertos' }).getByRole('listitem').last()).toHaveText(/X\s*1/)
-    expect(await d.stat('Racha')).toBe('0')
+    await expect(d.rows).toHaveCount(6)
   })
 
-  test('E2E-04_should_show_ordered_emojis_when_winning_after_failures', async ({ app }) => {
+  test('E2E-04_should_list_attempts_in_order_when_winning_after_failures', async ({ app }) => {
     const target = dailyTargetR()
     const [g1, g2] = nonTargets(target)
     const d = app.daily
     await app.goto()
     await d.ready()
-    await d.skip()
-    await d.ready()
     await d.guess(g1.title)
     await d.ready()
     await d.guess(g2.title)
     await d.ready()
+    await d.skip()
+    await d.ready()
     await d.guess(target.title)
 
     await expect(d.resultHeading).toHaveText('¡Acertaste en el intento 4!')
-    const labels = ['skip', outcomeOf(target, g1), outcomeOf(target, g2), 'hit'] as const
+    const labels = [outcomeOf(target, g1), outcomeOf(target, g2), 'skip', 'hit'] as const
     for (const [i, key] of labels.entries()) await expect(d.rows.nth(i)).toContainText(LABEL[key])
-    const row = labels.map((k) => EMOJI[k]).join('') + '⬜⬜'
-    await expect(d.shareText).toHaveText(`Pokémon Heardle diario ${madridToday()}\n4/6\n${row}`)
+    await expect(d.rows.nth(4)).toHaveText(/—|^\s*$/)
   })
 
   test('E2E-06_should_give_same_daily_solution_in_two_independent_contexts', async ({ browser, baseURL }) => {

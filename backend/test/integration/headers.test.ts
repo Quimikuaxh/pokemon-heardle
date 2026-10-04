@@ -206,3 +206,37 @@ describe('Cabeceras globales', () => {
     expect(typeof r.json?.error?.code).toBe('string')
   })
 })
+
+describe('/clips', () => {
+  it('un sufijo en la URL del ticket no permite descargar el clip dos veces', async () => {
+    const { app, g } = await gameC()
+    expect((await app.clip(g.json.clipUrl)).status).toBe(200)
+    for (const s of ['A', '_', '-']) expect((await app.clip(g.json.clipUrl + s)).status).toBe(404)
+    expect((await app.clip(g.json.clipUrl)).status).toBe(410)
+  })
+
+  it('HEAD responde 405 y no consume el ticket', async () => {
+    const { app, g } = await gameC()
+    const head = await app.call('HEAD', g.json.clipUrl)
+    expect(head.status).toBe(405)
+    expect((await app.clip(g.json.clipUrl)).status).toBe(200)
+  })
+})
+
+describe('CORS', () => {
+  it('el 429 expone Retry-After al origen permitido; las respuestas normales no exponen nada', async () => {
+    const { app } = await gameC({ env: { RATE_LIMIT_CREATE_GAME: '1' } })
+    const origin = { Origin: 'http://localhost:5173' }
+    const ok = await app.get('/api/health', origin)
+    expect(ok.headers.get('access-control-expose-headers')).toBeNull()
+    await app.createDaily(origin)
+    const limited = await app.createDaily(origin)
+    expect([limited.status, limited.headers.get('access-control-expose-headers')]).toEqual([429, 'Retry-After'])
+  })
+
+  it('ALLOWED_ORIGIN con barra final sigue funcionando', async () => {
+    const { app } = await gameC({ env: { ALLOWED_ORIGIN: 'http://localhost:5173/' } })
+    const r = await app.get('/api/health', { Origin: 'http://localhost:5173' })
+    expect(r.headers.get('access-control-allow-origin')).toBe('http://localhost:5173')
+  })
+})

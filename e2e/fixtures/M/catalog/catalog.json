@@ -20,7 +20,8 @@
       "reviewed": true,
       "source": {
         "youtubeId": "ytaaaaaaaaa",
-        "videoTitle": "Video original de Lonely Obelisk (OST)"
+        "videoTitle": "Video original de Lonely Obelisk (OST)",
+        "durationSec": 60
       }
     }
   ]

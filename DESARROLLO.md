@@ -4,7 +4,7 @@
 
 ### Instalación
 
-1. `npm run install:all` — instala raíz, `shared/`, `backend/`, `frontend/` y `scripts/catalog/`.
+1. `npm run install:all` — instala raíz, `shared/`, `backend/`, `frontend/`, `scripts/catalog/` y `scripts/catalog/admin-ui/`.
 
 ### Generación de catálogo
 
@@ -12,12 +12,12 @@ Requisitos del sistema: `yt-dlp` y `ffmpeg`. Ver `scripts/catalog/README.md` par
 
 Desde la raíz o `scripts/catalog/`:
 1. `npm --prefix scripts/catalog run cli -- fetch <playlistUrl>` — descarga audio de la playlist a `scripts/catalog/data/work/`.
-2. `npm --prefix scripts/catalog run cli -- draft` — añade videos nuevos a `scripts/catalog/data/catalog.json`.
-3. Editar `scripts/catalog/data/catalog.json` a mano: títulos, juegos, `startSec` y `enabled`.
-4. `npm --prefix scripts/catalog run cli -- build` — genera clips en `scripts/catalog/data/out/clips/`.
-5. `npm --prefix scripts/catalog run cli -- validate` — verifica integridad (6 clips por canción, duraciones, tamaños).
+2. `npm --prefix scripts/catalog run cli -- draft` — añade videos nuevos a `scripts/catalog/data/catalog.json` y mide la duración de las fuentes descargadas. Las que duran menos de 16,1 s (`startSec` + 16 s + margen) quedan desactivadas (`enabled: false`) y marcadas como cortas; no hacen fallar el flujo.
+3. `npm run admin` — admin local (http://127.0.0.1:5180): escuchar el tema completo, activar/desactivar, editar título y juegos, marcar revisada. Las cortas no se pueden activar. `startSec` no se edita en el admin (siempre 0 salvo edición manual del JSON).
+4. `npm --prefix scripts/catalog run cli -- build` — mide otra vez las fuentes activas (desactiva las cortas) y genera clips en `scripts/catalog/data/out/clips/`.
+5. `npm --prefix scripts/catalog run cli -- validate` — verifica integridad (6 clips por canción, duraciones, tamaños; falla si hay una corta activada).
 
-Con driver `fs` (local), el backend lee `scripts/catalog/data/out/catalog.json` y los clips. En producción, `upload` sube todo a Supabase Storage (ver despliegue).
+Todos los subcomandos aceptan `--data-dir <ruta>` (por defecto `scripts/catalog/data`). Con driver `fs` (local), el backend lee `scripts/catalog/data/out/catalog/catalog.json` y los clips. En producción, `upload` sube todo a Supabase Storage (ver despliegue).
 
 ### Backend y frontend en local
 
@@ -32,7 +32,7 @@ Con driver `fs` (local), el backend lee `scripts/catalog/data/out/catalog.json` 
 
 ### Tests
 
-- `npm test` — unitarios de `shared/`, `backend/`, `scripts/catalog/` y `frontend/` (vitest + Testing Library).
+- `npm test` — unitarios de `shared/`, `backend/`, `scripts/catalog/` (incluye el servidor del admin), `frontend/` y `scripts/catalog/admin-ui/` (vitest + Testing Library). Los tests del script y del admin trabajan siempre en directorios temporales (`--data-dir`): nunca deben tocar `scripts/catalog/data/`.
 - `npm run typecheck` — TypeScript.
 - `npm --prefix e2e test` — E2E con Playwright (requiere `npm --prefix e2e install` y `npm --prefix e2e run browsers`).
   - WebKit en Linux necesita librerías del sistema: `sudo npx playwright install-deps`.
@@ -148,25 +148,12 @@ Los motivos están en `ARQUITECTURA.md` (DEC-02 a DEC-04, DEC-22) y en `scripts/
 
 ## Tests E2E (Playwright)
 
-`npm --prefix e2e install` — una sola vez.
+`npm run e2e` (raíz) ejecuta `e2e/`. Requisitos: `npm --prefix e2e install` y `npm --prefix e2e run browsers` (Chromium, Firefox, WebKit). WebKit en Linux necesita librerías del sistema (`sudo npx playwright install-deps`); sin ellas fallan solo los proyectos `webkit` y `webkit-iphone`, y `npm --prefix e2e run test:no-webkit` los omite.
 
-`npm --prefix e2e run browsers` — descarga Chromium, Firefox y WebKit (requiere `sudo npx playwright install-deps` en Linux para WebKit; sin ellas no falla el test completo, solo skippan `webkit` y `webkit-iphone`).
-
-`npm --prefix e2e test` — ejecuta suite desde `e2e/tests/`. Alternativamente, `npm --prefix e2e run test:no-webkit` para omitir WebKit (Chromium y Firefox).
-
-**Arquitectura del test:**
-
-- `playwright.config.ts` arranca tres instancias backend-frontend con catálogos distintos:
-  - **R** (catálogo completo, sin rate-limit efectivo; puertos 3101/5101).
-  - **M** (catálogo de 1 canción; 3102/5102).
-  - **RL** (catálogo R con `RATE_LIMIT_ACTION=3` muy restrictivo; 3103/5103).
-
-- Fixtures en `e2e/fixtures/{R,M}/`: catálogos + clips MP3 de tonos (senoidales, generados con `lamejs`, sin ffmpeg). Se regeneran solo si cambian las definiciones en `e2e/fixtures/catalogs.ts`: `npm --prefix e2e run fixtures`.
-
-- El catálogo R define el comportamiento del ilimitado: filtro `Charlie` contiene solo canción multi-juego, `Delta` solo `Hollow Pinecone`.
-
-- El objetivo del diario se calcula en `e2e/support/oracle.ts` con la misma fórmula HMAC que el servidor (DEC-09), sin dependencia del código de producción.
-
-- Matriz de navegadores (E2E-44): E2E-01, E2E-02, E2E-26, E2E-45 corren en Chromium, Firefox y WebKit; E2E-38 en `webkit-iphone` (etiqueta `@mobile`).
-
-- Limitación: E2E-09 (cambio de día) no está automatizado; E2E-49 sí, con `page.clock`.
+- `playwright.config.ts` levanta tres pares backend (driver `fs`, `NODE_ENV=test`) + Vite: **R** (catálogo R; 3101/5101), **M** (una canción; 3102/5102) y **RL** (catálogo R con `RATE_LIMIT_ACTION=3`, solo E2E-37; 3103/5103). Los frontends usan `e2e/vite.e2e.config.ts` para cambiar el destino del proxy de `/api`.
+- Fixtures en `e2e/fixtures/{R,M,admin}` (catálogos + MP3 de tonos, versionados). Se regeneran sin ffmpeg con `npm --prefix e2e run fixtures` (encoder JS `lamejs`); las definiciones viven en `e2e/fixtures/catalogs.ts`.
+- El catálogo R fija el objetivo del ilimitado: el filtro `Charlie` solo contiene la canción multi-juego (A+C) y `Delta` solo `Hollow Pinecone`. El objetivo del diario se calcula en `e2e/support/oracle.ts` (HMAC documentado, sin importar código de producción).
+- Admin (E2E-62..72, `tests/admin/`): cada test copia `fixtures/admin` a un directorio temporal y arranca el servidor real del admin (`support/admin-launcher.ts`) contra él; nunca se usa `scripts/catalog/data/`. Sirve `scripts/catalog/admin-ui/dist` (se compila en el `globalSetup` si falta).
+- Las peticiones a YouTube se interceptan siempre con `page.route` (`support/youtube.ts`); la red real no interviene.
+- Matriz de navegadores (E2E-44): E2E-01, 02, 26, 45, 50 y 54 en Chromium, Firefox y WebKit; E2E-38 y 53 en `webkit-iphone` (etiqueta `@mobile`).
+- No automatizado: E2E-09 (cambio de día) porque el backend no permite fijar su reloj por entorno; E2E-71 no ejecuta `validate` (ffmpeg no instalado). E2E-23..25 retirados (compartir/estadísticas eliminados).

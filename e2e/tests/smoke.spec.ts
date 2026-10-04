@@ -16,6 +16,6 @@ test.describe('Diario - catalogo M', () => {
     await expect(d.search, 'buscador bloqueado').toHaveCount(0)
     await expect(d.skipButton, 'skip bloqueado').toHaveCount(0)
     await expect(d.playButton).toHaveCount(0)
-    expect(await d.stat('Racha')).toBe('1')
+    await expect(d.root.getByText(/Compartir|Copiar|Racha|Estadísticas|Distribución/i), 'sin compartir ni estadísticas').toHaveCount(0)
   })
 })

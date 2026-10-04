@@ -122,3 +122,28 @@ describe('game/tickets', () => {
     expect(restarted.redeem(t).clipKey).toBe(KEY)
   })
 })
+
+describe('ticket de un solo uso: forma canonica', () => {
+  const NOW_MS = 1_800_000_000_000
+  for (const suffix of ['A', '_', '-', 'AA']) {
+    it(`un ticket con sufijo ${JSON.stringify(suffix)} no descifra ni burla el un-solo-uso`, () => {
+      const svc = new TicketService({ secret: SECRET_A, ttlSec: 60, now: () => NOW_MS })
+      const ticket = svc.issue({ clipKey: 'aaaaaaaaaaaaaaaa', attempt: 0, nonce: '0123456789abcdef' })
+      svc.redeem(ticket)
+      expect(thrown(() => svc.redeem(ticket + suffix))?.code).toBe('CLIP_TICKET_INVALID')
+      expect(thrown(() => svc.redeem(ticket))?.code).toBe('CLIP_TICKET_USED')
+    })
+  }
+
+  it('cambiar solo los bits sobrantes del ultimo caracter tampoco da un ticket distinto', () => {
+    const svc = new TicketService({ secret: SECRET_A, ttlSec: 60, now: () => NOW_MS })
+    const ticket = svc.issue({ clipKey: 'aaaaaaaaaaaaaaaa', attempt: 0, nonce: '0123456789abcdef' })
+    svc.redeem(ticket)
+    const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_'
+    for (const ch of alphabet) {
+      const variant = ticket.slice(0, -1) + ch
+      if (variant === ticket) continue
+      expect(['CLIP_TICKET_INVALID', 'CLIP_TICKET_USED']).toContain(thrown(() => svc.redeem(variant))?.code)
+    }
+  })
+})

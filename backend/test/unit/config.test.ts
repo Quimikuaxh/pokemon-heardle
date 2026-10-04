@@ -99,3 +99,13 @@ describe('config loadConfig', () => {
     expect(JSON.stringify(c)).not.toMatch(/render/i)
   })
 })
+
+describe('config: limites >= 1', () => {
+  const base = { GAME_TOKEN_SECRET: randomBytes(32).toString('base64'), DAILY_SEED: 'seed', STORAGE_DRIVER: 'fs' }
+  for (const name of ['RATE_LIMIT_GLOBAL', 'RATE_LIMIT_CREATE_GAME', 'RATE_LIMIT_ACTION', 'RATE_LIMIT_CLIPS', 'RATE_LIMIT_PER_GAME']) {
+    it(`${name}=0 lanza y ${name}=1 se acepta`, () => {
+      expect(() => loadConfig({ ...base, [name]: '0' })).toThrow(name)
+      expect(() => loadConfig({ ...base, [name]: '1' })).not.toThrow()
+    })
+  }
+})

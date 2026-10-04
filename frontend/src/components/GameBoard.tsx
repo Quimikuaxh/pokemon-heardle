@@ -13,7 +13,7 @@ import { FilterPanel } from './FilterPanel'
 import { NoticeBanner } from './NoticeBanner'
 import { ResultPanel } from './ResultPanel'
 import { SongSearch } from './SongSearch'
-import { StatsPanel } from './StatsPanel'
+import { ClipProgressBar } from './ClipProgressBar'
 
 interface GameBoardProps {
   mode: 'daily' | 'unlimited'
@@ -31,6 +31,7 @@ export function GameBoard({ mode, controller, api, catalog, store }: GameBoardPr
   const [filter, setFilter] = useState(() => controller.getFilter())
   const [audio, setAudio] = useState<{ key: string; status: AudioStatus } | null>(null)
   const [audioRetry, setAudioRetry] = useState(0)
+  const [playback, setPlayback] = useState({ playing: false, positionSec: 0 })
 
   const player = useMemo(
     () =>
@@ -43,7 +44,13 @@ export function GameBoard({ mode, controller, api, catalog, store }: GameBoardPr
       }),
     [api, controller],
   )
-  useEffect(() => () => player.dispose(), [player])
+  useEffect(() => {
+    const unsubscribe = player.subscribe(setPlayback)
+    return () => {
+      unsubscribe()
+      player.dispose()
+    }
+  }, [player])
 
   useEffect(() => {
     if (mode === 'daily') void controller.openDaily()
@@ -116,6 +123,12 @@ export function GameBoard({ mode, controller, api, catalog, store }: GameBoardPr
 
       {isPlaying && (
         <>
+          <ClipProgressBar
+            clipSeconds={view.clipSeconds}
+            unlockedSec={seconds ?? 0}
+            positionSec={playback.positionSec}
+            playing={playback.playing}
+          />
           <div className="flex items-center gap-3">
             <button
               type="button"
@@ -147,7 +160,7 @@ export function GameBoard({ mode, controller, api, catalog, store }: GameBoardPr
         </>
       )}
 
-      {phase === 'finished' && view && <ResultPanel view={view} />}
+      {phase === 'finished' && view && <ResultPanel view={view} onOpenFullSong={() => player.stop()} />}
 
       {mode === 'unlimited' && phase !== 'loading' && (
         <details open={!isPlaying} className="rounded-xl">
@@ -158,7 +171,6 @@ export function GameBoard({ mode, controller, api, catalog, store }: GameBoardPr
         </details>
       )}
 
-      <StatsPanel store={store} mode={mode} />
     </section>
   )
 }

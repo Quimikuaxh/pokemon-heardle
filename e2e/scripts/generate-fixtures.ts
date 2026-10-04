@@ -5,7 +5,7 @@ import { createRequire } from 'node:module'
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { STORES } from '../fixtures/catalogs.ts'
+import { ADMIN_CATALOG, ADMIN_SOURCES, STORES } from '../fixtures/catalogs.ts'
 
 const CLIP_SECONDS = [1, 2, 4, 7, 11, 16]
 const SAMPLE_RATE = 44100
@@ -54,3 +54,13 @@ for (const [name, store] of Object.entries(STORES)) {
   }
   console.log(`fixtures ${name}: ${store.songs.length} canciones`)
 }
+
+// Admin: catalog.json + work/<youtubeId>.mp3 (fuentes completas de tono, sin clips por intento).
+const adminDir = join(root, 'admin')
+rmSync(adminDir, { recursive: true, force: true })
+mkdirSync(join(adminDir, 'work'), { recursive: true })
+writeFileSync(join(adminDir, 'catalog.json'), JSON.stringify(ADMIN_CATALOG, null, 2) + '\n')
+for (const [youtubeId, { seconds, toneHz }] of Object.entries(ADMIN_SOURCES)) {
+  writeFileSync(join(adminDir, 'work', `${youtubeId}.mp3`), encodeTone(seconds, toneHz))
+}
+console.log('fixtures admin: 8 canciones, 2 fuentes')

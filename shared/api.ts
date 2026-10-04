@@ -1,6 +1,6 @@
 // DTOs de la API (ARQUITECTURA 5).
 export type ResultName = 'skip' | 'miss' | 'game' | 'hit'
-export interface SolutionView { id: string; title: string; games: Array<{ id: string; name: string }> }
+export interface SolutionView { id: string; title: string; games: Array<{ id: string; name: string }>; youtubeId: string }
 export interface GameView {
   token: string; mode: 'daily' | 'unlimited'; date?: string; status: 'playing' | 'won' | 'lost'
   attempt: number; maxAttempts: 6; clipSeconds: number[]; results: ResultName[]; guesses: string[]

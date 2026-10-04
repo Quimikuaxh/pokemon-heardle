@@ -1,7 +1,7 @@
 # Pokemon Heardle - Arquitectura
 
-Estado: arquitectura definida, sin codigo ni git init. Requisitos en `REQUISITOS.md` (las decisiones de su seccion 9 no se reabren aqui).
-Sin preguntas abiertas: P1 (credencial del bucket) y P2 (buscador y "juego acertado") confirmadas por el usuario el 2026-10-03.
+Estado: version inicial implementada (main). Iteracion `feature/admin-catalogo` (DEC-36 a DEC-43, seccion 6.1; DEC-27 retirada) definida; sin preguntas abiertas. Requisitos en `REQUISITOS.md` (las decisiones de su seccion 9 no se reabren aqui).
+Las preguntas de la version inicial (credencial del bucket; buscador y "juego acertado") se confirmaron el 2026-10-03.
 
 ## 1. Vision general
 
@@ -12,7 +12,7 @@ Sin preguntas abiertas: P1 (credencial del bucket) y P2 (buscador y "juego acert
  │ UI juego         │ ────────────▶ │ /api/games  (token cifrado) │ ───────▶ │ catalog/catalog.json         │
  │ localStorage:    │               │ /api/clips/:ticket (audio)  │          │ clips/<clipKey>/<1..6>.mp3   │
  │ filtro, token,   │ ◀──────────── │ catalogo en memoria         │          └──────────────────────────────┘
- │ estadisticas     │  audio/mpeg   │ cache LRU de clips          │                         ▲
+ │ partida diaria   │  audio/mpeg   │ cache LRU de clips          │                         ▲
  └──────────────────┘               └─────────────────────────────┘                         │ upload
                                                                        scripts/catalog (maquina del usuario)
                                                                        yt-dlp + ffmpeg -> clips + catalog.json
@@ -45,10 +45,14 @@ pokemon-heardle/
       http/                   routes.ts, errors.ts, rateLimit.ts, validate.ts
   frontend/
     package.json vite.config.ts vercel.json index.html
-    src/ api/ (cliente + reintentos), game/ (estado, share), storage/ (localStorage), components/, hooks/
+    src/ api/ (cliente + reintentos), game/ (estado), storage/ (localStorage), components/, hooks/
   scripts/catalog/
     package.json README.md (instalacion de yt-dlp y ffmpeg, flujo completo)
     src/ cli.ts fetch.ts draft.ts build.ts validate.ts upload.ts parseTitle.ts ffmpegArgs.ts
+         catalogStore.ts      lectura tolerante y escritura atomica de catalog.json (DEC-37)
+         duration.ts          medicion de la fuente y regla de cancion corta (DEC-40)
+         admin/               servidor local del admin (server.ts, handlers.ts, range.ts) (DEC-36, 6.1)
+    admin-ui/                 UI del admin: paquete React + Vite propio (package.json, vite.config.ts, src/, dist/ ignorado) (DEC-38)
     data/                     IGNORADO: catalog.json, work/ (descargas), out/ (clips)
     catalog.example.json      ejemplo versionado sin datos reales
   e2e/
@@ -114,7 +118,7 @@ Carpeta local ignorada en git: `scripts/catalog/data/` (`work/` originales desca
 Estimacion: 6 clips = 41 s a 128 kbps = ~660 KB por cancion. 500 canciones = ~330 MB. El 1 GB de Storage del plan free se comparte con el Team Builder (que hoy no usa Storage; su BD tiene cuota aparte), asi que el techo practico es ~1500 canciones.
 Egress de Supabase (plan free, ~5 GB/mes, verificar en el panel): solo se consume cuando el backend lee un clip que no esta en su cache LRU (arranques en frio y canciones del modo ilimitado). Peor caso ~660 KB por partida sin cache = ~7.500 partidas/mes sin cache antes de agotarlo. El trafico backend -> navegador cuenta contra el ancho de banda de Render (100 GB/mes en free), no contra Supabase.
 
-DEC-17: **Buscador**: cada opcion es una cancion y muestra sus juegos. El texto busca por coincidencia en el titulo de la cancion O en el nombre de cualquiera de sus juegos (sin distinguir mayusculas ni acentos). Muestra SIEMPRE el catalogo completo, independientemente del filtro y de si ya se acerto el juego. Confirmado por el usuario.
+DEC-17: **Buscador**: cada opcion es una cancion y muestra sus juegos. El texto se parte en palabras y CADA palabra debe aparecer en el titulo de la cancion o en el nombre de alguno de sus juegos (sin distinguir mayusculas ni acentos, texto literal): "ruby battle" encuentra los combates de Ruby/Sapphire/Emerald. Implementado una sola vez en `shared/search.ts` (`matchesAllWords`) y usado por el juego y por el admin (que ademas busca en el titulo del video). Descartado: buscar la consulta completa como una subcadena, porque no permite combinar juego y titulo ("ruby battle" no encontraba nada; peticion del usuario 2026-10-04). Muestra SIEMPRE el catalogo completo, independientemente del filtro y de si ya se acerto el juego. Confirmado por el usuario.
 Alternativas descartadas: una opcion por par (cancion, juego) enviando `gameId`; limitar al pool del filtro (con un solo juego filtrado el feedback de juego seria siempre "acertado" y la lista daria pistas).
 Busqueda en cliente sobre `GET /catalog` (ya cargado); el servidor solo recibe `songId`.
 
@@ -144,7 +148,7 @@ Alternativas descartadas: cada version por separado (inflaria el filtro y el fee
 DEC-26: **Cancion sin juego reconocible en el titulo del video**: `draft` deja `games: []` y `validate` falla, forzando la revision manual en `catalog.json`. No existe juego comodin "unknown".
 Justificacion: un juego comodin pasaria la validacion y llegaria a produccion con feedback de juego erroneo.
 
-DEC-27: **Texto de compartir**: una fila de 6 emojis consecutivos sin espacios (resultados + ⬜ por intento no usado); la cabecera (modo, fecha en diario y marcador `3/6` o `X/6`) es texto libre que fija el desarrollador y nunca incluye la cancion.
+DEC-27: **RETIRADA** (iteracion admin-catalogo, decision del usuario: no quiere compartir resultado). Definia el texto de compartir (fila de 6 emojis y cabecera con modo, fecha y marcador). Se elimina `game/share.ts` y el boton "Compartir resultado" de `ResultPanel`; `results` sigue en `GameView` porque lo usa la lista de intentos.
 
 DEC-28: **Avisos de UI** (los tests los referencian por nombre).
 - `notice.kind` del controlador de juego: `already-guessed`, `rate-limited`, `invalid-token`, `empty-filter`, `unknown-game`, `network`, `server-error` (cualquier 5xx).
@@ -164,6 +168,42 @@ DEC-33: **Frontend sin `StrictMode`**: en desarrollo duplicaria la llamada de ca
 DEC-34: **`.env.example` por paquete** (`backend/`, `scripts/catalog/`, `frontend/`) en lugar de uno en la raiz: cada paquete se despliega o ejecuta por separado con sus propias variables.
 
 DEC-35: **`tsx` es dependency (no devDependency) y `render.yaml` instala con `npm ci`**: `npm start` usa `tsx` y Render instala con `NODE_ENV=production`, que omite devDependencies. Descartado `npm ci --include=dev`: instalaba todas las devDependencies en produccion solo por `tsx`. Sin probar aun en Render.
+
+DEC-36: **Admin del catalogo local en `scripts/catalog`, servidor `node:http` en `127.0.0.1`, sin login, con token de sesion y comprobacion de `Host`** (iteracion admin-catalogo, decision del usuario).
+Alternativa descartada: admin en la web desplegada con login (mas superficie de ataque y complejidad). Express: no hace falta para 6 rutas locales y el paquete de scripts no lo tiene.
+Justificacion del token y del `Host`: "sin login" no puede significar "cualquier pagina web abierta en el navegador puede escribir el catalogo"; el token aleatorio incrustado en la pagina servida bloquea peticiones de otros origenes y el `Host` bloquea DNS rebinding.
+
+DEC-37: **Escritura de `catalog.json` atomica y por lectura-modificacion-escritura**: `catalogStore.update(mutator)` lee el fichero en ese momento, aplica el cambio, escribe en `catalog.json.tmp-<pid>` del mismo directorio, hace `fsync` y `rename`. Dentro de un proceso las operaciones se encolan. La primera escritura de cada arranque del admin copia el original a `catalog.json.bak`. Lo usan `draft`, `build` y el admin.
+Alternativa descartada: que cada proceso cargue el catalogo al inicio y lo reescriba entero al final (un `build` lanzado con el admin abierto pisaria las ediciones hechas mientras tanto).
+Riesgo aceptado: dos procesos escribiendo en el mismo milisegundo; no hay bloqueo entre procesos.
+
+DEC-38: **UI del admin con React + Vite, en el paquete `scripts/catalog/admin-ui/`** (decision del usuario). Mismas versiones y convenciones que `frontend/` (React 19, Vite 8, TypeScript ~5.9, Tailwind 4, vitest + Testing Library + jsdom). Paquete aparte para que nada del admin pueda acabar en el build de Vercel ni en el backend.
+- Arranque: `npm run cli -- admin` ejecuta `vite build` de `admin-ui` (segundos; asi `dist/` nunca esta desfasado) y sirve `admin-ui/dist` como estaticos desde el mismo servidor `node:http` que la API. Si faltan las dependencias de `admin-ui`, termina con un mensaje que indica `npm --prefix scripts/catalog/admin-ui install` (se anade a `install:all`, `test` y `typecheck` de la raiz).
+- Desarrollo de la UI: `npm --prefix scripts/catalog/admin-ui run dev` con proxy de Vite `/api` -> servidor del admin (`changeOrigin` para que el `Host` pase la comprobacion de DEC-36).
+- Token de sesion: la UI lo obtiene con `GET /api/session` (mismo origen, sin cabeceras CORS: otra web no puede leer la respuesta; el `Host` bloquea DNS rebinding). Funciona igual con `dist` servido y con el proxy de Vite, sin inyectar nada en el HTML.
+Alternativas descartadas: TS sin framework empaquetado con `esbuild` (el usuario prefiere la misma pila que el frontend); Vite en modo middleware dentro del CLI (convierte Vite y React en dependencias de ejecucion del CLI, arranque mas lento y mas acoplamiento, sin ventaja para una herramienta local).
+Justificacion: misma pila y convenciones que `frontend/`; la logica de filtrado vive en un modulo puro (`filters.ts`) testeable con vitest.
+
+DEC-39: **Ids inmutables en el admin**: editar el titulo no cambia el id de la cancion; renombrar un juego solo cambia `name`. Crear juego genera id con el mismo `slugify`/`uniqueId` que `draft` (se extraen a un modulo comun del script).
+Justificacion: los ids de juego estan en el filtro guardado en `localStorage` de los jugadores y los de cancion en `/catalog` y en las jugadas guardadas; cambiarlos romperia filtros y partidas en curso. Borrar o fusionar juegos queda fuera de alcance; un juego sin canciones activas no aparece en `/catalog` (DEC-32).
+
+DEC-40: **Canciones demasiado cortas: deteccion con `ffprobe` sobre la fuente descargada, desactivacion automatica y marca derivada.**
+- Se guarda la duracion medida en `source.durationSec` (dato de la fuente, nunca expuesto por el backend). `tooShort = durationSec < startSec + 16 + 0.1` (margen para el recorte y el `loudnorm`); se calcula, no se guarda como flag, asi no puede desincronizarse.
+- `draft` mide las fuentes sin `durationSec`; `build` mide siempre antes de cortar (es la medida que cuenta). Si una cancion activa es corta: `enabled: false` via `catalogStore.update`, aviso en consola y se continua sin error. Nunca se activa nada automaticamente.
+- `validate` falla si una cancion `enabled` es corta (cubre la reactivacion a mano en el JSON). El admin muestra la marca "Demasiado corta (7,4 s)" y bloquea activarla (`409 TOO_SHORT`).
+- Datos actuales: 82 de las 293 fuentes descargadas duran menos de 16 s (sintonias); en el catalogo actual (109 canciones) afecta a 3, ya desactivadas a mano.
+Alternativas descartadas: duracion de `yt-dlp --flat-playlist` (redondeada y no siempre presente; mide el video, no el fichero que se corta); que `validate` falle por canciones cortas DESACTIVADAS (decision del usuario; `validate` si falla con una corta ACTIVADA, que es un estado invalido); un flag `tooShort` persistido (se desincroniza al cambiar `startSec`).
+
+DEC-41: **Cancion completa al terminar: embed `youtube-nocookie` con el `youtubeId` dentro de `solution`.** `SolutionView` gana `youtubeId`; el backend solo lo anade cuando la partida ha terminado (mismo punto donde hoy se construye `solution`). Nunca en `/catalog`, ni en `GameView` en curso, ni en cabeceras. El iframe solo existe en el arbol de React cuando `status !== 'playing'`, asi que no puede cargarse antes. URL: `https://www.youtube-nocookie.com/embed/<youtubeId>`. Carga del iframe: SOLO al pulsar el boton "Escuchar la cancion completa"; antes no hay iframe ni peticion a YouTube (decision del usuario). Descartado: cargarlo automaticamente al terminar (peticiones a YouTube cada vez que se reabre un diario terminado y mas datos en movil).
+Alternativa descartada: servir el tema completo o un fragmento largo propio (~1,5 GB para 500 canciones, supera el 1 GB gratis de Supabase).
+Justificacion de `youtube-nocookie`: no deja cookies de YouTube hasta que se reproduce.
+
+DEC-42: **Barra de reproduccion sobre la escala fija de 16 s**, con marcas en 1/2/4/7/11 s y fin en 16; zona `0..clipSeconds[attempt]` desbloqueada y el resto bloqueada (estilo distinto); cabezal = `audio.currentTime` limitado a la zona desbloqueada (el retardo del codificador MP3 puede dar unos ms de mas). Accesible como `role="progressbar"` con `aria-valuemax` = segundos desbloqueados.
+Justificacion: solo usa datos publicos (`clipSeconds`, `attempt`), no revela nada. Escala lineal como en Heardle: el segmento de 1 s ocupa ~6 % del ancho.
+Decisiones de implementacion (la opcion mas simple): con la partida terminada la barra NO se muestra (FE-BAR-11); en pausa o al terminar el clip (`playing=false`) el cabezal queda en la ultima posicion (FE-BAR-08) y vuelve a 0 al cargar el clip del intento siguiente. `ClipPlayer.subscribe` emite `{ playing, positionSec }` con un `requestAnimationFrame` por frame solo mientras suena; `GameBoard` se suscribe al montar y se desuscribe (y cancela el frame) al desmontar.
+
+DEC-43: **Sin estadisticas** (iteracion admin-catalogo, decision del usuario: no las quiere). Se eliminan `game/stats.ts`, `StatsPanel` y las claves `heardle:stats:daily` y `heardle:stats:unlimited`; al arrancar, el frontend borra esas claves si existen (limpieza idempotente de datos que ya nadie lee). Se mantiene `daily:<date>` (`DailyRecord`), necesario para no repetir el diario.
+Alternativa descartada: mantener racha y distribucion.
 
 ## 4. Modelo de partida
 
@@ -221,7 +261,7 @@ GameView = {
   results: ("skip" | "miss" | "game" | "hit")[],
   guesses: string[],              // songId ya intentados (propios del jugador); el buscador los deshabilita
   clipUrl?: string,               // solo si status == "playing": "/api/clips/<ticket>"
-  solution?: { id, title, games: [{ id, name }] }   // solo si status != "playing"
+  solution?: { id, title, games: [{ id, name }], youtubeId }   // solo si status != "playing"; youtubeId para el embed (DEC-41)
 }
 ```
 
@@ -270,30 +310,81 @@ Respuestas de `/clips`:
       "startSec": 0,
       "enabled": true,
       "reviewed": false,
-      "source": { "youtubeId": "xxxxxxxxxxx", "videoTitle": "titulo original del video" }
+      "source": { "youtubeId": "xxxxxxxxxxx", "videoTitle": "titulo original del video", "durationSec": 183.42 }
     }
   ]
 }
 ```
 
-Reglas del validador (`shared/catalog.ts`, usado por script y backend): ids unicos con el formato de DEC-29; `clipKey` unico, 16 hex; todo juego referenciado existe; `games` no vacio (DEC-26); `startSec >= 0`. El backend solo usa canciones con `enabled: true`.
+Reglas del validador (`shared/catalog.ts`, usado por script y backend): ids unicos con el formato de DEC-29; `clipKey` unico, 16 hex; todo juego referenciado existe; `games` no vacio (DEC-26); `startSec >= 0`; `source.youtubeId` con formato `[A-Za-z0-9_-]{11}` (DEC-41); `source.durationSec` opcional, numero finito > 0 (DEC-40); cancion `enabled` y corta (DEC-40) -> error. El backend solo usa canciones con `enabled: true`.
 
 Script `scripts/catalog` (TS con `tsx`), subcomandos idempotentes:
 
 1. `fetch <playlistUrl>`: `yt-dlp --flat-playlist -J` para listar; descarga `bestaudio` a `data/work/<youtubeId>.*` con `--download-archive` (no repite descargas).
-2. `draft`: fusiona en `catalog.json` los videos nuevos (por `youtubeId`), con titulo/juego derivados del titulo del video (`parseTitle.ts`), `startSec: 0`, `reviewed: false`, `clipKey` aleatorio; si el titulo no permite deducir el juego, `games: []` (DEC-26). **Nunca sobrescribe entradas existentes** (conserva la revision manual).
-3. Revision manual de `catalog.json` (titulos, juegos, `startSec`, `enabled`).
-4. `build`: por cancion activa, `ffmpeg -ss startSec -t 16` -> `loudnorm` -> master de 16 s; de el, 6 clips `0..N` s con fundido de salida de 50 ms, MP3 CBR 128k estereo (`-b:a 128k`), `-map_metadata -1 -id3v2_version 0 -write_xing 0 -fflags +bitexact`, salida a `data/out/clips/<clipKey>/<n>.mp3`. Solo recompila si cambian `startSec` o el fuente.
-5. `validate`: esquema; 6 clips por cancion; duracion por `ffprobe` dentro de ±30 ms de la esperada; tamano en bytes identico entre canciones para cada intento (DEC-06); sin etiquetas de metadatos (`ffprobe -show_format`). Falla con codigo != 0.
+2. `draft`: mide con `ffprobe` la duracion de las fuentes descargadas que aun no tienen `source.durationSec` y desactiva las cortas (DEC-40); fusiona en `catalog.json` los videos nuevos (por `youtubeId`), con titulo/juego derivados del titulo del video (`parseTitle.ts`), `startSec: 0`, `reviewed: false`, `clipKey` aleatorio; si el titulo no permite deducir el juego, `games: []` (DEC-26). **Nunca sobrescribe entradas existentes** (conserva la revision manual).
+3. Revision en el admin local (`npm run cli -- admin`, seccion 6.1) o a mano en `catalog.json`.
+4. `build`: por cancion activa, `ffmpeg -ss startSec -t 16` -> `loudnorm` -> master de 16 s; de el, 6 clips `0..N` s con fundido de salida de 50 ms, MP3 CBR 128k estereo (`-b:a 128k`), `-map_metadata -1 -id3v2_version 0 -write_xing 0 -fflags +bitexact`, salida a `data/out/clips/<clipKey>/<n>.mp3`. Solo recompila si cambian `startSec` o el fuente. Antes de cortar mide la fuente; si es corta la desactiva, la registra en el catalogo y sigue con las demas sin fallar (DEC-40).
+5. `validate`: esquema; 6 clips por cancion; duracion por `ffprobe` entre −30 ms y +60 ms de la esperada (sin cabecera Xing ffprobe mide ~40-50 ms de mas); tamano en bytes identico entre canciones para cada intento (DEC-06); sin etiquetas de metadatos (`ffprobe -show_format`). Falla con codigo != 0.
 6. `upload`: ejecuta `validate`, sube clips nuevos/cambiados (por md5, DEC-23) (nunca los originales de `data/work/`) y por ultimo `catalog.json` (asi el catalogo nunca apunta a clips no subidos). `--prune` borra clips huerfanos. Tras subir, reiniciar el backend en Render para recargar el catalogo.
 
+Toda escritura de `catalog.json` (draft, build, admin) pasa por `catalogStore.update` (DEC-37).
+
 `README` del script: instalacion de yt-dlp (`pipx install yt-dlp` o binario oficial) y ffmpeg (`apt install ffmpeg`), y el flujo completo.
+
+## 6.1 Admin local del catalogo (`npm run cli -- admin`)
+
+```
+ navegador (localhost)            scripts/catalog (node:http, 127.0.0.1)          disco (data/, ignorado)
+ ┌──────────────────────┐  JSON  ┌──────────────────────────────────┐  update()  ┌───────────────────────┐
+ │ UI admin (React +    │ ─────▶ │ admin/handlers.ts                │ ─────────▶ │ catalog.json (atomico)│
+ │ Vite): lista,        │        │  - Host + X-Admin-Token          │            │ work/<youtubeId>.*    │
+ │ filtros, edicion,    │ ◀───── │ admin/range.ts (audio con Range) │ ◀───────── │ (fuentes completas)   │
+ │ <audio> con seek     │  audio └──────────────────────────────────┘   lectura  └───────────────────────┘
+ └──────────────────────┘
+```
+
+- Arranque: `npm run cli -- admin [--port 5180] [--data-dir <ruta>]`. Escucha SOLO en `127.0.0.1`, imprime la URL y no abre nada en red. `--data-dir` (por defecto `scripts/catalog/data`) existe para que los tests apunten a un directorio temporal y nunca toquen el real (DEC-36).
+- UI: paquete React + Vite `scripts/catalog/admin-ui`, compilado al arrancar y servido por el mismo servidor (DEC-38).
+- `startSec` NO se edita en el admin: las canciones empiezan siempre en el segundo 0 salvo edicion manual de `catalog.json` (decision del usuario; descartado el campo con boton "usar posicion actual"). El reproductor del tema completo sirve para revisar, no para elegir el inicio.
+- Estado: el servidor no cachea el catalogo; cada operacion lee el fichero, aplica el cambio y escribe de forma atomica (DEC-37). La UI recarga la lista tras cada cambio y al recuperar el foco.
+- El catalogo puede ser invalido (p. ej. `games: []` tras `draft`): el admin lo carga igualmente con lectura tolerante y muestra los errores de `validateCatalog` por cancion; precisamente sirve para corregirlos.
+
+Contrato local (prefijo `/api`, JSON; mutaciones con cabecera `X-Admin-Token`):
+
+| Metodo y ruta | Peticion | Respuesta |
+|---|---|---|
+| `GET /`, `GET /assets/*` | - | estaticos de `admin-ui/dist` |
+| `GET /api/session` | - | `{ token }` (aleatorio por arranque) |
+| `GET /api/catalog` | - | `{ games: [{ id, name, songCount }], songs: [AdminSong] }` |
+| `PATCH /api/songs/:id` | `{ title?, games?, enabled?, reviewed? }` (`startSec` no es editable) | `AdminSong` |
+| `POST /api/games` | `{ name }` | `{ id, name }` (id = slug unico del nombre, como en `draft`) |
+| `PATCH /api/games/:id` | `{ name }` | `{ id, name }` (solo cambia el nombre, DEC-39) |
+| `GET /api/songs/:id/audio` | cabecera `Range` opcional | fuente completa de `data/work`, `200`/`206`/`416` |
+
+```
+AdminSong = Song & {
+  durationSec?: number,      // de source.durationSec
+  tooShort: boolean,         // derivado: durationSec < startSec + 16 + margen (DEC-40)
+  hasSource: boolean,        // existe data/work/<youtubeId>.*
+  errors: string[]           // errores de validateCatalog que mencionan esta cancion
+}
+```
+
+Reglas fijadas en la implementacion del admin:
+- `PATCH /api/songs/:id` acepta solo `title`, `games`, `enabled` y `reviewed`; cualquier otra clave (`startSec` incluido, DEC-38), un cuerpo vacio, `games: []` o activar una cancion sin juegos -> `400 VALIDATION_ERROR`. Todo o nada: si falla una regla (p. ej. `409 TOO_SHORT`) no se guarda ningun campo.
+- `songCount` = canciones que listan el juego, activas o no. Nombres de juego duplicados se detectan sin distinguir mayusculas, acentos ni espacios repetidos. Dos nombres con el mismo slug -> el segundo recibe id con sufijo (`-2`, igual que `draft`).
+- Audio: un `Range` mal formado o de varios tramos se ignora (`200` completo); fuera del fichero -> `416` con `Content-Range: bytes */N`. La autorizacion del audio es solo el `Host` (un `<audio>` no envia cabeceras).
+- Host duplicado o ausente -> `403`.
+
+Errores locales: `400 VALIDATION_ERROR` (titulo vacio, juego inexistente o repetido, nombre de juego vacio o duplicado), `403 FORBIDDEN` (Host o token incorrectos), `404 NOT_FOUND`, `409 TOO_SHORT` (activar una cancion corta), `416` (Range fuera del fichero).
+
+Filtros y busqueda en la UI (en cliente, sobre `/api/catalog`): juego, activadas/desactivadas, revisadas/pendientes, cortas, con errores, y texto sobre titulo, nombre de juego y titulo del video (sin distinguir mayusculas ni acentos, como DEC-17).
 
 ## 7. Frontend (lo que condiciona la arquitectura)
 
 - Al abrir: `GET /health` (DEC-14) -> `GET /catalog`. Estados de UI: despertando / listo / error con boton de reintento.
 - Filtro: SOLO en modo ilimitado. Ids de juego en `localStorage`; filtro vacio deshabilita "Empezar" en ilimitado. Un cambio de filtro con partida ilimitada en curso solo aplica a la siguiente. El modo diario no muestra filtro.
-- `localStorage` (prefijo `heardle:`): `filter`; `daily:<date>` -> `DailyRecord = { token, finished, view? }`, donde `view` es la `GameView` final (con `solution` y `results`), para mostrar un diario terminado sin llamar a la API; `unlimited` -> partida en curso; `stats:daily` (una sola racha actual y maxima y una distribucion 1..6 + X; como hay una partida diaria por dia no hay ambiguedad) y `stats:unlimited` (distribucion, sin racha). Durante la partida solo hay token cifrado y las jugadas propias.
+- `localStorage` (prefijo `heardle:`): `filter`; `daily:<date>` -> `DailyRecord = { token, finished, view? }`, donde `view` es la `GameView` final (con `solution` y `results`), para mostrar un diario terminado sin llamar a la API; `unlimited` -> partida en curso. (RETIRADAS: `stats:daily` y `stats:unlimited`, DEC-43.) Durante la partida solo hay token cifrado y las jugadas propias.
 - Apertura del modo diario, sin crear partidas innecesarias en servidor:
   1. El cliente calcula la fecha de hoy en Europe/Madrid con `Intl` (misma funcion que el servidor, en `shared/`).
   2. Si existe `daily:<fecha>` terminada -> muestra el resultado, sin boton de jugar, y no llama a la API.
@@ -301,9 +392,11 @@ Script `scripts/catalog` (TS con `tsx`), subcomandos idempotentes:
   4. Si no existe -> `POST /games { mode: "daily" }`. Si la `date` devuelta por el servidor difiere de la calculada (reloj del cliente desviado o cambio de dia en ese instante), manda la del servidor: si esa fecha ya esta terminada en `localStorage` se muestra el resultado y se descarta el token nuevo (crear partida no deja estado en servidor).
 - Recarga: `POST /games/state` con el token guardado; `TOKEN_INVALID` -> partida nueva.
 - Buscador: deshabilita los `guesses` de la `GameView` (DEC-18); si aun asi llega `ALREADY_GUESSED`, se muestra aviso y se mantiene el intento.
-- Compartir: texto generado solo a partir de `results`: `H` 🟩, `G` 🟨, `M` 🟥, `S` ⬛, intentos no usados ⬜, en una fila de 6 sin espacios (DEC-27), mas modo y fecha. Nunca incluye la cancion.
+- (RETIRADO: compartir resultado, DEC-27; estadisticas, DEC-43.) `ResultPanel` muestra la solucion y el boton de la cancion completa (DEC-41).
 - Buscador segun DEC-17, filtrado en cliente sobre `/catalog`.
 - Tailwind 4, modo oscuro por `prefers-color-scheme`, responsive. Interfaz en espanol sin i18n (un solo idioma).
+- Barra de reproduccion (DEC-42): `ClipProgressBar({ clipSeconds, unlockedSec, positionSec, playing })`. `ClipPlayer` amplia su interfaz con `subscribe(listener) -> unsubscribe`, que emite `{ playing, positionSec }` con `requestAnimationFrame` mientras suena y al parar/terminar.
+- Cancion completa al terminar (DEC-41): componente `FullSongEmbed({ youtubeId })` dentro de `ResultPanel`, renderizado solo cuando `status !== 'playing'` y existe `solution`. Muestra el boton "Escuchar la cancion completa"; el iframe se crea al pulsarlo y en ese momento se para el clip.
 
 ## 8. Seguridad
 
@@ -312,6 +405,9 @@ Script `scripts/catalog` (TS con `tsx`), subcomandos idempotentes:
 - Bucket privado; credenciales de solo backend/script, nunca en el frontend.
 - Entrada validada en cada endpoint; tamano de cuerpo limitado (`express.json({ limit: '4kb' })`).
 - `trust proxy` = 1 (Render pone un proxy delante) para que el rate-limit use la IP real; configurable por env por portabilidad.
+- Embed de YouTube (DEC-41): `youtubeId` validado con `[A-Za-z0-9_-]{11}` en `shared/catalog.ts` y codificado al construir la URL; `vercel.json` anade `Content-Security-Policy: frame-src https://www.youtube-nocookie.com` (solo restringe iframes; no hay CSP global hoy). El iframe usa `referrerpolicy="strict-origin-when-cross-origin"` (YouTube rechaza embeds sin `Referer`) y `allow="encrypted-media; picture-in-picture; fullscreen"`.
+- Admin local (DEC-36): solo `127.0.0.1`; rechaza `Host` distinto de `127.0.0.1:<puerto>` / `localhost:<puerto>` (defensa ante DNS rebinding); mutaciones con `X-Admin-Token` aleatorio por arranque (una web cualquiera abierta en el navegador no puede hacer POST/PATCH al admin); solo `Content-Type: application/json`, cuerpo <= 16 KB. El audio se localiza por id de cancion via el catalogo, nunca con rutas del cliente (sin path traversal).
+- Rutas para ffmpeg/ffprobe siempre absolutas: 6 de los 291 `youtubeId` actuales empiezan por `-` y, con ruta relativa, ffprobe los interpreta como opcion (comprobado: `ffprobe -BRQ_XVwg-M.webm` -> "Missing argument for option"). El codigo actual ya usa rutas absolutas; `duration.ts` y el admin deben mantenerlo.
 - Limitaciones aceptadas (no se mitigan, se documentan): Shazam/grabacion; un cliente puede reutilizar un token antiguo o abrir partidas diarias nuevas en otro navegador para probar canciones por fuerza bruta (sin BD no hay forma de impedirlo; el rate-limit lo encarece); un atacante paciente puede construir una tabla hash(clip 1) -> cancion jugando en ilimitado (equivale a reconocer el audio).
 
 Rate-limit (valores por defecto, ajustables por env):
@@ -370,17 +466,22 @@ Unitarios backend (vitest):
 - `token`: ida y vuelta; un byte alterado -> invalido; caducado -> invalido; **longitud identica para ids de cancion de distinta longitud y para 0..6 resultados**; el token no contiene en claro id, titulo ni `clipKey`; token no valido como ticket y viceversa.
 - `engine`: H/G/M/S; cancion en varios juegos (interseccion); 6.o fallo -> perdida; accion tras fin -> `GAME_OVER`; cancion repetida -> `ALREADY_GUESSED` sin consumir intento ni cambiar el token.
 - `tickets`: un solo uso; caducidad; el indice corresponde al intento actual; la duracion servida para el intento N es `CLIP_SECONDS[N]`.
-- `shared/catalog`: validador con casos invalidos (ids duplicados, juego inexistente, `clipKey` mal formado).
+- `shared/catalog`: validador con casos invalidos (ids duplicados, juego inexistente, `clipKey` mal formado, `youtubeId` fuera de formato, `durationSec` invalido, cancion activa y corta).
+- `engine`/vista: `solution.youtubeId` presente al ganar y al perder, ausente en partidas en curso.
 
 Integracion backend (vitest, `createApp` + `app.listen(0)` + `fetch`, como claude-test; `FsClipStore` con catalogo y clips de prueba):
 - Flujo completo ganar/perder/skip; recuperacion con `/games/state`; errores de la tabla de la seccion 5; 429 con `Retry-After`.
-- **Prueba de fuga**: durante una partida completa, se serializan todas las respuestas (cuerpo y cabeceras) antes del final y se comprueba que no aparecen id, titulo, `clipKey` ni nombre de fichero de la cancion objetivo.
+- **Prueba de fuga**: durante una partida completa, se serializan todas las respuestas (cuerpo y cabeceras) antes del final y se comprueba que no aparecen id, titulo, `clipKey`, `youtubeId` ni nombre de fichero de la cancion objetivo. Tras terminar, `youtubeId` aparece SOLO dentro de `solution`; `/catalog` no lo contiene nunca.
 - Cabeceras de `/clips`: sin ETag, con `no-store`; segunda peticion al mismo ticket -> 410.
 
 Frontend (vitest + Testing Library + jsdom):
-- Generador de texto de compartir; estadisticas y racha (dias consecutivos en fecha Madrid devuelta por el servidor); filtro solo visible en ilimitado y vacio deshabilita empezar; apertura del diario sin llamada a la API si ya esta terminado; buscador deshabilita canciones ya intentadas; hook de arranque en frio con temporizadores falsos; recuperacion con `TOKEN_INVALID`.
+- Sin compartir ni estadisticas (DEC-27, DEC-43): limpieza de las claves `stats:*` antiguas; filtro solo visible en ilimitado y vacio deshabilita empezar; apertura del diario sin llamada a la API si ya esta terminado; buscador deshabilita canciones ya intentadas; hook de arranque en frio con temporizadores falsos; recuperacion con `TOKEN_INVALID`; `ClipProgressBar` (posicion de marcas, zona desbloqueada por intento, limite del cabezal); `ClipPlayer.subscribe` con un audio falso; `FullSongEmbed` ausente en juego; al terminar, boton sin iframe hasta pulsarlo; tras pulsar, URL `youtube-nocookie` y `referrerpolicy`.
 
-Script (vitest): `parseTitle`, fusion de `draft` (no pisa entradas revisadas), construccion de argumentos de ffmpeg (funciones puras). `validate` se ejecuta contra fixtures si ffmpeg esta instalado; si no, se marca omitido.
+Script (vitest): `parseTitle`, fusion de `draft` (no pisa entradas revisadas), construccion de argumentos de ffmpeg (funciones puras). Iteracion admin-catalogo, siempre con `--data-dir` en un directorio temporal:
+- `catalogStore`: escritura atomica (un fallo a mitad deja el original intacto), operaciones encoladas, `.bak` solo en la primera escritura.
+- Regla de cancion corta en el limite exacto (`startSec + 16 + 0.1`), desactivacion en `draft`/`build` sin tocar otros campos ni activar nada, `validate` con cancion activa y corta.
+- Handlers del admin: `PATCH` de cada campo, `TOO_SHORT`, juego inexistente o duplicado, crear/renombrar juego sin cambiar id, `403` sin token y con `Host` ajeno, audio por id (no por ruta), `Range` (`bytes=0-`, `bytes=a-b`, sufijo, fuera de rango -> 416), `youtubeId` con `-` inicial.
+- `admin-ui` (vitest + Testing Library): modulo puro de filtros/busqueda, edicion de titulo y juegos, bloqueo de activar cancion corta, obtencion del token via `/api/session`; `PATCH` con `startSec` -> ignorado/rechazado. `validate` se ejecuta contra fixtures si ffmpeg esta instalado; si no, se marca omitido.
 
 E2E (Playwright en `e2e/`, backend con driver `fs` y fixtures de tonos senoidales generados con ffmpeg y versionados, sin copyright):
 - Partida ganada, perdida y con skips; feedback de juego acertado/fallado; revelacion final y bloqueo posterior.
@@ -388,6 +489,9 @@ E2E (Playwright en `e2e/`, backend con driver `fs` y fixtures de tonos senoidale
 - Fuga: recoger todas las respuestas de red y el `localStorage` antes de terminar y buscar el titulo/id objetivo (criterio 1).
 - Arranque en frio simulado (`page.route` devuelve 503 / retrasa `/health`): la UI muestra carga y se recupera (criterio 8).
 - Viewport movil (iPhone, WebKit) y `colorScheme: 'dark'`.
+- Barra de reproduccion visible al reproducir, con la zona desbloqueada creciendo con cada intento.
+- Al terminar (ganar y perder) aparece el boton y el iframe solo tras pulsarlo; antes de pulsar no hay iframe ni peticiones a `youtube-nocookie.com` (interceptadas con `page.route` para no depender de YouTube).
+- Admin (opcional, Playwright contra `npm run cli -- admin --data-dir <tmp>`): editar, filtrar y oir con seek.
 
 ## 12. Despliegue
 
@@ -406,12 +510,14 @@ E2E (Playwright en `e2e/`, backend con driver `fs` y fixtures de tonos senoidale
 - **yt-dlp** cambia a menudo por cambios de YouTube: fijar version en el README y actualizar cuando falle.
 - **`trust proxy`** mal configurado haria que todas las peticiones compartan IP en el rate-limit o permitiria falsear la IP; probar en Render con `X-Forwarded-For`.
 - **Cambio de catalogo a mitad de dia** cambia la cancion diaria de partidas nuevas (DEC-09); ahora afecta a cualquier alta o baja en el catalogo, no solo a un juego concreto.
+- **Embed de YouTube**: videos retirados, privados o con el embed desactivado muestran el error de YouTube; no se detecta de antemano (fuera de alcance comprobarlo en `validate`, requiere red).
+- **Escritura concurrente del catalogo entre procesos** (admin + `draft`/`build`): ventana de milisegundos sin bloqueo (DEC-37).
 - **Tickets usados en memoria**: tras un reinicio un ticket aun no caducado (<= 60 s) podria reutilizarse una vez mas; impacto nulo (mismo clip del mismo intento).
 
 ## 14. Fuera de alcance tecnico
 
-Cuentas de usuario, base de datos, ranking global, sincronizacion de estadisticas entre dispositivos, anti-trampas mas alla del rate-limit, CDN para el audio, recorte en servidor, keep-alive, i18n, PWA/offline.
+Admin desplegado o con login, borrado y fusion de juegos en el admin, oir los 6 fragmentos en el admin, editar `startSec` en el admin, comprobar en `validate` que los videos siguen siendo embebibles, CSP global del frontend, cuentas de usuario, base de datos, ranking global, sincronizacion de estadisticas entre dispositivos, anti-trampas mas alla del rate-limit, CDN para el audio, recorte en servidor, keep-alive, i18n, PWA/offline.
 
 ## Preguntas abiertas
 
-Ninguna.
+Ninguna. Las de la iteracion admin-catalogo se cerraron el 2026-10-04: `startSec` no editable en el admin (6.1), embed al pulsar (DEC-41), UI del admin con React + Vite (DEC-38).

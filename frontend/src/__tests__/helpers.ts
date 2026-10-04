@@ -11,19 +11,11 @@
  *   useBackendWarmup(api: { health(): Promise<unknown> }): { status: 'waking'|'ready'|'error'; retry(): void }
  * storage/store.ts
  *   createStore(storage: Storage): Store   claves: heardle:filter, heardle:daily:<fecha>, heardle:unlimited,
- *                                           heardle:stats:daily, heardle:stats:unlimited
+ *                                           (heardle:stats:* RETIRADAS, DEC-43: createStore las borra al crearse)
  *   getFilter(): string[]; setFilter(ids)
  *   getDaily(date): DailyRecord | null; setDaily(date, rec)        DailyRecord = { token, finished, view? }
  *   getUnlimited(): { token } | null; setUnlimited(rec | null)
- *   getStats(kind): DailyStats | UnlimitedStats; setStats(kind, stats)
  *   writeFailed: boolean (true tras un fallo de escritura); ninguna operacion lanza.
- * game/stats.ts
- *   emptyDailyStats(), recordDaily(stats, date, attempts: number | null): DailyStats    (null = derrota)
- *     DailyStats = { played, current, max, lastDate: string|null, distribution: Record<'1'..'6'|'X', number> }
- *   emptyUnlimitedStats(), recordUnlimited(stats, attempts | null): { played, distribution }  (sin racha)
- * game/share.ts
- *   buildShareText({ mode, date?, results }): string    (no admite ni lee `solution`)
- *   copyToClipboard(text, nav?: Navigator): Promise<'copied' | 'fallback'>
  * game/search.ts
  *   searchSongs(catalog: PublicCatalog, query: string): Array<{ id, title, games: {id,name}[] }>
  * game/view.ts
@@ -76,10 +68,13 @@ export function mkView(over: Record<string, unknown> = {}): any {
   }
 }
 
+export const YOUTUBE_ID = 'dQw4w9WgXcQ'
+
 export const SOLUTION = {
   id: 'rse-littleroot-town',
   title: 'Littleroot Town',
   games: [{ id: 'rse', name: 'Pokémon Ruby / Sapphire / Emerald' }],
+  youtubeId: YOUTUBE_ID,
 }
 
 export function mkFinished(over: Record<string, unknown> = {}): any {

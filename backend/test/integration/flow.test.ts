@@ -36,8 +36,36 @@ describe('API /api/catalog y /api/health', () => {
   it('BE-CAT-06 GET /catalog no contiene claves internas ni datos de youtube', async () => {
     const app = await startTestApp()
     const r = await app.get('/api/catalog')
-    for (const k of ['clipKey', 'startSec', 'source', 'enabled', 'reviewed', 'youtubeId', 'videoTitle', 'Phantom Biscuit'])
+    for (const k of ['clipKey', 'startSec', 'source', 'enabled', 'reviewed', 'youtubeId', 'videoTitle', 'durationSec', 'Phantom Biscuit'])
       expect(r.text).not.toContain(k)
+  })
+
+  it('BE-CAT-06 el JSON serializado de /catalog no contiene el youtubeId, videoTitle ni durationSec de ninguna cancion', async () => {
+    const app = await startTestApp()
+    const r = await app.get('/api/catalog')
+    for (const s of catalogR().songs) {
+      expect(r.text).not.toContain(s.source.youtubeId)
+      expect(r.text).not.toContain(s.source.videoTitle)
+      expect(r.text).not.toContain(String(s.source.durationSec))
+    }
+  })
+
+  it('BE-CAT-10 /catalog lista solo los juegos con alguna cancion habilitada (DEC-32)', async () => {
+    const c: any = catalogR()
+    c.games.push({ id: 'E', name: 'Pokemon Game Echo' })
+    c.songs.push({ ...c.songs[0], id: 'e-short-song-09', title: 'Brief Jingle', clipKey: 'eeeeeeeeeeeeeeee', games: ['E'], enabled: false, source: { youtubeId: 'ytEEEEEEEEE', videoTitle: 'x', durationSec: 7.4 } })
+    const app = await startTestApp({ catalog: c })
+    const r = await app.get('/api/catalog')
+    const ids = r.json.games.map((g: any) => g.id)
+    expect([ids.includes('E'), ids.includes('A'), ids.includes('D')]).toEqual([false, true, true])
+  })
+
+  it('BE-CAT-10 el juego reaparece al habilitar una de sus canciones', async () => {
+    const c: any = catalogR()
+    c.games.push({ id: 'E', name: 'Pokemon Game Echo' })
+    c.songs.push({ ...c.songs[0], id: 'e-back-song-09', title: 'Back Again', clipKey: 'eeeeeeeeeeeeeeee', games: ['E'], enabled: true, source: { youtubeId: 'ytEEEEEEEEE', videoTitle: 'x', durationSec: 90.5 } })
+    const app = await startTestApp({ catalog: c })
+    expect((await app.get('/api/catalog')).json.games.map((g: any) => g.id)).toContain('E')
   })
 })
 
@@ -65,10 +93,15 @@ describe('Partida ilimitada: ganar, perder, skip, recuperar', () => {
     ])
   })
 
-  it('BE-LEAK-02 solution al ganar: id, title y games con nombre', async () => {
+  it('BE-LEAK-02 solution al ganar: id, title, games con nombre y youtubeId', async () => {
     const { app, view } = await unlimitedC()
     const r = await app.guess(view.token, C1)
-    expect(r.json.solution).toEqual({ id: C1, title: 'Tangerine Glacier', games: [{ id: 'C', name: 'Pokemon Game Charlie' }] })
+    expect(r.json.solution).toEqual({
+      id: C1,
+      title: 'Tangerine Glacier',
+      games: [{ id: 'C', name: 'Pokemon Game Charlie' }],
+      youtubeId: 'yt666666666',
+    })
   })
 
   it('BE-LEAK-03 perder: 6 skips -> lost con solution y sin clipUrl', async () => {
@@ -405,6 +438,36 @@ describe('Filtro ilimitado (errores)', () => {
   })
 })
 
+describe('BE-ENG-26 solucion tras terminar (idempotente)', () => {
+  it('state sobre una partida ganada devuelve la misma solution con youtubeId', async () => {
+    const { app, view } = await unlimitedC()
+    const won = await app.guess(view.token, C1)
+    const s1 = await app.state(won.json.token)
+    const s2 = await app.state(won.json.token)
+    expect(s1.json.solution).toEqual(won.json.solution)
+    expect(s2.json.solution).toEqual(won.json.solution)
+    expect(s1.json.solution.youtubeId).toBe('yt666666666')
+  })
+
+  it('state sobre una partida perdida devuelve la solution con youtubeId', async () => {
+    const { app, view } = await unlimitedC()
+    let token = view.token
+    for (let i = 0; i < 6; i++) token = (await app.skip(token)).json.token
+    const r = await app.state(token)
+    expect([r.json.status, r.json.solution.youtubeId]).toEqual(['lost', 'yt666666666'])
+  })
+
+  it('guess y skip tras terminar -> 409 GAME_OVER sin solution ni youtubeId', async () => {
+    const { app, view } = await unlimitedC()
+    const won = await app.guess(view.token, C1)
+    for (const r of [await app.skip(won.json.token), await app.guess(won.json.token, A1)]) {
+      expect([r.status, codeOf(r)]).toEqual([409, 'GAME_OVER'])
+      expect(r.text).not.toContain('solution')
+      expect(r.text).not.toContain('yt666666666')
+    }
+  })
+})
+
 describe('Catalogo cambiante y no disponible', () => {
   it('BE-CAT-07 cancion objetivo retirada del catalogo con partida en curso -> 401 TOKEN_INVALID', async () => {
     const { view } = await unlimitedC()
@@ -463,5 +526,28 @@ describe('Catalogo cambiante y no disponible', () => {
     })
     const r = await app.createDaily()
     expect([r.status, codeOf(r)]).toEqual([503, 'CATALOG_UNAVAILABLE'])
+  })
+
+  it('BE-CAT-11 cancion enabled y corta en catalog.json -> el validador compartido lo rechaza: /health 503 CATALOG_UNAVAILABLE', async () => {
+    const c: any = catalogR()
+    c.songs[0].source.durationSec = 7.4
+    const app = await startTestApp({ catalog: c, skipCatalogWait: true, schedule: () => {} })
+    const r = await app.get('/api/health')
+    expect([r.status, codeOf(r)]).toEqual([503, 'CATALOG_UNAVAILABLE'])
+  })
+
+  it('BE-CAT-11 youtubeId mal formado en catalog.json -> /health 503 CATALOG_UNAVAILABLE', async () => {
+    const c: any = catalogR()
+    c.songs[2].source.youtubeId = '"><script>x'
+    const app = await startTestApp({ catalog: c, skipCatalogWait: true, schedule: () => {} })
+    expect(codeOf(await app.get('/api/health'))).toBe('CATALOG_UNAVAILABLE')
+  })
+
+  it('BE-CAT-11 la misma cancion corta pero desactivada si arranca (no es un error)', async () => {
+    const c: any = catalogR()
+    c.songs[0].source.durationSec = 7.4
+    c.songs[0].enabled = false
+    const app = await startTestApp({ catalog: c })
+    expect((await app.get('/api/health')).status).toBe(200)
   })
 })

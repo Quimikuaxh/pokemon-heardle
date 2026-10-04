@@ -46,7 +46,7 @@ const servers = (Object.keys(VARIANTS) as Variant[]).flatMap((name): Server[] =>
 })
 
 // E2E-44: matriz de navegadores reducida a los casos de humo, fuga e intento repetido.
-const CROSS_BROWSER = /E2E-(01|02|26|45)_/
+const CROSS_BROWSER = /E2E-(01|02|26|45|50|54)_/
 
 export default defineConfig({
   testDir: './tests',

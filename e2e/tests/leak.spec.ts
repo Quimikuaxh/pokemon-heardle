@@ -41,6 +41,8 @@ test('E2E-31_should_reveal_title_and_games_when_the_game_ends', async ({ app }) 
   await expect(d.resultHeading).toHaveText('Has agotado los intentos')
   await expect(d.solution).toHaveText(target.title)
   await expect(d.resultPanel).toContainText(gamesText(target))
+  await expect(d.root.getByRole('button', { name: 'Escuchar la canción completa' })).toBeVisible()
+  expect(app.page.frames(), 'sin iframe hasta pulsar el boton').toHaveLength(1)
 })
 
 test('E2E-32_should_show_the_solution_only_after_the_game_ends', async ({ app, page }) => {

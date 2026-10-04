@@ -1,9 +1,8 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { createGameController } from '../game/controller'
 import { createStore } from '../storage/store'
-import { emptyDailyStats, recordDaily } from '../game/stats'
 import { ApiError } from '../api/client'
-import { mkApi, mkCatalog, mkView, mkFinished, NOW_MS, TODAY } from './helpers'
+import { mkApi, mkCatalog, mkView, mkFinished, NOW_MS, TODAY, YOUTUBE_ID } from './helpers'
 
 const YESTERDAY = '2026-10-02'
 const TOMORROW = '2026-10-04'
@@ -335,35 +334,13 @@ describe('controller: acciones', () => {
   })
 })
 
-describe('controller: estadisticas y almacenamiento', () => {
-  it('FE-GAM-12 / FE-STA-02 al ganar el diario se registra con la fecha del servidor y continua la racha', async () => {
-    const { store, ctl } = setup({
-      createGame: vi.fn(async () => dailyView({ date: '2026-03-29' })),
-      guess: vi.fn(async () => dailyDone('2026-03-29', { attempt: 2, results: ['miss', 'hit'] })),
-    })
-    store.setStats('daily', recordDaily(emptyDailyStats(), '2026-03-28', 3))
-    await ctl.openDaily()
-    await ctl.guess('rse-littleroot-town')
-    const s: any = store.getStats('daily')
-    expect([s.current, s.lastDate, s.distribution['2']]).toEqual([2, '2026-03-29', 1])
-  })
-
+describe('controller: registro del diario y almacenamiento', () => {
   it('al terminar el diario el registro queda finished con la vista final', async () => {
     const final = dailyDone(TODAY)
     const { store, ctl } = setup({ createGame: vi.fn(async () => dailyView()), guess: vi.fn(async () => final) })
     await ctl.openDaily()
     await ctl.guess('rse-littleroot-town')
     expect([store.getDaily(TODAY)?.finished, store.getDaily(TODAY)?.view]).toEqual([true, final])
-  })
-
-  it('FE-STA-09 terminar una partida ilimitada no toca stats:daily y suma en stats:unlimited', async () => {
-    const { store, ctl } = setup({ createGame: vi.fn(async () => mkView()), guess: vi.fn(async () => mkFinished()) })
-    const daily = recordDaily(emptyDailyStats(), '2026-10-02', 4)
-    store.setStats('daily', daily)
-    store.setFilter(['rse'])
-    await ctl.startUnlimited()
-    await ctl.guess('rse-littleroot-town')
-    expect([store.getStats('daily'), (store.getStats('unlimited') as any).played]).toEqual([daily, 1])
   })
 
   it('FE-STA-12 durante la partida el storage solo tiene token y jugadas propias: ni titulo ni id de la solucion', async () => {
@@ -375,15 +352,68 @@ describe('controller: estadisticas y almacenamiento', () => {
     await ctl.startUnlimited()
     await ctl.guess('dp-twinleaf-town')
     const dump = Object.keys(localStorage).map((k) => k + '=' + localStorage.getItem(k)).join('\n')
-    for (const s of ['Littleroot', 'rse-littleroot-town', '"solution"']) expect(dump).not.toContain(s)
+    for (const s of ['Littleroot', 'rse-littleroot-town', '"solution"', YOUTUBE_ID, 'youtubeId']) expect(dump).not.toContain(s)
   })
 
-  it('FE-STA-11 si el storage falla la partida sigue funcionando', async () => {
+  it('FE-STA-12 [MOD] diario EN CURSO: ninguna clave (daily:<fecha>, filter, unlimited) contiene titulo, id ni youtubeId de la objetivo', async () => {
+    const { ctl, store } = setup({
+      createGame: vi.fn(async () => dailyView({ token: 'd1' })),
+      guess: vi.fn(async () => dailyView({ token: 'd2', attempt: 1, results: ['miss'], guesses: ['dp-twinleaf-town'] })),
+    })
+    store.setFilter(['rse'])
+    await ctl.openDaily()
+    await ctl.guess('dp-twinleaf-town')
+    const dump = Object.keys(localStorage).map((k) => k + '=' + localStorage.getItem(k)).join('\n')
+    for (const s of ['Littleroot', 'rse-littleroot-town', YOUTUBE_ID, 'youtubeId']) expect(dump).not.toContain(s)
+  })
+
+  it('FE-STA-12 [MOD] diario TERMINADO: el youtubeId solo aparece dentro de DailyRecord.view.solution', async () => {
+    const final = dailyDone(TODAY)
+    const { ctl } = setup({ createGame: vi.fn(async () => dailyView()), guess: vi.fn(async () => final) })
+    await ctl.openDaily()
+    await ctl.guess('rse-littleroot-town')
+    const record = JSON.parse(localStorage.getItem('heardle:daily:' + TODAY)!)
+    expect(record.view.solution.youtubeId).toBe(YOUTUBE_ID)
+    delete record.view.solution.youtubeId
+    expect(JSON.stringify(record)).not.toContain(YOUTUBE_ID)
+    const others = Object.keys(localStorage).filter((k) => k !== 'heardle:daily:' + TODAY).map((k) => localStorage.getItem(k)).join('\n')
+    expect(others).not.toContain(YOUTUBE_ID)
+  })
+
+  it('FE-STA-12 [MOD] ilimitado terminado: no queda ni la partida guardada ni el youtubeId en el storage', async () => {
+    const { ctl, store } = setup({ createGame: vi.fn(async () => mkView()), guess: vi.fn(async () => mkFinished()) })
+    store.setFilter(['rse'])
+    await ctl.startUnlimited()
+    await ctl.guess('rse-littleroot-town')
+    const dump = Object.keys(localStorage).map((k) => k + '=' + localStorage.getItem(k)).join('\n')
+    expect(dump).not.toContain(YOUTUBE_ID)
+    expect(store.getUnlimited()).toBeNull()
+  })
+
+  it('FE-FIL-05 si el storage falla la partida sigue funcionando', async () => {
     const api = mkApi({ createGame: vi.fn(async () => dailyView()), skip: vi.fn(async () => mkView({ attempt: 1, results: ['skip'] })) })
     const broken = { getItem: () => { throw new Error('x') }, setItem: () => { throw new Error('x') }, removeItem: () => { throw new Error('x') }, clear() {}, key: () => null, length: 0 } as Storage
     const ctl = createGameController({ api, store: createStore(broken), catalog: mkCatalog(), nowMs: () => NOW_MS })
     await ctl.openDaily()
     await ctl.skip()
     expect(ctl.getState().view?.attempt).toBe(1)
+  })
+})
+
+describe('controller sin depender de this', () => {
+  it('getFilter y setFilter funcionan desestructurados', () => {
+    const store = createStore(localStorage)
+    const { getFilter, setFilter } = createGameController({ api: mkApi(), store, catalog: mkCatalog(), nowMs: () => NOW_MS })
+    setFilter(['rse', 'rse'])
+    expect(getFilter()).toEqual(['rse'])
+  })
+
+  it('startUnlimited desestructurado usa el filtro guardado', async () => {
+    const api = mkApi({ createGame: vi.fn(async () => mkView()) })
+    const store = createStore(localStorage)
+    store.setFilter(['dp'])
+    const { startUnlimited } = createGameController({ api, store, catalog: mkCatalog(), nowMs: () => NOW_MS })
+    await startUnlimited()
+    expect(api.createGame.mock.calls).toEqual([[{ mode: 'unlimited', games: ['dp'] }]])
   })
 })

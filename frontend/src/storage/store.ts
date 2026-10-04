@@ -1,6 +1,4 @@
 import type { GameView } from '../../../shared/api'
-import { emptyDailyStats, emptyUnlimitedStats } from '../game/stats'
-import type { DailyStats, UnlimitedStats } from '../game/stats'
 
 export interface DailyRecord {
   token: string
@@ -12,8 +10,6 @@ export interface UnlimitedRecord {
   token: string
 }
 
-type StatsKind = 'daily' | 'unlimited'
-
 export interface Store {
   /** true tras un fallo de escritura (cuota excedida o almacenamiento bloqueado). */
   readonly writeFailed: boolean
@@ -23,33 +19,11 @@ export interface Store {
   setDaily(date: string, record: DailyRecord): void
   getUnlimited(): UnlimitedRecord | null
   setUnlimited(record: UnlimitedRecord | null): void
-  getStats(kind: 'daily'): DailyStats
-  getStats(kind: 'unlimited'): UnlimitedStats
-  getStats(kind: StatsKind): DailyStats | UnlimitedStats
-  setStats(kind: StatsKind, stats: DailyStats | UnlimitedStats): void
 }
 
 const PREFIX = 'heardle:'
-const DISTRIBUTION_KEYS = ['1', '2', '3', '4', '5', '6', 'X']
-
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
-
-const isCount = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value) && value >= 0
-
-const isDistribution = (value: unknown) =>
-  isRecord(value) && DISTRIBUTION_KEYS.every((key) => isCount(value[key]))
-
-const isDailyStats = (value: unknown): value is DailyStats =>
-  isRecord(value) &&
-  isCount(value.played) &&
-  isCount(value.current) &&
-  isCount(value.max) &&
-  (value.lastDate === null || typeof value.lastDate === 'string') &&
-  isDistribution(value.distribution)
-
-const isUnlimitedStats = (value: unknown): value is UnlimitedStats =>
-  isRecord(value) && isCount(value.played) && isDistribution(value.distribution)
 
 const isDailyRecord = (value: unknown): value is DailyRecord =>
   isRecord(value) &&
@@ -59,9 +33,27 @@ const isDailyRecord = (value: unknown): value is DailyRecord =>
 
 const isUnlimitedRecord = (value: unknown): value is UnlimitedRecord => isRecord(value) && typeof value.token === 'string'
 
-/** Ninguna operacion lanza: si localStorage falla, la app sigue sin persistir (FE-STA-11). */
+const RETIRED_KEY_PREFIX = `${PREFIX}stats`
+
+// Las estadisticas se retiraron (DEC-43): se borran las claves heredadas, que ya nadie lee. Idempotente y sin
+// marcar writeFailed: es limpieza, no persistencia del usuario.
+function removeRetiredKeys(storage: Storage): void {
+  try {
+    const retired: string[] = []
+    for (let index = 0; index < storage.length; index++) {
+      const key = storage.key(index)
+      if (key?.startsWith(RETIRED_KEY_PREFIX)) retired.push(key)
+    }
+    retired.forEach((key) => storage.removeItem(key))
+  } catch {
+    // almacenamiento bloqueado: nada que limpiar
+  }
+}
+
+/** Ninguna operacion lanza: si localStorage falla, la app sigue sin persistir. */
 export function createStore(storage: Storage): Store {
   let writeFailed = false
+  removeRetiredKeys(storage)
 
   function read<T>(key: string, isValid: (value: unknown) => value is T): T | null {
     try {
@@ -100,10 +92,5 @@ export function createStore(storage: Storage): Store {
     setDaily: (date, record) => write(`daily:${date}`, record),
     getUnlimited: () => read('unlimited', isUnlimitedRecord),
     setUnlimited: (record) => (record ? write('unlimited', record) : remove('unlimited')),
-    getStats: ((kind: StatsKind) =>
-      kind === 'daily'
-        ? (read('stats:daily', isDailyStats) ?? emptyDailyStats())
-        : (read('stats:unlimited', isUnlimitedStats) ?? emptyUnlimitedStats())) as Store['getStats'],
-    setStats: (kind, stats) => write(`stats:${kind}`, stats),
   }
 }

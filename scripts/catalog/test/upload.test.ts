@@ -168,4 +168,16 @@ describe('runUpload', () => {
     await runUpload({ catalog: catalog([song('a', K1)]), outDir: out, store, validate: okValidate, prune: true })
     expect(calls.indexOf('put catalog/catalog.json')).toBeLessThan(calls.indexOf('delete clips/ffffffffffffffff/1.mp3'))
   })
+
+  it('SC-UP-06 no sube clips de canciones desactivadas (cortas) y el catalog.json subido las mantiene enabled:false', async () => {
+    const { out } = setup([K1, K2])
+    const short = { ...song('corta', K2, false), source: { youtubeId: 'vid00000002', videoTitle: 'x', durationSec: 7.4 } }
+    const c = catalog([song('a', K1), short])
+    const f = fakeStore()
+    await runUpload({ catalog: c, outDir: out, store: f.store, validate: okValidate })
+    expect(f.calls.some((x) => x.includes(K2))).toBe(false)
+    const uploaded = JSON.parse(f.store.put.mock.calls.find((x) => x[0] === 'catalog/catalog.json')![1].toString())
+    const sent = uploaded.songs.find((x: any) => x.id === 'corta')
+    expect([sent.enabled, sent.source.durationSec]).toEqual([false, 7.4])
+  })
 })

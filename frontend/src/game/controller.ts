@@ -3,7 +3,6 @@ import { madridDate } from '../../../shared/date'
 import { ApiError } from '../api/client'
 import type { ApiClient } from '../api/client'
 import type { Store } from '../storage/store'
-import { recordDaily, recordUnlimited } from './stats'
 
 export type NoticeKind =
   | 'already-guessed'
@@ -102,23 +101,12 @@ export function createGameController(options: {
     listeners.forEach((listener) => listener())
   }
 
-  function recordFinish(view: GameView) {
-    const attempts = view.status === 'won' ? view.attempt : null
-    if (view.mode === 'daily' && view.date) {
-      store.setStats('daily', recordDaily(store.getStats('daily'), view.date, attempts))
-    } else if (view.mode === 'unlimited') {
-      store.setStats('unlimited', recordUnlimited(store.getStats('unlimited'), attempts))
-    }
-  }
-
-  // Aplica una vista del servidor: persiste el ultimo token y, al terminar, estadisticas y resultado.
+  // Aplica una vista del servidor: persiste el ultimo token y, al terminar, el resultado.
   function applyView(view: GameView, options: { newGame?: boolean } = {}) {
     const finished = view.status !== 'playing'
     if (view.mode === 'daily' && view.date) {
       store.setDaily(view.date, { token: view.token, finished, ...(finished ? { view } : {}) })
-      if (finished) recordFinish(view)
     } else if (finished) {
-      if (store.getUnlimited()) recordFinish(view)
       store.setUnlimited(null)
     } else {
       store.setUnlimited({ token: view.token })

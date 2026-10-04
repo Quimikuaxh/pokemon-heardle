@@ -1,6 +1,6 @@
 # Pokemon Heardle - Requisitos
 
-Estado: requisitos cerrados, sin preguntas abiertas. Sin codigo ni git init todavia.
+Estado: version inicial implementada (main). Iteracion `feature/admin-catalogo` (admin local, canciones cortas, barra de reproduccion, cancion completa al terminar) definida en esta revision.
 
 ## 1. Objetivo
 Juego web estilo Heardle: adivinar la cancion de un juego de Pokemon a partir de fragmentos de audio que se alargan con cada intento.
@@ -13,7 +13,7 @@ Juego web estilo Heardle: adivinar la cancion de un juego de Pokemon a partir de
 - Limitacion aceptada: no se puede impedir Shazam ni grabar la salida de audio.
 
 ## 3. Mecanica
-- Estandar Heardle: 6 intentos, fragmentos de 1/2/4/7/11/16 s (una duracion por intento), boton Skip (consume intento y alarga fragmento), buscador con autocompletado de canciones, compartir resultado en emojis.
+- Estandar Heardle: 6 intentos, fragmentos de 1/2/4/7/11/16 s (una duracion por intento), boton Skip (consume intento y alarga fragmento), buscador con autocompletado de canciones. Sin compartir resultado ni estadisticas (retirados, seccion 9).
 - Modos: diario e ilimitado.
   - Diario: SIN filtro. Una unica cancion por dia (Europe/Madrid), la misma para todas las personas, elegida de todo el catalogo: cancion del dia = HMAC(semilla secreta, fecha); sin base de datos.
   - Ilimitado: cancion aleatoria en servidor segun filtro.
@@ -21,7 +21,9 @@ Juego web estilo Heardle: adivinar la cancion de un juego de Pokemon a partir de
 - Intento repetido no permitido: el buscador marca las canciones ya intentadas y no deja elegirlas; el servidor rechaza la repeticion sin consumir intento.
 - Feedback parcial: tras cada intento fallido, el servidor indica si el juego de la cancion elegida era correcto aunque la cancion no lo sea.
 - Una cancion puede pertenecer a varios juegos. Acertar el juego = el juego elegido esta entre los de la cancion objetivo.
-- Estadisticas (racha, distribucion de aciertos) en localStorage. Diario: una sola racha y una sola distribucion.
+- Registro de la partida diaria en localStorage para no repetir el diario y mostrar su resultado. (RETIRADO: estadisticas de racha y distribucion.)
+- Barra de reproduccion: al reproducir, una barra muestra el avance en tiempo real sobre la escala total de 16 s, dividida en los segmentos de los fragmentos (marcas en 1/2/4/7/11/16 s); la parte desbloqueada del intento actual se distingue de la bloqueada.
+- Cancion completa al terminar (acierto o fallo): se ofrece el video original de YouTube embebido (`youtube-nocookie`) tras pulsar "Escuchar la cancion completa". El id del video solo llega al cliente dentro de la solucion revelada, nunca antes; el iframe no se carga antes de terminar.
 
 ## 4. Catalogo (script)
 - El usuario aporta una playlist de YouTube.
@@ -29,6 +31,8 @@ Juego web estilo Heardle: adivinar la cancion de un juego de Pokemon a partir de
 - Juego/titulo se derivan del titulo del video y se revisan a mano en `catalog.json`.
 - yt-dlp y ffmpeg no estan instalados: el script/README documenta la instalacion.
 - Audios y catalogo no se suben al repo publico (.gitignore); se suben al bucket.
+- Canciones demasiado cortas (duran menos de `startSec + 16 s`, p. ej. "Obtained a Badge", "Cable Car"): se detectan automaticamente midiendo el audio descargado, quedan `enabled: false` con una marca visible en el admin y no hacen fallar el flujo. No se pueden activar mientras sigan siendo cortas.
+- Admin local del catalogo (en `scripts/catalog`, no desplegado, sin login), arrancado con `npm run cli -- admin`: servidor local + pagina para listar canciones; escuchar el tema COMPLETO descargado (`data/work`) con barra para moverse, sin necesidad de `build`; activar/desactivar; editar titulo y juegos (varios por cancion; crear y renombrar juegos, con la regla de seccion 9); marcar revisada; filtrar y buscar; `startSec` NO se edita (siempre 0 salvo edicion manual del JSON). UI con React + Vite (por juego, activadas/desactivadas, revisadas/pendientes, texto). Guarda `data/catalog.json` de forma atomica; despues el flujo sigue con `build`/`validate`/`upload`.
 
 ## 5. Stack y despliegue
 - Frontend: React + Vite + TypeScript. Backend: Node + TypeScript.
@@ -47,7 +51,7 @@ Juego web estilo Heardle: adivinar la cancion de un juego de Pokemon a partir de
 3. Fallo con juego correcto muestra feedback de juego acertado; con juego incorrecto, lo indica.
 4. El mismo dia da la misma cancion en diario para todas las personas, sin filtro.
 5. En ilimitado, filtro vacio no permite empezar; pool con una sola cancion funciona.
-6. Compartir genera texto de emojis sin revelar la cancion.
+6. (RETIRADO: compartir resultado en emojis.)
 7. Tras fallar o acertar, se revela la solucion y no se puede seguir jugando esa partida.
 8. Funciona en movil y en modo oscuro; arranque en frio del backend no rompe la UI.
 
@@ -56,7 +60,8 @@ Juego web estilo Heardle: adivinar la cancion de un juego de Pokemon a partir de
 - Diario ya jugado hoy: mostrar resultado, no permitir repetir.
 - Cambio de filtro a mitad de partida (ilimitado): aplica a la siguiente partida.
 - Cancion ya intentada: no seleccionable; si llega al servidor, se rechaza sin consumir intento.
-- Cambio de dia (zona horaria): definir zona de referencia .
+- Cambio de dia (zona horaria): Europe/Madrid (seccion 9).
+- Video de YouTube retirado o no embebible: el iframe muestra el error de YouTube; la solucion (titulo y juegos) sigue visible.
 
 ## 9. Decisiones cerradas (con motivo y alternativa descartada)
 - **6 intentos** (1/2/4/7/11/16 s). Estandar Heardle; un 7.o intento exigiria inventar una duracion. Descartado: 7 intentos con 30 s.
@@ -71,6 +76,13 @@ Juego web estilo Heardle: adivinar la cancion de un juego de Pokemon a partir de
 - **Almacenamiento definitivo en Supabase Storage.** Descartados: Backblaze B2 (egress gratis ~3x almacenamiento, ~1 GB/mes, y 2.500 descargas/dia) y Google Drive (mas configuracion y latencia).
 - **Un "juego" del catalogo = grupo de versiones que comparten banda sonora** ("Ruby/Sapphire/Emerald" es UN juego); un remake con banda sonora distinta es otro juego ("Omega Ruby/Alpha Sapphire"). Cada cancion lista todos los juegos en los que aparece. Descartado: cada version por separado (inflaria el filtro y el feedback de juego fallaria entre versiones con la misma OST) y agrupar por generacion.
 - **Cancion sin juego reconocible**: el catalogo la deja sin juegos y la validacion falla hasta revisarla a mano. No existe juego "unknown" (llegaria a produccion con feedback de juego erroneo).
+- **Admin del catalogo local, no desplegado y sin login.** Descartado: admin en la web desplegada con login (mas superficie de ataque y complejidad). Descartado: oir en el admin los 6 fragmentos (exige `build` previo); se oye el tema completo descargado.
+- **Sin compartir resultado ni estadisticas** (retirados en la iteracion admin-catalogo): el usuario no las quiere. Se mantiene solo el registro de la partida diaria en localStorage para no repetir el diario. Descartado: mantener el texto de emojis y la racha/distribucion.
+- **`startSec` no editable en el admin**: las canciones empiezan en el segundo 0 salvo edicion manual de `catalog.json`. Descartado: campo y boton "usar posicion actual" en el admin.
+- **UI del admin con React + Vite** (misma pila que el frontend). Descartado: TS sin framework con esbuild.
+- **Embed de la cancion completa solo al pulsar un boton.** Descartado: carga automatica al terminar (peticiones a YouTube al reabrir un diario terminado y mas datos en movil).
+- **Canciones cortas: desactivacion automatica con marca, no fallo.** Descartado: que `validate` falle (bloqueaba el flujo por temas que simplemente no sirven).
+- **Cancion completa al terminar via embed de YouTube.** Descartado: servir el tema completo o un fragmento largo propio (~1,5 GB para 500 canciones, supera el 1 GB gratis de Supabase).
 - **Clips precortados, no ffmpeg al vuelo.** La instancia free de Render tiene poca CPU/RAM; cortar por peticion la tumbaria. El script de catalogo genera los clips por intento. Descartado: recorte en servidor.
 - **Render free compartido con el Team Builder.** El plan free da 750 h/mes por workspace; ambos backends duermen tras 15 min de inactividad. RIESGO: si ambos estan despiertos a la vez, el consumo suma y puede agotar las horas. REQUISITO: NO anadir keep-alive ni pings periodicos; solo se despierta con trafico real (la UI muestra carga ante el arranque en frio).
 - **Backend portable.** Sin dependencias especificas de Render (solo Node estandar, variables de entorno, Dockerfile opcional) para poder migrarlo. Descartado: Koyeb, porque exige tarjeta y el usuario no quiere tarjeta obligatoria.

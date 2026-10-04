@@ -2,10 +2,11 @@
 export interface Game { id: string; name: string }
 export interface Song {
   id: string; title: string; games: string[]; clipKey: string; startSec: number
-  enabled: boolean; reviewed: boolean; source: { youtubeId: string; videoTitle: string }
+  enabled: boolean; reviewed: boolean; source: { youtubeId: string; videoTitle: string; durationSec?: number }
 }
 export interface Catalog { version: 1; generatedAt: string; games: Game[]; songs: Song[] }
 export type ValidationResult = { ok: true; catalog: Catalog } | { ok: false; errors: string[] }
+const YOUTUBE_ID_PATTERN = /^[A-Za-z0-9_-]{11}$/
 const SLUG_PATTERN = /^[a-z0-9-]+$/
 // Los ids de juego admiten mayusculas: los fixtures de tests los usan (A, B, ...) y se envian tal cual en el filtro.
 const GAME_ID_PATTERN = /^[A-Za-z0-9-]+$/
@@ -103,12 +104,24 @@ function validateSong(
   if (typeof song.reviewed !== 'boolean') errors.push(`${label}: reviewed debe ser booleano`)
 
   const source = song.source
-  if (
-    !isRecord(source) ||
-    typeof source.youtubeId !== 'string' ||
-    typeof source.videoTitle !== 'string'
-  ) {
+  if (!isRecord(source) || typeof source.videoTitle !== 'string') {
     errors.push(`${label}: source debe tener youtubeId y videoTitle de tipo texto`)
+    return
+  }
+  if (typeof source.youtubeId !== 'string' || !YOUTUBE_ID_PATTERN.test(source.youtubeId)) {
+    errors.push(`${label}: source.youtubeId invalido ${describeValue(source.youtubeId)} (se esperan 11 caracteres [A-Za-z0-9_-])`)
+  }
+  const { durationSec } = source
+  if (durationSec !== undefined) {
+    if (typeof durationSec !== 'number' || !Number.isFinite(durationSec) || durationSec <= 0) {
+      errors.push(`${label}: source.durationSec debe ser un numero finito > 0 (recibido ${describeValue(durationSec)})`)
+    } else if (
+      song.enabled === true &&
+      typeof song.startSec === 'number' &&
+      tooShort(durationSec, song.startSec)
+    ) {
+      errors.push(`${label}: esta activada pero es demasiado corta (${durationSec} s con startSec ${song.startSec})`)
+    }
   }
 }
 
@@ -132,4 +145,14 @@ export function validateCatalog(input: unknown): ValidationResult {
   }
 
   return errors.length > 0 ? { ok: false, errors } : { ok: true, catalog: input as unknown as Catalog }
+}
+
+const MIN_SOURCE_SECONDS_AFTER_START = 16 + 0.1
+
+/**
+ * Cancion demasiado corta (DEC-40): la fuente dura menos de `startSec + 16 s` mas un margen de 0,1 s
+ * para el recorte y el loudnorm. Duracion desconocida no es corta. Se calcula siempre, nunca se persiste.
+ */
+export function tooShort(durationSec: number | undefined, startSec: number): boolean {
+  return durationSec !== undefined && durationSec < startSec + MIN_SOURCE_SECONDS_AFTER_START
 }

@@ -3,7 +3,7 @@
 // Funcion pura: nunca lanza. `games` son los nombres tal cual aparecen en el titulo del video
 // (el id del juego lo deriva `draft`).
 import { describe, it, expect } from 'vitest'
-import { parseTitle } from '../src/parseTitle'
+import { commonGameTails, parseTitle } from '../src/parseTitle'
 
 describe('parseTitle', () => {
   it('SC-PT-01 formato tipico "Juego - Cancion": separa titulo y juego', () => {
@@ -68,6 +68,26 @@ describe('parseTitle', () => {
 
   it('SC-PT-05 si el principio ya parece un juego, se mantiene el orden "Juego - Cancion"', () => {
     expect(parseTitle('Pokemon X/Y - Lumiose City - Night').games).toEqual(['Pokemon X/Y'])
+  })
+
+  it('SC-PT-06 un tramo final conocido es el juego aunque la cancion mencione Pokemon', () => {
+    const tails = new Set(['Pokémon Diamond and Pearl (Restored)'])
+    expect(parseTitle('Pokémon Center (Night) - Pokémon Diamond and Pearl (Restored)', tails)).toEqual({
+      title: 'Pokémon Center (Night)',
+      games: ['Pokémon Diamond and Pearl (Restored)'],
+      needsReview: false,
+    })
+  })
+
+  it('SC-PT-06 commonGameTails detecta el tramo final repetido de la playlist', () => {
+    const titles = [
+      'Twinleaf Town - Pokémon Diamond and Pearl (Restored)',
+      'Route 201 - Pokémon Diamond and Pearl (Restored)',
+      'Pokémon Center (Day) - Pokémon Diamond and Pearl (Restored)',
+      'Lake - Pokémon Diamond and Pearl (Restored)',
+      'Distortion World - Pokémon Platinum (Restored)',
+    ]
+    expect([...commonGameTails(titles)]).toEqual(['Pokémon Diamond and Pearl (Restored)'])
   })
 
   it('SC-PT-03 sin separador: titulo completo, juego desconocido, marcado para revision', () => {

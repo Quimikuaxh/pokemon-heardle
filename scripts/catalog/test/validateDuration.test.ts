@@ -9,7 +9,7 @@ const SECONDS = [1, 2, 4, 7, 11, 16]
 const KEY = '1111111111111111'
 const catalog: any = {
   version: 1, generatedAt: 'x', games: [{ id: 'g', name: 'G' }],
-  songs: [{ id: 'a', title: 'a', games: ['g'], clipKey: KEY, startSec: 0, enabled: true, reviewed: true, source: { youtubeId: 'v', videoTitle: 'v' } }],
+  songs: [{ id: 'a', title: 'a', games: ['g'], clipKey: KEY, startSec: 0, enabled: true, reviewed: true, source: { youtubeId: 'vid00000001', videoTitle: 'v' } }],
 }
 const created: string[] = []
 afterAll(() => created.forEach((d) => rmSync(d, { recursive: true, force: true })))

@@ -85,7 +85,7 @@ describe('catalog/ indice y pool de ilimitado', () => {
 
   it('BE-CAT-06 publicCatalog no contiene claves internas en ningun nivel', () => {
     const text = JSON.stringify(idx().publicCatalog())
-    for (const k of ['clipKey', 'startSec', 'source', 'enabled', 'reviewed', 'youtubeId', 'videoTitle'])
+    for (const k of ['clipKey', 'startSec', 'source', 'enabled', 'reviewed', 'youtubeId', 'videoTitle', 'durationSec'])
       expect(text).not.toContain(k)
   })
 

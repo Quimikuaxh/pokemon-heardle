@@ -3,6 +3,9 @@
 import { describe, it, expect, afterEach } from 'vitest'
 import { startTestApp, closeAllTestApps, codeOf, DAILY_SEED, type TestApp, type Res } from '../helpers/app'
 import { catalogR, dailyTarget, enabledSorted, T, type FixtureSong } from '../helpers/fixtures'
+import { SECRET_A } from '../helpers/secrets'
+import { decryptToken } from '../../src/game/token'
+import { TicketService } from '../../src/game/tickets'
 
 afterEach(closeAllTestApps)
 
@@ -23,12 +26,13 @@ function decodedBlobs(text: string): string[] {
 
 function needlesFor(s: FixtureSong): string[] {
   const words = s.title.split(/\s+/).filter((w) => w.length >= 6)
-  const direct = [s.id, s.title, s.clipKey, s.source.youtubeId, s.source.videoTitle, ...words]
+  const duration = String(s.source.durationSec)
+  const direct = [s.id, s.title, s.clipKey, s.source.youtubeId, s.source.videoTitle, ...words, ...(duration.length >= 6 ? [duration] : [])]
   const b64 = [s.id, s.title, s.clipKey].flatMap((v) => [Buffer.from(v).toString('base64'), Buffer.from(v).toString('base64url')])
   return [...direct, ...b64.filter((x) => x.length >= 8)]
 }
 
-const FORBIDDEN_KEYS = ['clipKey', 'startSec', 'youtubeId', 'videoTitle', 'filterKey', '"source"', '"enabled"', '"reviewed"', '.mp3']
+const FORBIDDEN_KEYS = ['clipKey', 'startSec', 'youtubeId', 'videoTitle', 'durationSec', 'filterKey', '"source"', '"enabled"', '"reviewed"', '.mp3']
 
 function assertNoLeak(responses: Res[], target: FixtureSong) {
   const needles = needlesFor(target)
@@ -153,11 +157,11 @@ describe('BE-LEAK fuga de la cancion objetivo', () => {
     expect(g.json.clipUrl).toMatch(/^\/api\/clips\/[A-Za-z0-9_-]+$/)
   })
 
-  it('BE-LEAK-10 solution revelada: solo id,title,games (sin clipKey, startSec, source)', async () => {
+  it('BE-LEAK-10 solution revelada: solo id,title,games,youtubeId (sin clipKey, startSec, source, durationSec)', async () => {
     const app = await startTestApp({ randomInt: () => 0 })
     const g = await app.createUnlimited(['C'])
     const w = await app.guess(g.json.token, 'c-only-song-05')
-    expect(Object.keys(w.json.solution).sort()).toEqual(['games', 'id', 'title'])
+    expect(Object.keys(w.json.solution).sort()).toEqual(['games', 'id', 'title', 'youtubeId'])
   })
 
   it('BE-LEAK-12 ninguna respuesta incluye el clipKey de las canciones intentadas (solo songId)', async () => {
@@ -180,5 +184,113 @@ describe('BE-LEAK fuga de la cancion objetivo', () => {
     const a = await app.createUnlimited(['C'])
     const b = await app.createUnlimited(['A'])
     expect(a.json.clipUrl.length).toBe(b.json.clipUrl.length)
+  })
+
+  // ---- DEC-41: el youtubeId solo existe en solution.youtubeId, y solo tras terminar ----
+  const C_YT = 'yt666666666' // youtubeId de c-only-song-05 en el fixture
+
+  async function playUnlimitedCToEnd(app: TestApp) {
+    const created = await app.createUnlimited(['C'])
+    const before: Res[] = [created]
+    let token = created.json.token
+    for (let i = 0; i < 5; i++) {
+      const r = await app.skip(token)
+      before.push(r)
+      token = r.json.token
+    }
+    const final = await app.skip(token)
+    return { before, final, finalToken: final.json.token as string }
+  }
+
+  it('BE-LEAK-13 al terminar el youtubeId aparece solo en solution.youtubeId de la respuesta final', async () => {
+    const app = await startTestApp({ randomInt: () => 0 })
+    const { final } = await playUnlimitedCToEnd(app)
+    expect(final.json.solution.youtubeId).toBe(C_YT)
+    const copy = JSON.parse(final.text)
+    delete copy.solution.youtubeId
+    expect(JSON.stringify(copy)).not.toContain(C_YT)
+    expect(final.text.split(C_YT).length - 1).toBe(1)
+  })
+
+  it('BE-LEAK-13 /games/state posterior devuelve el youtubeId solo en solution y no en cabeceras', async () => {
+    const app = await startTestApp({ randomInt: () => 0 })
+    const { final, finalToken } = await playUnlimitedCToEnd(app)
+    const again = await app.state(finalToken)
+    expect(again.json.solution).toEqual(final.json.solution)
+    const copy = JSON.parse(again.text)
+    delete copy.solution.youtubeId
+    expect(JSON.stringify(copy)).not.toContain(C_YT)
+    let headers = ''
+    again.headers.forEach((v, k) => (headers += `${k}: ${v}\n`))
+    expect(headers).not.toContain(C_YT)
+  })
+
+  it('BE-LEAK-13 /catalog nunca contiene un youtubeId, ni antes ni despues de terminar', async () => {
+    const app = await startTestApp({ randomInt: () => 0 })
+    const pre = await app.get('/api/catalog')
+    await playUnlimitedCToEnd(app)
+    const post = await app.get('/api/catalog')
+    for (const s of catalogR().songs) {
+      expect(pre.text).not.toContain(s.source.youtubeId)
+      expect(post.text).not.toContain(s.source.youtubeId)
+    }
+  })
+
+  it('BE-LEAK-13 la unica clave de GameView que puede llevar el youtubeId es solution (el resto no)', async () => {
+    const app = await startTestApp({ randomInt: () => 0 })
+    const { final } = await playUnlimitedCToEnd(app)
+    const { solution: _solution, ...rest } = final.json
+    expect(JSON.stringify(rest)).not.toContain(C_YT)
+  })
+
+  it('BE-LEAK-14 ninguna respuesta anterior a la final contiene el youtubeId (cuerpo ni cabeceras)', async () => {
+    const app = await startTestApp({ randomInt: () => 0 })
+    const { before } = await playUnlimitedCToEnd(app)
+    expect(before.length).toBe(6)
+    for (const r of before) {
+      expect(serialize(r)).not.toContain(C_YT)
+      for (const b of decodedBlobs(r.text)) expect(b).not.toContain(C_YT)
+    }
+  })
+
+  it('BE-LEAK-14 la respuesta del 5.o intento (la ultima antes del final) tampoco lo contiene aunque la siguiente si', async () => {
+    const app = await startTestApp({ randomInt: () => 0 })
+    const { before, final } = await playUnlimitedCToEnd(app)
+    expect(before.at(-1)!.json.attempt).toBe(5)
+    expect(before.at(-1)!.text).not.toContain(C_YT)
+    expect(final.text).toContain(C_YT)
+  })
+
+  it('BE-LEAK-15 dos partidas diarias el mismo dia: ninguna respuesta anterior al final contiene el youtubeId comun', async () => {
+    const app = await startTestApp()
+    const target = dailyTarget(catalogR(), DAILY_SEED, '2026-07-01')
+    for (let game = 0; game < 2; game++) {
+      const all = await playBeforeEnd(app, await app.createDaily(), target)
+      for (const r of all) expect(serialize(r)).not.toContain(target.source.youtubeId)
+    }
+  })
+
+  it('BE-LEAK-16 el token descifrado no contiene youtubeId y q solo tiene clipKeys de 16 hex', async () => {
+    const app = await startTestApp({ randomInt: () => 0 })
+    const g = await app.createUnlimited(['C'])
+    const a = await app.guess(g.json.token, 'a-one-song-01')
+    const b = await app.skip(a.json.token)
+    for (const token of [g.json.token, a.json.token, b.json.token]) {
+      const payload = decryptToken(token, SECRET_A, app.clock.now)
+      const text = JSON.stringify(payload)
+      expect(text).not.toContain(C_YT)
+      expect(text).not.toContain('youtubeId')
+      for (const key of payload.q) expect(key).toMatch(/^[0-9a-f]{16}$/)
+    }
+  })
+
+  it('BE-LEAK-16 el ticket descifrado solo lleva clipKey, intento y nonce (sin youtubeId)', async () => {
+    const app = await startTestApp({ randomInt: () => 0 })
+    const g = await app.createUnlimited(['C'])
+    const ticket = g.json.clipUrl.split('/').pop() as string
+    const svc = new TicketService({ secret: SECRET_A, ttlSec: 60, now: () => app.clock.now })
+    const redeemed = svc.redeem(ticket)
+    expect(Object.keys(redeemed).sort()).toEqual(['attempt', 'clipKey', 'nonce'])
+    expect(JSON.stringify(redeemed)).not.toContain(C_YT)
   })
 })

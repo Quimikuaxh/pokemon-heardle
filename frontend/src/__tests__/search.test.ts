@@ -13,6 +13,14 @@ describe('game/search searchSongs', () => {
     expect(ids(searchSongs(mkCatalog(), 'ruby'))).toEqual(['rse-dp-shared-cafe', 'rse-littleroot-town', 'rse-oldale-town'])
   })
 
+  it('FE-SRC-16 juego y texto a la vez: "ruby town" combina palabras del juego y del titulo', () => {
+    expect(ids(searchSongs(mkCatalog(), 'ruby town'))).toEqual(['rse-littleroot-town', 'rse-oldale-town'])
+  })
+
+  it('FE-SRC-16 todas las palabras deben coincidir: "ruby twinleaf" no encuentra nada', () => {
+    expect(searchSongs(mkCatalog(), 'ruby twinleaf')).toEqual([])
+  })
+
   it('FE-SRC-03 sin distinguir mayusculas', () => {
     expect(ids(searchSongs(mkCatalog(), 'LITTLEROOT'))).toEqual(['rse-littleroot-town'])
   })

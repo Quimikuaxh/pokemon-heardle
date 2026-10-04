@@ -141,6 +141,59 @@ describe('validateOutput', () => {
   })
 })
 
+describe('validateOutput: cancion corta (DEC-40) y games vacio', () => {
+  const withDuration = (id: string, key: string, durationSec: number | undefined, enabled = true): any => {
+    const base = song(id, key, enabled)
+    if (durationSec !== undefined) base.source.durationSec = durationSec
+    return base
+  }
+
+  it('SC-VA-01 falla si una cancion enabled tiene games: [] (DEC-26)', async () => {
+    const d = dirWith([K1])
+    const bad = song('a', K1)
+    bad.games = []
+    const r = await validateOutput({ catalog: catalog([bad]), outDir: d, probe: probeOk() })
+    expect(r.ok).toBe(false)
+    expect(r.errors.join('\n')).toContain('a')
+  })
+
+  it('SC-VA-07 falla si una cancion enabled es corta y el mensaje nombra la cancion y su duracion', async () => {
+    const d = dirWith([K1])
+    const r = await validateOutput({ catalog: catalog([withDuration('tema-corto', K1, 7.4)]), outDir: d, probe: probeOk() })
+    expect(r.ok).toBe(false)
+    const text = r.errors.join('\n')
+    expect(text).toContain('tema-corto')
+    expect(text).toMatch(/7[.,]4/)
+  })
+
+  it('SC-VA-07 en el limite exacto (16,1 s) no falla; 16,0999 s si', async () => {
+    const d = dirWith([K1, K2])
+    const okCase = await validateOutput({ catalog: catalog([withDuration('a', K1, 16 + 0.1)]), outDir: d, probe: probeOk() })
+    const badCase = await validateOutput({ catalog: catalog([withDuration('b', K2, 16 + 0.1 - 0.0001)]), outDir: d, probe: probeOk() })
+    expect([okCase.ok, badCase.ok]).toEqual([true, false])
+  })
+
+  it('SC-VA-08 pasa si la cancion corta esta desactivada y no exige sus clips', async () => {
+    const d = dirWith([K1])
+    const r = await validateOutput({ catalog: catalog([withDuration('a', K1, 200), withDuration('corta', K2, 7.4, false)]), outDir: d, probe: probeOk() })
+    expect(r).toEqual({ ok: true, errors: [] })
+  })
+
+  it('SC-VA-09 cancion activa sin durationSec: no se considera corta', async () => {
+    const d = dirWith([K1])
+    const r = await validateOutput({ catalog: catalog([withDuration('a', K1, undefined)]), outDir: d, probe: probeOk() })
+    expect(r.ok).toBe(true)
+  })
+
+  it('SC-VA-07 el comando validate (runCli, --data-dir temporal) sale con codigo != 0 con una corta activa', async () => {
+    const { makeDataDir, catalogOf, song: mk, io, runCliSafe } = await import('./helpers/data')
+    const dir = makeDataDir({ catalog: catalogOf([mk({ id: 'tema-corto', clipKey: K1, youtubeId: 'vid00000001', durationSec: 7.4 })]) })
+    const out = io()
+    expect(await runCliSafe(['validate', '--data-dir', dir], out)).not.toBe(0)
+    expect(out.text()).toContain('tema-corto')
+  })
+})
+
 function hasFfmpeg(): boolean {
   try {
     execFileSync('ffmpeg', ['-version'], { stdio: 'ignore' })

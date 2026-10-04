@@ -116,3 +116,15 @@ describe('draftCatalog', () => {
     expect(JSON.stringify(base)).toBe(snapshot)
   })
 })
+
+describe('draft: colas de juego comunes sobre toda la playlist', () => {
+  const videos = [1, 2, 3].map((n) => ({ youtubeId: `AAAAAAAAAA${n}`, title: `Cancion ${n} - Foo Bar` }))
+
+  it('SC-DR-11 con dos ya en el catalogo y una nueva, la cola repetida se sigue reconociendo como juego', () => {
+    const first = draftCatalog(null, videos.slice(0, 2), {})
+    const merged = draftCatalog(first, videos, {})
+    const added = merged.songs.find((s) => s.source.youtubeId === 'AAAAAAAAAA3')!
+    expect(added.games.length).toBe(1)
+    expect(merged.games.map((g) => g.name)).toContain('Foo Bar')
+  })
+})

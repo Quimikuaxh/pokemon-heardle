@@ -1,0 +1,148 @@
+{
+  "version": 1,
+  "generatedAt": "2026-10-04T12:00:00Z",
+  "games": [
+    {
+      "id": "alpha",
+      "name": "Admin Alpha"
+    },
+    {
+      "id": "bravo",
+      "name": "Admin Bravo"
+    },
+    {
+      "id": "charlie",
+      "name": "Admin Charlie"
+    }
+  ],
+  "songs": [
+    {
+      "id": "song-long-one",
+      "title": "Long Melody",
+      "games": [
+        "alpha"
+      ],
+      "clipKey": "b1b1b1b1b1b1b1b1",
+      "startSec": 0,
+      "enabled": true,
+      "reviewed": true,
+      "source": {
+        "youtubeId": "longsrc0001",
+        "videoTitle": "Original video of Long Melody",
+        "durationSec": 40
+      }
+    },
+    {
+      "id": "song-short-one",
+      "title": "Short Jingle",
+      "games": [
+        "alpha"
+      ],
+      "clipKey": "b2b2b2b2b2b2b2b2",
+      "startSec": 0,
+      "enabled": false,
+      "reviewed": false,
+      "source": {
+        "youtubeId": "shortsrc001",
+        "videoTitle": "Original video of Short Jingle",
+        "durationSec": 7.4
+      }
+    },
+    {
+      "id": "song-bravo-a",
+      "title": "Bravo Theme",
+      "games": [
+        "bravo"
+      ],
+      "clipKey": "b3b3b3b3b3b3b3b3",
+      "startSec": 0,
+      "enabled": true,
+      "reviewed": true,
+      "source": {
+        "youtubeId": "bravosrc001",
+        "videoTitle": "Original video of Bravo Theme",
+        "durationSec": 120
+      }
+    },
+    {
+      "id": "song-bravo-b",
+      "title": "Cañón de Bravo",
+      "games": [
+        "bravo"
+      ],
+      "clipKey": "b4b4b4b4b4b4b4b4",
+      "startSec": 0,
+      "enabled": false,
+      "reviewed": true,
+      "source": {
+        "youtubeId": "bravosrc002",
+        "videoTitle": "Original video of Cañón de Bravo",
+        "durationSec": 100
+      }
+    },
+    {
+      "id": "song-multi",
+      "title": "Multi Game Tune",
+      "games": [
+        "alpha",
+        "bravo"
+      ],
+      "clipKey": "b5b5b5b5b5b5b5b5",
+      "startSec": 0,
+      "enabled": true,
+      "reviewed": false,
+      "source": {
+        "youtubeId": "multisrc001",
+        "videoTitle": "Original video of Multi Game Tune",
+        "durationSec": 90
+      }
+    },
+    {
+      "id": "song-charlie",
+      "title": "Charlie Song",
+      "games": [
+        "charlie"
+      ],
+      "clipKey": "b6b6b6b6b6b6b6b6",
+      "startSec": 0,
+      "enabled": false,
+      "reviewed": false,
+      "source": {
+        "youtubeId": "charsrc0001",
+        "videoTitle": "Original video of Charlie Song",
+        "durationSec": 80
+      }
+    },
+    {
+      "id": "song-nodur",
+      "title": "Unknown Length",
+      "games": [
+        "charlie"
+      ],
+      "clipKey": "b7b7b7b7b7b7b7b7",
+      "startSec": 0,
+      "enabled": false,
+      "reviewed": false,
+      "source": {
+        "youtubeId": "nodursrc001",
+        "videoTitle": "Original video of Unknown Length"
+      }
+    },
+    {
+      "id": "song-pending-b",
+      "title": "Another Pending",
+      "games": [
+        "bravo"
+      ],
+      "clipKey": "b8b8b8b8b8b8b8b8",
+      "startSec": 0,
+      "enabled": true,
+      "reviewed": false,
+      "source": {
+        "youtubeId": "pendsrc0001",
+        "videoTitle": "Original video of Another Pending",
+        "durationSec": 60
+      }
+    }
+  ]
+}

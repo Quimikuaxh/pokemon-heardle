@@ -215,3 +215,20 @@ describe('game/token', () => {
     expect(codeOf(() => decryptToken(t, SECRET_A, NOW_MS))).toBe('TOKEN_INVALID')
   })
 })
+
+describe('token: forma canonica y q <= r (DEC-21)', () => {
+  it('un token con sufijo base64url no descifra', () => {
+    const t = encryptToken(payload(), SECRET_A)
+    for (const s of ['A', '_', '-']) expect(thrown(() => decryptToken(t + s, SECRET_A, NOW_MS))?.code).toBe('TOKEN_INVALID')
+  })
+
+  it('q con mas elementos que r -> TOKEN_INVALID', () => {
+    const t = encryptToken(payload({ r: ['M'], q: ['1111111111111111', '2222222222222222'] }), SECRET_A)
+    expect(thrown(() => decryptToken(t, SECRET_A, NOW_MS))?.code).toBe('TOKEN_INVALID')
+  })
+
+  it('q con tantos elementos como r es valido', () => {
+    const p = payload({ r: ['M', 'S'], q: ['1111111111111111', '2222222222222222'] })
+    expect(decryptToken(encryptToken(p, SECRET_A), SECRET_A, NOW_MS)).toEqual(p)
+  })
+})

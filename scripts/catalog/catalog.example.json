@@ -2,29 +2,48 @@
   "version": 1,
   "generatedAt": "2026-10-03T12:00:00Z",
   "games": [
-    { "id": "rse", "name": "Pokemon Ruby / Sapphire / Emerald" },
-    { "id": "dp", "name": "Pokemon Diamond / Pearl" }
+    {
+      "id": "rse",
+      "name": "Pokemon Ruby / Sapphire / Emerald"
+    },
+    {
+      "id": "dp",
+      "name": "Pokemon Diamond / Pearl"
+    }
   ],
   "songs": [
     {
       "id": "rse-littleroot-town",
       "title": "Littleroot Town",
-      "games": ["rse"],
+      "games": [
+        "rse"
+      ],
       "clipKey": "9f3a1c0e5b7d2a46",
       "startSec": 0,
       "enabled": true,
       "reviewed": false,
-      "source": { "youtubeId": "xxxxxxxxxxx", "videoTitle": "ejemplo: titulo original del video" }
+      "source": {
+        "youtubeId": "xxxxxxxxxxx",
+        "videoTitle": "ejemplo: titulo original del video",
+        "durationSec": 183.42
+      }
     },
     {
       "id": "rse-dp-example-shared-theme",
       "title": "Example Shared Theme",
-      "games": ["rse", "dp"],
+      "games": [
+        "rse",
+        "dp"
+      ],
       "clipKey": "0123456789abcdef",
       "startSec": 12.5,
       "enabled": false,
       "reviewed": false,
-      "source": { "youtubeId": "yyyyyyyyyyy", "videoTitle": "ejemplo: cancion en varios juegos" }
+      "source": {
+        "youtubeId": "yyyyyyyyyyy",
+        "videoTitle": "ejemplo: cancion en varios juegos",
+        "durationSec": 7.4
+      }
     }
   ]
 }

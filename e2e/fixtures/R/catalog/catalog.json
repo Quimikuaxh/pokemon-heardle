@@ -31,8 +31,9 @@
       "enabled": true,
       "reviewed": true,
       "source": {
-        "youtubeId": "yt111111111",
-        "videoTitle": "Video original de Zephyr Harbor (OST)"
+        "youtubeId": "-abcDEF_123",
+        "videoTitle": "Video original de Zephyr Harbor (OST)",
+        "durationSec": 60
       }
     },
     {
@@ -47,7 +48,8 @@
       "reviewed": true,
       "source": {
         "youtubeId": "yt222222222",
-        "videoTitle": "Video original de Quasar Meadow (OST)"
+        "videoTitle": "Video original de Quasar Meadow (OST)",
+        "durationSec": 60
       }
     },
     {
@@ -62,7 +64,8 @@
       "reviewed": true,
       "source": {
         "youtubeId": "yt333333333",
-        "videoTitle": "Video original de Obsidian Lantern (OST)"
+        "videoTitle": "Video original de Obsidian Lantern (OST)",
+        "durationSec": 60
       }
     },
     {
@@ -77,7 +80,8 @@
       "reviewed": true,
       "source": {
         "youtubeId": "yt444444444",
-        "videoTitle": "Video original de Velvet Cascade (OST)"
+        "videoTitle": "Video original de Velvet Cascade (OST)",
+        "durationSec": 60
       }
     },
     {
@@ -93,7 +97,8 @@
       "reviewed": true,
       "source": {
         "youtubeId": "yt555555555",
-        "videoTitle": "Video original de Marigold Citadel (OST)"
+        "videoTitle": "Video original de Marigold Citadel (OST)",
+        "durationSec": 60
       }
     },
     {
@@ -108,7 +113,8 @@
       "reviewed": true,
       "source": {
         "youtubeId": "yt777777777",
-        "videoTitle": "Video original de Hollow Pinecone (OST)"
+        "videoTitle": "Video original de Hollow Pinecone (OST)",
+        "durationSec": 60
       }
     },
     {
@@ -123,7 +129,8 @@
       "reviewed": true,
       "source": {
         "youtubeId": "yt999999999",
-        "videoTitle": "Video original de Pokémon Café Medley (OST)"
+        "videoTitle": "Video original de Pokémon Café Medley (OST)",
+        "durationSec": 60
       }
     },
     {
@@ -138,7 +145,8 @@
       "reviewed": true,
       "source": {
         "youtubeId": "yt888888888",
-        "videoTitle": "Video original de Phantom Biscuit (OST)"
+        "videoTitle": "Video original de Phantom Biscuit (OST)",
+        "durationSec": 60
       }
     }
   ]

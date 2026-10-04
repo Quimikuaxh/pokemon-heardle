@@ -1,18 +1,18 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import { AttemptList } from '../components/AttemptList'
-import { ResultPanel } from '../components/ResultPanel'
 import { GameBoard } from '../components/GameBoard'
 import App from '../App'
 import { ApiError } from '../api/client'
 import { createGameController } from '../game/controller'
 import { createStore } from '../storage/store'
-import { mkApi, mkCatalog, mkView, mkFinished, NOW_MS, TODAY } from './helpers'
+import { mkApi, mkCatalog, mkView, NOW_MS, TODAY } from './helpers'
 
 let audioPlay: ReturnType<typeof vi.fn>
 beforeEach(() => {
   audioPlay = vi.fn(() => Promise.resolve())
-  ;(globalThis as any).Audio = class {
+  // Con la barra de reproduccion (DEC-42) el player escucha eventos del audio: el falso es un EventTarget.
+  ;(globalThis as any).Audio = class extends EventTarget {
     src = ''
     currentTime = 0
     play = audioPlay
@@ -35,29 +35,6 @@ describe('AttemptList', () => {
     expect(rows[2].textContent).toContain('Oldale Town')
     expect(rows[2].textContent).toMatch(/juego acertado/i)
     expect(rows[3].textContent).toContain('Intento 4')
-  })
-})
-
-describe('ResultPanel', () => {
-  it('victoria: muestra solucion y texto de compartir sin la cancion; copia al pulsar', async () => {
-    const writeText = vi.fn(async () => {})
-    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
-    render(<ResultPanel view={mkFinished({ mode: 'daily', date: TODAY })} />)
-    expect(screen.getByText(/Acertaste en el intento 1/)).toBeTruthy()
-    const share = document.querySelector('pre')!.textContent!
-    expect(share).toContain(TODAY)
-    expect(share).not.toContain('Littleroot')
-    fireEvent.click(screen.getByRole('button', { name: /compartir/i }))
-    await waitFor(() => screen.getByText(/Copiado/))
-    expect(writeText).toHaveBeenCalledWith(share)
-  })
-
-  it('derrota sin portapapeles: aviso de copia manual', async () => {
-    Object.defineProperty(navigator, 'clipboard', { value: undefined, configurable: true })
-    render(<ResultPanel view={mkFinished({ status: 'lost', attempt: 6, results: ['miss', 'miss', 'miss', 'miss', 'miss', 'skip'] })} />)
-    expect(screen.getByText(/agotado los intentos/)).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: /compartir/i }))
-    await waitFor(() => screen.getByText(/No se pudo copiar/))
   })
 })
 

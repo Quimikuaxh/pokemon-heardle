@@ -14,7 +14,7 @@ export interface FixtureSong {
   startSec: number
   enabled: boolean
   reviewed: boolean
-  source: { youtubeId: string; videoTitle: string }
+  source: { youtubeId: string; videoTitle: string; durationSec: number }
 }
 
 function song(id: string, title: string, games: string[], clipKey: string, enabled = true): FixtureSong {
@@ -26,7 +26,12 @@ function song(id: string, title: string, games: string[], clipKey: string, enabl
     startSec: 7,
     enabled,
     reviewed: true,
-    source: { youtubeId: `yt${clipKey.slice(0, 9)}`, videoTitle: `Video original de ${title} (OST)` },
+    source: {
+      youtubeId: `yt${clipKey.slice(0, 9)}`,
+      videoTitle: `Video original de ${title} (OST)`,
+      // duracion medida de la fuente (DEC-40), siempre con decimales y > 16,1 s
+      durationSec: Number((121.37 + parseInt(clipKey.slice(0, 2), 16) * 1.01).toFixed(2)),
+    },
   }
 }
 

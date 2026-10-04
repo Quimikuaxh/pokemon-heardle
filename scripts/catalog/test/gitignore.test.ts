@@ -25,6 +25,11 @@ describe('.gitignore', () => {
     'e2e/test-results/a.png',
     'clip.mp3',
     'backend/test/tmp/clip.mp3',
+    // SC-GI-02: UI del admin y restos del catalogStore
+    'scripts/catalog/admin-ui/dist/index.html',
+    'scripts/catalog/admin-ui/node_modules/react/index.js',
+    'scripts/catalog/data/catalog.json.bak',
+    'scripts/catalog/data/catalog.json.tmp-12345',
   ]) {
     it(`SC-GI-01 ignora ${p}`, () => {
       expect(ignored(p)).toBe(true)

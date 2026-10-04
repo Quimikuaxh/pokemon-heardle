@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest'
 import { createStore } from '../storage/store'
-import { emptyDailyStats, emptyUnlimitedStats, recordDaily } from '../game/stats'
 import { mkFinished } from './helpers'
 
 const throwingStorage = (name = 'QuotaExceededError'): Storage =>
@@ -61,31 +60,19 @@ describe('storage/store', () => {
     expect(localStorage.getItem('heardle:unlimited')).toBeNull()
   })
 
-  it('las estadisticas viven en heardle:stats:daily y heardle:stats:unlimited por separado', () => {
-    const s = createStore(localStorage)
-    s.setStats('daily', recordDaily(emptyDailyStats(), '2026-10-03', 2))
-    expect(localStorage.getItem('heardle:stats:daily')).not.toBeNull()
-    expect(localStorage.getItem('heardle:stats:unlimited')).toBeNull()
-    expect((s.getStats('daily') as any).current).toBe(1)
-  })
-
-  for (const key of ['heardle:filter', 'heardle:daily:2026-10-03', 'heardle:unlimited', 'heardle:stats:daily', 'heardle:stats:unlimited']) {
+  for (const key of ['heardle:filter', 'heardle:daily:2026-10-03', 'heardle:unlimited']) {
     for (const junk of ['{{{ no json', 'null', '42', '"cadena"', '[1,2,{"x"', '{"foo":1}']) {
-      it(`FE-FIL-05 / FE-STA-10 valor corrupto ${JSON.stringify(junk)} en ${key} -> valores por defecto sin excepcion`, () => {
+      it(`FE-FIL-05 valor corrupto ${JSON.stringify(junk)} en ${key} -> valores por defecto sin excepcion`, () => {
         localStorage.setItem(key, junk)
         const s = createStore(localStorage)
         expect(() => {
           s.getFilter()
           s.getDaily('2026-10-03')
           s.getUnlimited()
-          s.getStats('daily')
-          s.getStats('unlimited')
         }).not.toThrow()
         if (key === 'heardle:filter') expect(s.getFilter()).toEqual([])
         if (key.startsWith('heardle:daily')) expect(s.getDaily('2026-10-03')).toBeNull()
         if (key === 'heardle:unlimited') expect(s.getUnlimited()).toBeNull()
-        if (key === 'heardle:stats:daily') expect(s.getStats('daily')).toEqual(emptyDailyStats())
-        if (key === 'heardle:stats:unlimited') expect(s.getStats('unlimited')).toEqual(emptyUnlimitedStats())
       })
     }
   }
@@ -95,23 +82,17 @@ describe('storage/store', () => {
     expect(createStore(localStorage).getFilter()).toEqual([])
   })
 
-  it('FE-STA-10 stats de version antigua (forma desconocida) se reinician', () => {
-    localStorage.setItem('heardle:stats:daily', JSON.stringify({ v: 0, wins: 3, streak: 9 }))
-    expect(createStore(localStorage).getStats('daily')).toEqual(emptyDailyStats())
-  })
-
-  it('FE-STA-11 localStorage no disponible: ninguna operacion lanza y se devuelven valores por defecto', () => {
+  it('FE-FIL-05 localStorage no disponible: ninguna operacion lanza y se devuelven valores por defecto', () => {
     const s = createStore(throwingStorage('SecurityError'))
     expect(() => {
       s.setFilter(['a'])
       s.setDaily('2026-10-03', { token: 't', finished: false })
       s.setUnlimited({ token: 't' })
-      s.setStats('daily', emptyDailyStats())
     }).not.toThrow()
     expect([s.getFilter(), s.getDaily('2026-10-03'), s.getUnlimited()]).toEqual([[], null, null])
   })
 
-  it('FE-STA-11 cuota excedida al escribir: no lanza y marca writeFailed para avisar', () => {
+  it('FE-FIL-05 cuota excedida al escribir: no lanza y marca writeFailed para avisar', () => {
     const s = createStore(throwingStorage('QuotaExceededError'))
     expect(s.writeFailed).toBe(false)
     s.setFilter(['a'])

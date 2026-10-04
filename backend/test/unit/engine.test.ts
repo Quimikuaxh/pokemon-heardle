@@ -275,7 +275,7 @@ describe('game/engine buildGameView', () => {
     expect([v.solution, v.clipUrl]).toEqual([undefined, '/api/clips/abc'])
   })
 
-  it('BE-LEAK-10 solution al terminar: solo id,title y games con id y name', () => {
+  it('BE-LEAK-10 solution al terminar: id, title, games con id y name y youtubeId', () => {
     const v: any = buildGameView(play(game(AB), [AB]), index, { token: 't' })
     expect(v.solution).toEqual({
       id: AB,
@@ -284,6 +284,7 @@ describe('game/engine buildGameView', () => {
         { id: 'A', name: 'Pokemon Game Alpha' },
         { id: 'B', name: 'Pokemon Game Bravo' },
       ],
+      youtubeId: 'yt555555555',
     })
   })
 
@@ -302,5 +303,26 @@ describe('game/engine buildGameView', () => {
     const snap = JSON.stringify(p0)
     const p1 = applySkip(p0)
     expect([JSON.stringify(p0), p1 === p0]).toEqual([snap, false])
+  })
+
+  it('BE-ENG-25 solution.youtubeId presente al ganar e igual al source.youtubeId de la objetivo', () => {
+    const v: any = buildGameView(play(game(C1), [C1]), index, { token: 't' })
+    expect(v.solution.youtubeId).toBe(S(C1).source.youtubeId)
+  })
+
+  it('BE-ENG-25 solution.youtubeId presente al perder', () => {
+    const v: any = buildGameView(play(game(D1), ['skip', 'skip', 'skip', 'skip', 'skip', 'skip']), index, { token: 't' })
+    expect(v.solution.youtubeId).toBe(S(D1).source.youtubeId)
+  })
+
+  it('BE-ENG-25 en partida en curso no existe ni la clave solution', () => {
+    const v: any = buildGameView(play(game(C1), [A1, 'skip']), index, { token: 't' })
+    expect('solution' in v).toBe(false)
+    expect(JSON.stringify(v)).not.toContain(S(C1).source.youtubeId)
+  })
+
+  it('BE-ENG-25 el youtubeId de la solucion es el de la objetivo, no el de la ultima jugada', () => {
+    const v: any = buildGameView(play(game(C1), [A1, B1, 'skip', 'skip', 'skip', 'skip']), index, { token: 't' })
+    expect(v.solution.youtubeId).toBe('yt666666666')
   })
 })

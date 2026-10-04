@@ -23,7 +23,3 @@ export function addDays(date: string, days: number): string {
   const shifted = new Date((toUtcDayNumber(date) + days) * 86_400_000)
   return shifted.toISOString().slice(0, 10)
 }
-
-export function diffDays(from: string, to: string): number {
-  return toUtcDayNumber(to) - toUtcDayNumber(from)
-}

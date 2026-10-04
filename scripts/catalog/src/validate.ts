@@ -1,9 +1,9 @@
-import { execFile } from 'node:child_process'
 import { existsSync, statSync } from 'node:fs'
-import { promisify } from 'node:util'
 import type { Catalog } from '../../../shared/catalog'
 import { validateCatalog } from '../../../shared/catalog'
 import { CLIP_SECONDS } from '../../../shared/rules'
+import { defaultRunner } from './duration'
+import type { Runner } from './duration'
 import { clipOutputPath } from './ffmpegArgs'
 
 export type Probe = (file: string) => Promise<{ durationSec: number; tags: Record<string, string> }>
@@ -71,10 +71,12 @@ export async function validateOutput(options: {
   return { ok: errors.length === 0, errors }
 }
 
-const execFileAsync = promisify(execFile)
-
-export const ffprobeProbe: Probe = async (file) => {
-  const { stdout } = await execFileAsync('ffprobe', ['-v', 'error', '-show_format', '-of', 'json', file])
-  const format = JSON.parse(stdout).format ?? {}
-  return { durationSec: Number(format.duration), tags: format.tags ?? {} }
+export function createFfprobeProbe(run: Runner = defaultRunner): Probe {
+  return async (file) => {
+    const { stdout } = await run('ffprobe', ['-v', 'error', '-show_format', '-of', 'json', file])
+    const format = JSON.parse(stdout).format ?? {}
+    return { durationSec: Number(format.duration), tags: format.tags ?? {} }
+  }
 }
+
+export const ffprobeProbe: Probe = createFfprobeProbe()

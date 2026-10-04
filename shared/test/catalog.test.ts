@@ -6,7 +6,7 @@
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import { validateCatalog } from '../catalog'
+import { validateCatalog, tooShort } from '../catalog'
 
 function base(): any {
   return {
@@ -25,7 +25,7 @@ function base(): any {
         startSec: 0,
         enabled: true,
         reviewed: false,
-        source: { youtubeId: 'xxxxxxxxxxx', videoTitle: 'video original' },
+        source: { youtubeId: 'xxxxxxxxxxx', videoTitle: 'video original', durationSec: 183.42 },
       },
       {
         id: 'dp-twinleaf-town',
@@ -216,5 +216,148 @@ describe('shared/catalog validateCatalog', () => {
     const c = base()
     c.songs.forEach((s: any) => (s.enabled = false))
     expect(validateCatalog(c).ok).toBe(true)
+  })
+
+  it('SH-CAT-01 el ejemplo versionado incluye source.durationSec', () => {
+    const p = fileURLToPath(new URL('../../scripts/catalog/catalog.example.json', import.meta.url))
+    const json = JSON.parse(readFileSync(p, 'utf8'))
+    expect(json.songs.every((s: any) => typeof s.source.durationSec === 'number')).toBe(true)
+  })
+
+  for (const id of ['dQw4w9WgXcQ', '-BRQ_XVwg-M', '___________', '-----------', 'AbCdEfGhIjK']) {
+    it(`SH-CAT-15 source.youtubeId valido ${JSON.stringify(id)}`, () => {
+      const c = base()
+      c.songs[0].source.youtubeId = id
+      expect(errorsOf(validateCatalog(c))).toEqual([])
+    })
+  }
+
+  for (const [label, id] of [
+    ['10 caracteres', 'abcdefghij'],
+    ['12 caracteres', 'abcdefghijkl'],
+    ['vacio', ''],
+    ['con espacio', 'abcde fghij'],
+    ['con /', 'abcde/fghij'],
+    ['con comillas', 'abcde"fghij'],
+    ['con <', 'abcde<fghij'],
+    ['con punto', 'abcde.fghij'],
+    ['unicode', 'abcdeéfghij'],
+    ['inyeccion', '"><script>1'],
+    ['no string (numero)', 12345678901],
+    ['null', null],
+    ['ausente', undefined],
+  ] as Array<[string, unknown]>) {
+    it(`SH-CAT-16 source.youtubeId invalido (${label})`, () => {
+      const c = base()
+      if (id === undefined) delete c.songs[0].source.youtubeId
+      else c.songs[0].source.youtubeId = id
+      const r = validateCatalog(c)
+      expect(r.ok).toBe(false)
+    })
+  }
+
+  it('SH-CAT-16 el error de youtubeId nombra la cancion', () => {
+    const c = base()
+    c.songs[0].source.youtubeId = 'corto'
+    expect(errorsOf(validateCatalog(c)).some((e) => e.includes('rse-littleroot-town'))).toBe(true)
+  })
+
+  it('SH-CAT-17 source.durationSec ausente es valido', () => {
+    const c = base()
+    delete c.songs[0].source.durationSec
+    expect(validateCatalog(c).ok).toBe(true)
+  })
+
+  for (const v of [16.1, 183.42, 0.001, 1e6]) {
+    it(`SH-CAT-17 durationSec ${v} (finito > 0) es valido`, () => {
+      const c = base()
+      c.songs[1].enabled = false // una duracion pequena no debe invalidar por la regla de corta si esta desactivada
+      c.songs[1].source.durationSec = v
+      expect(validateCatalog(c).ok).toBe(true)
+    })
+  }
+
+  for (const [label, v] of [
+    ['0', 0],
+    ['negativo', -5],
+    ['NaN', NaN],
+    ['Infinity', Infinity],
+    ['-Infinity', -Infinity],
+    ['string', '183'],
+    ['null', null],
+    ['objeto', {}],
+  ] as Array<[string, unknown]>) {
+    it(`SH-CAT-17 durationSec invalido (${label})`, () => {
+      const c = base()
+      c.songs[1].enabled = false
+      c.songs[1].source.durationSec = v
+      expect(validateCatalog(c).ok).toBe(false)
+    })
+  }
+
+  const LIMIT = 16 + 0.1
+  for (const [label, dur, start, short] of [
+    ['startSec 0: 16,1 no es corta', LIMIT, 0, false],
+    ['startSec 0: 16,0999 es corta', LIMIT - 0.0001, 0, true],
+    ['startSec 0: 16,0 es corta', 16, 0, true],
+    ['startSec 0: 0,5 es corta', 0.5, 0, true],
+    ['startSec 0: 183 no es corta', 183, 0, false],
+    ['startSec 5: 21,1 no es corta', 5 + LIMIT, 5, false],
+    ['startSec 5: 21,0999 es corta', 5 + LIMIT - 0.0001, 5, true],
+  ] as Array<[string, number, number, boolean]>) {
+    it(`SH-CAT-18 tooShort: ${label}`, () => {
+      expect(tooShort(dur, start)).toBe(short)
+    })
+  }
+
+  it('SH-CAT-18 tooShort con duracion desconocida (undefined) no es corta', () => {
+    expect(tooShort(undefined, 0)).toBe(false)
+  })
+
+  it('SH-CAT-19 cancion enabled y corta -> error que nombra la cancion', () => {
+    const c = base()
+    c.songs[0].source.durationSec = 7.4
+    const r = validateCatalog(c)
+    expect(r.ok).toBe(false)
+    expect(errorsOf(r).some((e) => e.includes('rse-littleroot-town'))).toBe(true)
+  })
+
+  it('SH-CAT-19 el error de corta incluye la duracion medida', () => {
+    const c = base()
+    c.songs[0].source.durationSec = 7.4
+    expect(errorsOf(validateCatalog(c)).join('\n')).toMatch(/7[.,]4/)
+  })
+
+  it('SH-CAT-19 cancion enabled:false y corta -> valido', () => {
+    const c = base()
+    c.songs[0].enabled = false
+    c.songs[0].source.durationSec = 7.4
+    expect(validateCatalog(c).ok).toBe(true)
+  })
+
+  it('SH-CAT-20 cancion enabled sin durationSec -> valido (duracion desconocida no es corta)', () => {
+    const c = base()
+    delete c.songs[0].source.durationSec
+    expect(validateCatalog(c).ok).toBe(true)
+  })
+
+  it('SH-CAT-21 tooShort es derivado de startSec: 20 s con startSec 0 no es corta y con startSec 5 si', () => {
+    expect(tooShort(20, 0)).toBe(false)
+    expect(tooShort(20, 5)).toBe(true)
+  })
+
+  it('SH-CAT-21 la regla se aplica al validar con el startSec editado a mano', () => {
+    const c = base()
+    c.songs[0].source.durationSec = 20
+    expect(validateCatalog(c).ok).toBe(true)
+    c.songs[0].startSec = 5
+    expect(validateCatalog(c).ok).toBe(false)
+  })
+
+  it('SH-CAT-21 el validador no exige ni acepta un campo tooShort persistido como fuente de verdad', () => {
+    const c = base()
+    c.songs[0].source.durationSec = 7.4
+    c.songs[0].tooShort = false // persistido y falso: la regla derivada manda
+    expect(validateCatalog(c).ok).toBe(false)
   })
 })

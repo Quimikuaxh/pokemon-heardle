@@ -1,29 +1,11 @@
 import { randomBytes } from 'node:crypto'
 import type { Catalog, Game, Song } from '../../../shared/catalog'
-import { parseTitle } from './parseTitle'
+import { slugify, uniqueId } from './ids'
+import { commonGameTails, parseTitle } from './parseTitle'
 
 export interface DraftOptions {
   randomClipKey?: () => string
   now?: () => string
-}
-
-const MAX_ID_LENGTH = 56
-
-export function slugify(text: string): string {
-  return text
-    .normalize('NFD')
-    .replace(/\p{M}+/gu, '')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-}
-
-function uniqueId(base: string, taken: Set<string>): string {
-  const root = base.slice(0, MAX_ID_LENGTH).replace(/-+$/g, '') || 'item'
-  let candidate = root
-  for (let suffix = 2; taken.has(candidate); suffix++) candidate = `${root}-${suffix}`
-  taken.add(candidate)
-  return candidate
 }
 
 /**
@@ -63,13 +45,15 @@ export function draftCatalog(
     return key
   }
 
+  const gameTails = commonGameTails(videos.map((video) => video.title))
+
   let added = false
   for (const video of videos) {
     if (knownVideos.has(video.youtubeId)) continue
     knownVideos.add(video.youtubeId)
     added = true
 
-    const parsed = parseTitle(video.title)
+    const parsed = parseTitle(video.title, gameTails)
     const games = [...new Set(parsed.games.map((name) => ensureGame(name).id))]
     const idBase = slugify(`${games[0] ?? ''} ${parsed.title}`.replace(/^pokemon[- ]/i, '')) || `song-${slugify(video.youtubeId)}`
     const song: Song = {

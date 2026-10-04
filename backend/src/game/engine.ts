@@ -108,6 +108,8 @@ export function buildGameView(
         id: target.id,
         title: target.title,
         games: target.games.map((gameId) => ({ id: gameId, name: index.gameById(gameId)?.name ?? gameId })),
+        // Solo en la solucion revelada: el cliente nunca lo recibe antes de terminar (DEC-41).
+        youtubeId: target.source.youtubeId,
       }
     }
   }

@@ -15,7 +15,7 @@ export const RECORD_AUDIO_SRC = () => {
   })
 }
 
-const FORBIDDEN_KEYS = ['clipKey', 'startSec', 'videoTitle', 'youtubeId', 'source', 'reviewed', 'enabled', '.mp3']
+const FORBIDDEN_KEYS = ['clipKey', 'startSec', 'videoTitle', 'youtubeId', 'source', 'reviewed', 'enabled', 'durationSec', '.mp3']
 
 /** Secretos de la objetivo que no deben aparecer NUNCA (ni en el catalogo publico). */
 const secrets = (t: FixtureSong) => [t.clipKey, t.source.youtubeId, t.source.videoTitle]

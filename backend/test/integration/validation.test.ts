@@ -115,3 +115,13 @@ describe('POST /api/games/{state,guess,skip} validacion (BE-VAL-03, BE-VAL-04)',
     else expect(r.json.results).toEqual(['miss'])
   })
 })
+
+describe('errores de cuerpo', () => {
+  it('charset no soportado -> 4xx VALIDATION_ERROR, no 500', async () => {
+    const { app } = await setup()
+    const r = await app.call('POST', '/api/games', '{"mode":"daily"}', { 'content-type': 'application/json; charset=utf-16' })
+    expect(r.status).toBeGreaterThanOrEqual(400)
+    expect(r.status).toBeLessThan(500)
+    expect(codeOf(r)).toBe('VALIDATION_ERROR')
+  })
+})
