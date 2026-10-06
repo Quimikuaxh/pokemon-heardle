@@ -30,6 +30,16 @@ Todos los subcomandos aceptan `--data-dir <ruta>` (por defecto `scripts/catalog/
 
 3. `npm run dev` (raíz) — arranca backend (puerto 3002) y frontend (puerto 5173) con concurrently.
 
+### Compartir el entorno local con ngrok
+
+Sirve para probar desde el móvil o que otra persona juegue sin desplegar.
+
+1. Instalar ngrok (binario oficial, sin sudo): descargar `ngrok-v3-stable-linux-amd64.tgz` de ngrok.com y extraer `ngrok` en `~/.local/bin`.
+2. Una sola vez: `ngrok config add-authtoken <token>` (token del panel de ngrok, cuenta gratuita).
+3. Con `npm run dev` en marcha: `ngrok http 5173`. Comparte la URL `https://….ngrok-free.app` que muestra.
+
+Solo se expone el puerto de Vite: el backend queda detrás de su proxy `/api`, así que no hay que tocar `ALLOWED_ORIGIN`. `frontend/vite.config.ts` admite los dominios de ngrok en `server.allowedHosts`; sin eso Vite responde "Blocked request". No expongas el admin (puerto 5180): no tiene login y escribe en el catálogo real.
+
 ### Tests
 
 - `npm test` — unitarios de `shared/`, `backend/`, `scripts/catalog/` (incluye el servidor del admin), `frontend/` y `scripts/catalog/admin-ui/` (vitest + Testing Library). Los tests del script y del admin trabajan siempre en directorios temporales (`--data-dir`): nunca deben tocar `scripts/catalog/data/`.
