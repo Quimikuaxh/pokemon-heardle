@@ -1,7 +1,10 @@
-import { useEffect, useId, useMemo, useState } from 'react'
+import { memo, useEffect, useId, useMemo, useState } from 'react'
 import type { KeyboardEvent } from 'react'
 import type { PublicCatalog } from '../../../shared/api'
+import { shortGameName } from '../game/gameColors'
 import { searchSongs } from '../game/search'
+import { GameSwatch } from './GameSwatch'
+import { SearchIcon } from './icons'
 
 interface SongSearchProps {
   catalog: PublicCatalog
@@ -14,10 +17,11 @@ interface SongSearchProps {
 
 const MAX_VISIBLE_OPTIONS = 50
 
-export function SongSearch({ catalog, guesses, disabled = false, readOnly = false, onSelect }: SongSearchProps) {
+export const SongSearch = memo(function SongSearch({ catalog, guesses, disabled = false, readOnly = false, onSelect }: SongSearchProps) {
   const [query, setQuery] = useState('')
   const [activeId, setActiveId] = useState<string | null>(null)
   const listId = useId()
+  const inputId = `${listId}-input`
 
   const allResults = useMemo(() => searchSongs(catalog, query), [catalog, query])
   const results = allResults.slice(0, MAX_VISIBLE_OPTIONS)
@@ -60,31 +64,39 @@ export function SongSearch({ catalog, guesses, disabled = false, readOnly = fals
 
   return (
     <div className="relative">
-      <input
-        role="combobox"
-        aria-expanded={isOpen}
-        aria-controls={listId}
-        aria-autocomplete="list"
-        aria-activedescendant={activeId ? `${listId}-${activeId}` : undefined}
-        autoComplete="off"
-        disabled={disabled}
-        readOnly={readOnly}
-        value={query}
-        placeholder="Busca una canción o un juego..."
-        onChange={(event) => {
-          setQuery(event.target.value)
-          setActiveId(null)
-        }}
-        onKeyDown={onKeyDown}
-        className="min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-base disabled:opacity-50 dark:border-slate-600 dark:bg-slate-900"
-      />
+      <label htmlFor={inputId} className="mb-1.5 block text-xs font-semibold tracking-[0.5px] lg:text-[13px]">
+        ¿Qué canción es?
+      </label>
+      <div className="flex min-h-[52px] items-center gap-2 rounded-lg border-2 border-edge bg-field px-3 focus-within:outline-[3px] focus-within:outline-offset-2 focus-within:outline-[#2a75bb]">
+        <SearchIcon className="flex-none text-ink" />
+        <input
+          id={inputId}
+          role="combobox"
+          aria-expanded={isOpen}
+          aria-controls={listId}
+          aria-autocomplete="list"
+          aria-activedescendant={activeId ? `${listId}-${activeId}` : undefined}
+          autoComplete="off"
+          disabled={disabled}
+          readOnly={readOnly}
+          value={query}
+          placeholder="Canción o juego…"
+          onChange={(event) => {
+            setQuery(event.target.value)
+            setActiveId(null)
+          }}
+          onKeyDown={onKeyDown}
+          className="min-h-12 min-w-0 flex-1 border-0 bg-transparent text-base font-medium text-ink outline-none focus-visible:outline-none disabled:opacity-50"
+        />
+      </div>
       {isOpen && (
         <ul
           id={listId}
           role="listbox"
-          className="absolute z-10 mt-1 max-h-72 w-full overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-lg dark:border-slate-700 dark:bg-slate-800"
+          aria-label="Sugerencias"
+          className="absolute z-10 mt-1.5 max-h-72 w-full overflow-y-auto rounded-lg border-2 border-edge bg-field p-1"
         >
-          {results.length === 0 && <li className="px-3 py-3 text-sm text-slate-500">Sin resultados</li>}
+          {results.length === 0 && <li className="px-3 py-3 text-sm text-muted">Sin resultados</li>}
           {results.map((song) => {
             const isAttempted = attempted.has(song.id)
             return (
@@ -95,25 +107,24 @@ export function SongSearch({ catalog, guesses, disabled = false, readOnly = fals
                 aria-selected={song.id === activeId}
                 aria-disabled={isAttempted}
                 onClick={() => choose(song.id)}
-                className={`min-h-11 px-3 py-2 ${
-                  isAttempted
-                    ? 'cursor-not-allowed text-slate-400 line-through dark:text-slate-500'
-                    : 'cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-700'
-                } ${song.id === activeId ? 'bg-indigo-100 dark:bg-indigo-900' : ''}`}
+                className={`flex min-h-11 items-center gap-2.5 rounded px-2.5 py-1.5 ${
+                  isAttempted ? 'cursor-not-allowed text-dim line-through' : 'cursor-pointer hover:bg-chip'
+                } ${song.id === activeId ? 'bg-chip' : ''}`}
               >
-                <div className="font-medium">{song.title}</div>
-                <div className="text-xs text-slate-500 dark:text-slate-400">
-                  {song.games.map((game) => game.name).join(' · ')}
-                  {isAttempted && ' — ya intentada'}
-                </div>
+                <GameSwatch gameId={song.games[0]?.id ?? ''} />
+                <span className="flex min-w-0 flex-col">
+                  <span className="text-[15px] font-semibold">{song.title}</span>
+                  <span className="text-xs text-muted">
+                    {song.games.map((game) => shortGameName(game.name)).join(' · ')}
+                    {isAttempted && ' — ya intentada'}
+                  </span>
+                </span>
               </li>
             )
           })}
-          {hiddenCount > 0 && (
-            <li className="px-3 py-2 text-xs text-slate-500">y {hiddenCount} más… afina la búsqueda</li>
-          )}
+          {hiddenCount > 0 && <li className="px-3 py-2 text-xs text-muted">y {hiddenCount} más… afina la búsqueda</li>}
         </ul>
       )}
     </div>
   )
-}
+})

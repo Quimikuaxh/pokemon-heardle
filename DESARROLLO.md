@@ -55,94 +55,76 @@ Si el bucket y `data/out/` tienen aún el layout antiguo (`clips/<clipKey>/<n>.m
 
 ## Despliegue
 
-Orden: bucket S3 → catálogo en bucket → backend en Render → frontend en Vercel.
+Reutiliza las cuentas del Team Builder (Supabase, Render y Vercel). No se crea ningún proyecto de Supabase nuevo: el audio va a un bucket privado del proyecto existente.
 
-### 1. Bucket privado en Supabase Storage
+Orden obligatorio: bucket y claves → subir clips y catálogo → backend en Render → frontend en Vercel → `ALLOWED_ORIGIN` → verificación. El backend lee el catálogo del bucket al arrancar: si arranca antes de que exista, `/health` responde 503 hasta reiniciarlo.
 
-En el proyecto Supabase de claude-test (no crear proyecto nuevo; el plan free se pausa tras inactividad):
+### 1. Bucket privado y claves S3 en Supabase
 
-1. Storage → Buckets → "New bucket" → nombre: `heardle-audio`, privado.
-2. Storage → S3 Access Keys → "Create new key".
-3. Guardar en seguro: **endpoint**, **región**, **access key ID** y **secret access key** (el secreto solo se muestra una vez).
-4. Formato del endpoint: `https://<ref>.supabase.co/storage/v1/s3` (p. ej. `https://abcd1234.supabase.co/storage/v1/s3`).
-5. Región: vacía o `auto` (Supabase no requiere región real).
+En el proyecto de Supabase del Team Builder:
 
-### 2. Script de catálogo: generar y subir clips
+1. Storage → New bucket → nombre `heardle-audio`, **sin** marcar "Public bucket".
+2. Storage → S3 Connection: anotar el **endpoint** (`https://<ref>.supabase.co/storage/v1/s3`) y la **región** del proyecto (p. ej. `eu-west-1`). La región es obligatoria; el backend no arranca con ella vacía.
+3. Storage → S3 Access Keys → New access key. Anotar **Access key ID** y **Secret access key** (el secreto solo se muestra una vez).
 
-Con las claves del bucket en `scripts/catalog/.env`:
-```
-STORAGE_BUCKET=heardle-audio
-STORAGE_S3_ENDPOINT=https://<ref>.supabase.co/storage/v1/s3
-STORAGE_S3_REGION=
-STORAGE_S3_ACCESS_KEY_ID=<key>
-STORAGE_S3_SECRET_ACCESS_KEY=<secret>
-```
+Usa estas claves S3, nunca la `service_role`: las claves S3 solo dan acceso a Storage; la `service_role` daría acceso a la base de datos del Team Builder.
 
-Desde `scripts/catalog/`:
-```bash
-npm --prefix scripts/catalog run cli -- validate
-npm --prefix scripts/catalog run cli -- upload
-```
+### 2. Subir clips y catálogo
 
-Tras el primer `upload`, los clips y `catalog.json` están en el bucket. La siguiente vez que el backend arranque, cargará el catálogo desde el bucket.
+1. `scripts/catalog/.env` (copiar de `.env.example`) con `STORAGE_BUCKET=heardle-audio` y el endpoint, región y claves del paso 1. Está en `.gitignore`.
+2. Desde la raíz:
+   ```bash
+   npm --prefix scripts/catalog run cli -- validate
+   npm --prefix scripts/catalog run cli -- upload
+   ```
+   `upload` valida antes de subir y sube solo lo nuevo o cambiado (por md5) y al final `catalog.json`.
+3. Comprobar en Supabase → Storage → `heardle-audio` que existen `catalog/catalog.json` y `clips/<clipKey>.mp3` (256.626 bytes cada uno).
 
 ### 3. Backend en Render
 
-Render usa `render.yaml` en la raíz (service `pokemon-heardle-backend`, `rootDir: backend`). 
+1. Render → New → Web Service → repositorio `pokemon-heardle`, rama `main`, plan Free. `render.yaml` fija `rootDir: backend`, `npm ci` y `npm start` (alternativa: New → Blueprint, que lee `render.yaml`).
+2. Variables de entorno:
 
-Conectar el repo a Render:
-1. Dashboard → New Service → GitHub → seleccionar repositorio `pokemon-heardle` → rama `main`.
-2. Auto-deploy activado para `main`.
-3. Build command y start command: `render.yaml` ya los especifica (`npm ci` y `npm start`).
+   | Variable | Valor |
+   |---|---|
+   | `NODE_ENV` | `production` |
+   | `STORAGE_DRIVER` | `s3` |
+   | `STORAGE_BUCKET` | `heardle-audio` |
+   | `STORAGE_S3_ENDPOINT` | endpoint del paso 1 |
+   | `STORAGE_S3_REGION` | región del paso 1 |
+   | `STORAGE_S3_ACCESS_KEY_ID` / `STORAGE_S3_SECRET_ACCESS_KEY` | claves del paso 1 |
+   | `GAME_TOKEN_SECRET` | nuevo, `openssl rand -base64 32` (no reutilizar el de local) |
+   | `DAILY_SEED` | nuevo, `openssl rand -hex 32` |
+   | `ALLOWED_ORIGIN` | URL de Vercel del paso 4, sin barra final (se rellena después) |
 
-Variables de entorno (Render → Environment):
-- `NODE_ENV=production`
-- `STORAGE_DRIVER=s3`
-- `ALLOWED_ORIGIN=<frontend-url>` (p. ej. `https://pokemon-heardle.vercel.app`)
-- `GAME_TOKEN_SECRET=<openssl rand -base64 32>` (mismo que en local)
-- `DAILY_SEED=<openssl rand -hex 32>` (mismo que en local)
-- `STORAGE_BUCKET=heardle-audio` (ya en `render.yaml`)
-- `STORAGE_S3_ENDPOINT=<endpoint del bucket>`
-- `STORAGE_S3_REGION=` (vacío o `auto`)
-- `STORAGE_S3_ACCESS_KEY_ID=<key>`
-- `STORAGE_S3_SECRET_ACCESS_KEY=<secret>`
+   `DAILY_SEED` no se cambia nunca una vez publicado: cambiarlo cambia la canción del día. Cambiar `GAME_TOKEN_SECRET` invalida las partidas en curso.
+3. Comprobar `https://<servicio>.onrender.com/api/health` → `{"ok":true,"catalog":true}`.
 
-El primer despliegue tardará ~2-3 min. El backend dormirá tras 15 min de inactividad; la UI mostrará "Despertando el servidor..." cuando despierte. **No añadir health check ni cron jobs** (DEC-14): solo se despierta con tráfico real.
-
-Nota sobre Render free: 750 h/mes compartidas por workspace con otros servicios (p. ej. Team Builder). Si ambos backends están despiertos a la vez sin keep-alive, el consumo es bajo. Nunca publicar cambios de código en ambos proyectos a la vez en Render free para evitar collision de horas.
+Render free: 750 h/mes compartidas con el backend del Team Builder; cada servicio solo consume mientras está despierto (se duerme tras 15 min sin tráfico). No añadir health checks externos ni cron que lo mantengan despierto.
 
 ### 4. Frontend en Vercel
 
-Conectar el repo:
-1. Vercel dashboard → Add new project → Import GitHub repo → seleccionar `pokemon-heardle`.
-2. Framework: Vite.
-3. Root directory: `frontend`.
-4. Enable "Include files outside the Root Directory" (necesario para importar `shared/` con ruta relativa).
-5. Deploy.
+1. Vercel → Add New → Project → importar `pokemon-heardle`.
+2. Root Directory: `frontend`; Framework: Vite; mantener activado "Include files outside the Root Directory in the Build Step" (el frontend importa `shared/`).
+3. Variable `VITE_API_URL` = URL de Render, sin `/api` ni barra final (p. ej. `https://pokemon-heardle-backend.onrender.com`). Se incrusta al compilar: si cambia, hay que redesplegar.
+4. Deploy. Production Branch: `main`.
 
-Variables de entorno (Vercel → Settings → Environment Variables):
-- `VITE_API_URL=<backend-url>` (p. ej. `https://pokemon-heardle-backend.onrender.com`)
+### 5. Cerrar CORS
 
-Production branch: `main`. Redeploy automático si `main` cambia.
+En Render, `ALLOWED_ORIGIN` = URL de producción de Vercel (p. ej. `https://pokemon-heardle.vercel.app`), sin barra final, y redesplegar el backend.
 
-El archivo `frontend/vercel.json` ya reescribe rutas SPA a `index.html`.
+### 6. Verificación
 
-### 5. Verificación del primer despliegue
+1. Abrir la URL de Vercel: si el backend duerme, aparece "Despertando el servidor…" hasta ~1 min.
+2. Jugar el diario y una partida libre. En DevTools → Network:
+   - `GET /api/clips/…` con `Content-Type: audio/mpeg`, `Cache-Control: no-store, private`, sin `ETag`, y `Content-Length` = 16300 en el intento 1.
+   - Ninguna petición a Google Fonts ni a YouTube hasta pulsar "Escuchar la canción completa".
+3. Probar en un iPhone, también con el interruptor de silencio activado (DEC-45).
+4. Volver a ejecutar `upload` sin cambios: debe subir 0 clips. Si los vuelve a subir todos, el ETag de Supabase no coincide con el md5 local (DEC-23).
 
-Después de subir catálogo, backend y frontend:
+### Publicar cambios de catálogo
 
-1. Abrir `<frontend-url>` en navegador. Debe mostrar "Despertando el servidor..." si el backend está durmiendo.
-2. Esperar a que aparezca la pantalla de juego.
-3. Iniciar una partida en modo ilimitado, elegir un juego y un intento.
-4. Abrir DevTools → Network, reproducir el clip del intento 1.
-   - Ver petición `GET /api/clips/:ticket`.
-   - Cabeceras: `Content-Type: audio/mpeg`, `Cache-Control: no-store, private`.
-   - Sin `ETag` ni `Last-Modified`.
-   - `Content-Length` = 16300 bytes (prefijo del intento 1).
-5. Verificar tamaño de clip en el bucket (Supabase Storage):
-   - Bucket → clips → ver un clip de 1 s.
-   - Tamaño local y ETag en Supabase deben coincidir (md5): DEC-23 requiere que `validate` compruebe tamaños idénticos entre canciones. Si el ETag de Supabase no coincide con el md5 local, `upload` subirá de nuevo (lentitud aceptable en el primer despliegue; en los sucesivos es un error de configuración S3).
-6. Probar en iPhone u otro dispositivo móvil: autoplay del audio requiere gesto del usuario (se llama `audio.play()` tras el clic en "Reproducir").
+`build` → `validate` → `upload` → reiniciar el backend en Render (Manual Deploy → Restart) → opcional `upload --prune` para borrar del bucket los clips que ya no están activos. Publicar cerca de las 00:00 (Europe/Madrid): cambiar las canciones activas puede cambiar la canción del día y deja inválidas las partidas en curso cuya canción se desactive.
 
 ## Decisiones de implementación
 

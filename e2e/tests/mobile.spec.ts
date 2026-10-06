@@ -23,11 +23,11 @@ test('E2E-38_should_win_daily_and_lose_unlimited_on_iphone @mobile', async ({ ap
   await expect.poll(() => states(page), 'contexto tras el primer toque').toEqual(['running'])
   await expect.poll(() => starts(page), 'suena en ese mismo gesto').toBe(1)
   await app.daily.guess(target.title)
-  await expect(app.daily.resultHeading).toHaveText('¡Acertaste en el intento 1!')
+  await expect(app.daily.resultHeading).toHaveText('¡ACERTASTE EN EL INTENTO 1!')
 
   await app.startUnlimited(['Pokemon Game Charlie'])
   await app.unlimited.skipAll()
-  await expect(app.unlimited.resultHeading).toHaveText('Has agotado los intentos')
+  await expect(app.unlimited.resultHeading).toHaveText('¡LA CANCIÓN SE ESCAPÓ!')
   await expect(app.unlimited.solution).toHaveText(MULTI.title)
 })
 
@@ -35,11 +35,11 @@ test('E2E-38_should_lose_daily_and_win_unlimited_on_iphone @mobile', async ({ ap
   const target = dailyTargetR()
   await app.goto()
   await app.daily.skipAll()
-  await expect(app.daily.resultHeading).toHaveText('Has agotado los intentos')
+  await expect(app.daily.resultHeading).toHaveText('¡LA CANCIÓN SE ESCAPÓ!')
   await expect(app.daily.solution).toHaveText(target.title)
 
   await app.startUnlimited(['Pokemon Game Charlie'])
   await app.unlimited.playButton.tap()
   await app.unlimited.guess(MULTI.title)
-  await expect(app.unlimited.resultHeading).toHaveText('¡Acertaste en el intento 1!')
+  await expect(app.unlimited.resultHeading).toHaveText('¡ACERTASTE EN EL INTENTO 1!')
 })

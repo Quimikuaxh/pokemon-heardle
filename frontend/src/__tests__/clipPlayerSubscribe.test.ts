@@ -268,3 +268,53 @@ describe('ClipPlayer: audio.play() rechazado', () => {
     expect(pending.size).toBe(0)
   })
 })
+
+describe('ClipPlayer ruta <audio>: pausa y reanudacion (DEC-46)', () => {
+  it('FE-PLY-16 pause() hace audio.pause(), emite la posicion y el siguiente play() continua sin reiniciar currentTime', async () => {
+    const { player, audio } = setup()
+    const fn = vi.fn()
+    player.subscribe(fn)
+    await player.prepare('/api/clips/a', 'k0')
+    player.play()
+    audio.currentTime = 0.7
+    player.pause()
+    expect(audio.pause).toHaveBeenCalled()
+    expect(last(fn)).toEqual({ playing: false, positionSec: 0.7 })
+    player.play()
+    expect(audio.currentTime).toBe(0.7)
+    expect(last(fn)).toEqual({ playing: true, positionSec: 0.7 })
+    expect(audio.play).toHaveBeenCalledTimes(2)
+  })
+
+  it('FE-PLY-16 al terminar (ended) el siguiente play() empieza desde 0', async () => {
+    const { player, audio } = setup()
+    await player.prepare('/api/clips/a', 'k0')
+    player.play()
+    player.pause()
+    player.play()
+    audio.currentTime = 1
+    audio.dispatchEvent(new Event('ended'))
+    player.play()
+    expect(audio.currentTime).toBe(0)
+  })
+
+  it('FE-PLY-16 al cambiar de intento se descarta la pausa', async () => {
+    const { player, audio } = setup()
+    await player.prepare('/api/clips/a', 'k0')
+    player.play()
+    audio.currentTime = 0.5
+    player.pause()
+    await player.prepare('/api/clips/b', 'k1')
+    player.play()
+    expect(audio.currentTime).toBe(0)
+  })
+
+  it('FE-PLY-16 si ya suena, play() reinicia desde 0', async () => {
+    const { player, audio } = setup()
+    await player.prepare('/api/clips/a', 'k0')
+    player.play()
+    audio.currentTime = 0.9
+    player.play()
+    expect(audio.currentTime).toBe(0)
+  })
+})

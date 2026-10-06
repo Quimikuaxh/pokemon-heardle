@@ -9,7 +9,7 @@ test.describe('Diario - catalogo M', () => {
     await d.ready()
     await d.guess('Lonely Obelisk')
 
-    await expect(d.resultHeading).toHaveText('¡Acertaste en el intento 1!')
+    await expect(d.resultHeading).toHaveText('¡ACERTASTE EN EL INTENTO 1!')
     await expect(d.solution).toHaveText('Lonely Obelisk')
     await expect(d.resultPanel).toContainText('Pokemon Game Alpha')
     await expect(d.rows.nth(0)).toContainText('Acertada')

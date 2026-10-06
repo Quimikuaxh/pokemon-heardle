@@ -32,7 +32,7 @@ test('E2E-46_should_show_notice_without_consuming_attempt_when_server_returns_AL
   const res = await d.guess(y.title)
   expect(res.status()).toBe(409)
   await expect(d.notice.filter({ hasText: 'Ya has intentado esa canción' })).toBeVisible()
-  await expect(d.rows.nth(1), 'no se consume intento').toContainText('Intento 2')
+  await expect(d.rows.nth(1), 'no se consume intento').toContainText('Escuchando')
   expect((await app.localStorageDump())[`heardle:daily:${madridToday()}`], 'token guardado intacto').toBe(tokenBefore)
   await expect(d.search).toBeEnabled()
 })

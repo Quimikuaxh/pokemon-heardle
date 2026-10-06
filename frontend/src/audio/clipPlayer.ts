@@ -16,6 +16,9 @@ export interface AudioContextLike {
 
 export interface AudioBufferLike {
   duration: number
+  sampleRate?: number
+  numberOfChannels?: number
+  getChannelData?(channel: number): Float32Array
 }
 
 export interface AudioSourceLike {
@@ -23,12 +26,13 @@ export interface AudioSourceLike {
   onended: (() => void) | null
   connect(node: unknown): void
   disconnect(): void
-  start(when?: number): void
-  stop(): void
+  start(when?: number, offset?: number): void
+  stop(when?: number): void
 }
 
 export interface AudioGainLike {
   gain: {
+    cancelScheduledValues?(time: number): void
     setValueAtTime(value: number, time: number): void
     linearRampToValueAtTime(value: number, time: number): void
   }
@@ -45,6 +49,11 @@ export interface ClipPlayerDeps {
   createAudio(): HTMLAudioElement
   /** null fuerza la ruta de reserva <audio>. Por defecto AudioContext ?? webkitAudioContext. */
   createAudioContext?: () => AudioContextLike | null
+  /**
+   * Avisa del AudioBuffer decodificado del intento actual (para dibujar la onda) o de null cuando se suelta o no
+   * hay buffer (ruta <audio>). Nunca se entrega el de un intento anterior.
+   */
+  onDecoded?(info: { attemptKey: string; buffer: AudioBufferLike | null }): void
   /** Por defecto requestAnimationFrame / cancelAnimationFrame (se resuelven en cada llamada). */
   requestFrame?(callback: (time: number) => void): number
   cancelFrame?(id: number): void
@@ -57,9 +66,11 @@ export interface PlaybackState {
 
 export interface ClipPlayer {
   prepare(clipUrl: string, attemptKey: string): Promise<void>
-  /** Sincrono: debe ejecutarse dentro del gesto del usuario (autoplay en iOS). */
+  /** Sincrono: debe ejecutarse dentro del gesto del usuario (autoplay en iOS). Si estaba pausado, continua; si ya sonaba, reinicia. */
   play(): void
-  /** Detiene la reproduccion (p. ej. al abrir la cancion completa). */
+  /** Pausa en la posicion actual: el siguiente `play()` continua desde ahi (hasta que acabe el clip o cambie el intento). */
+  pause(): void
+  /** Detiene la reproduccion y vuelve a 0 (p. ej. al abrir la cancion completa). */
   stop(): void
   /** Avisa de { playing, positionSec } en cada frame mientras suena y al parar o terminar. */
   subscribe(listener: (state: PlaybackState) => void): () => void
@@ -68,6 +79,8 @@ export interface ClipPlayer {
 
 const TICKET_GONE_STATUSES = new Set([404, 410])
 const FADE_OUT_SECONDS = 0.05
+/** Rampa de ganancia al pausar: sin ella, cortar la onda en seco suena a chasquido. */
+const PAUSE_FADE_SECONDS = 0.01
 
 function defaultAudioContext(): AudioContextLike | null {
   const scope = globalThis as unknown as Record<string, (new () => AudioContextLike) | undefined>
@@ -85,6 +98,9 @@ interface ActiveSource {
   source: AudioSourceLike
   gain: AudioGainLike
   startTime: number
+  /** Segundos del buffer por los que empezo esta fuente (0, o el punto de una pausa). */
+  offset: number
+  /** Duracion del buffer entero. */
   duration: number
 }
 
@@ -109,6 +125,10 @@ export function createClipPlayer(deps: ClipPlayerDeps): ClipPlayer {
   let contextClosed = false
   let active: ActiveSource | null = null
   let playing = false
+  // Posicion al parar (Web Audio) y punto de reanudacion: solo `pause()` o una interrupcion dejan offset > 0.
+  let heldPosition = 0
+  let resumeOffset = 0
+  let elementResumable = false
   let frameId: number | null = null
   let disposed = false
 
@@ -124,10 +144,12 @@ export function createClipPlayer(deps: ClipPlayerDeps): ClipPlayer {
   }
 
   function currentPosition(): number {
-    if (mode === 'buffer' && active && context) {
-      return Math.min(Math.max(context.currentTime - active.startTime, 0), active.duration)
-    }
+    if (mode === 'buffer') return active && context ? bufferPosition(active, context) : heldPosition
     return audio.currentTime
+  }
+
+  function bufferPosition(entry: ActiveSource, web: AudioContextLike): number {
+    return Math.min(entry.offset + Math.max(web.currentTime - entry.startTime, 0), entry.duration)
   }
 
   function cancelPendingFrame() {
@@ -156,6 +178,7 @@ export function createClipPlayer(deps: ClipPlayerDeps): ClipPlayer {
   function detachActiveSource() {
     if (!active) return
     const { source, gain } = active
+    if (context) heldPosition = bufferPosition(active, context)
     active = null
     source.onended = null
     try {
@@ -167,15 +190,48 @@ export function createClipPlayer(deps: ClipPlayerDeps): ClipPlayer {
     gain.disconnect()
   }
 
+  // Pausa sin chasquido: ganancia a 0 en ~10 ms y la fuente se para al final de la rampa. La posicion guardada es la
+  // del momento de pulsar; la fuente que se apaga deja de ser la activa y su 'ended' solo libera los nodos.
+  function fadeOutActiveSource(web: AudioContextLike) {
+    if (!active) return
+    const entry = active
+    heldPosition = bufferPosition(entry, web)
+    if (heldPosition >= entry.duration - FADE_OUT_SECONDS) {
+      detachActiveSource() // ya esta en el fundido final: no hay nada que suavizar
+      return
+    }
+    active = null
+    const now = web.currentTime
+    const { source, gain } = entry
+    gain.gain.cancelScheduledValues?.(now)
+    gain.gain.setValueAtTime(1, now)
+    gain.gain.linearRampToValueAtTime(0, now + PAUSE_FADE_SECONDS)
+    source.onended = () => {
+      source.disconnect()
+      gain.disconnect()
+    }
+    try {
+      source.stop(now + PAUSE_FADE_SECONDS)
+    } catch {
+      // ya parada
+    }
+  }
+
   function onElementPlaybackEnd() {
     if (mode === 'element') markEnded()
   }
+  function onElementEnded() {
+    elementResumable = false
+    onElementPlaybackEnd()
+  }
   audio.addEventListener?.('pause', onElementPlaybackEnd)
-  audio.addEventListener?.('ended', onElementPlaybackEnd)
+  audio.addEventListener?.('ended', onElementEnded)
 
   function onContextStateChange() {
     if (context && context.state !== 'running' && mode === 'buffer' && playing) {
+      // Una interrupcion del sistema (llamada, segundo plano) equivale a una pausa: el siguiente clic continua.
       detachActiveSource()
+      resumeOffset = heldPosition
       markEnded()
     }
   }
@@ -220,9 +276,19 @@ export function createClipPlayer(deps: ClipPlayerDeps): ClipPlayer {
   async function prepareClip(clipUrl: string, attemptKey: string) {
     // Un intento nuevo invalida lo anterior aunque este prepare falle: nunca suena el clip del intento previo.
     const hadPreviousClip = mode !== null
+    if (playing) {
+      // Sonando al cambiar de intento: la barra no debe seguir "sonando" (ni el rAF repintar) mientras se descarga el siguiente.
+      playing = false
+      cancelPendingFrame()
+      emit({ playing: false, positionSec: 0 })
+    }
     detachActiveSource()
     buffer = null
     mode = null
+    heldPosition = 0
+    resumeOffset = 0
+    elementResumable = false
+    deps.onDecoded?.({ attemptKey, buffer: null })
     const blob = await download(clipUrl)
     const decoded = await decode(blob)
     if (disposed || preparedKey !== attemptKey) return
@@ -232,6 +298,7 @@ export function createClipPlayer(deps: ClipPlayerDeps): ClipPlayer {
       releaseObjectUrl()
       buffer = decoded
       mode = 'buffer'
+      deps.onDecoded?.({ attemptKey, buffer: decoded })
     } else {
       releaseObjectUrl()
       objectUrl = deps.createObjectURL(blob)
@@ -242,7 +309,7 @@ export function createClipPlayer(deps: ClipPlayerDeps): ClipPlayer {
     if (hadPreviousClip) emit({ playing: false, positionSec: 0 })
   }
 
-  function playBuffer(web: AudioContextLike, decoded: AudioBufferLike) {
+  function playBuffer(web: AudioContextLike, decoded: AudioBufferLike, offset: number) {
     useMediaPlaybackAudioSession()
     detachActiveSource()
     if (web.state !== 'running') {
@@ -258,19 +325,24 @@ export function createClipPlayer(deps: ClipPlayerDeps): ClipPlayer {
     const gain = web.createGain()
     source.connect(gain)
     gain.connect(web.destination)
-    const fadeStart = Math.max(startTime, startTime + duration - FADE_OUT_SECONDS)
+    // El fundido de 50 ms va al final del tramo que queda por sonar (al reanudar, el resto del clip).
+    const remaining = Math.max(duration - offset, 0)
+    const fadeStart = Math.max(startTime, startTime + remaining - FADE_OUT_SECONDS)
     gain.gain.setValueAtTime(1, startTime)
     gain.gain.setValueAtTime(1, fadeStart)
-    gain.gain.linearRampToValueAtTime(0, startTime + duration)
-    const entry: ActiveSource = { source, gain, startTime, duration }
+    gain.gain.linearRampToValueAtTime(0, startTime + remaining)
+    const entry: ActiveSource = { source, gain, startTime, offset, duration }
     source.onended = () => {
       if (active === entry) {
         active = null
+        heldPosition = duration
+        resumeOffset = 0
         markEnded()
       }
     }
     active = entry
-    source.start(startTime)
+    if (offset > 0) source.start(startTime, offset)
+    else source.start(startTime)
   }
 
   return {
@@ -290,23 +362,46 @@ export function createClipPlayer(deps: ClipPlayerDeps): ClipPlayer {
 
     play() {
       if (disposed) return
+      // Si ya sonaba, play() reinicia desde 0; si estaba en pausa, continua desde donde quedo.
+      const resumeFrom = playing ? 0 : resumeOffset
+      resumeOffset = 0
+      let startPosition = 0
       if (mode === 'buffer' && buffer && context) {
-        playBuffer(context, buffer)
+        startPosition = resumeFrom < buffer.duration - FADE_OUT_SECONDS ? resumeFrom : 0
+        playBuffer(context, buffer, startPosition)
       } else if (mode === 'element') {
-        audio.currentTime = 0
+        if (playing || !elementResumable) audio.currentTime = 0
+        startPosition = audio.currentTime
+        elementResumable = false
         // Si el navegador rechaza la reproduccion no hay 'pause': se cierra aqui para no animar sin fin.
         void audio.play()?.catch(() => markEnded())
       } else {
         return
       }
       playing = true
-      emit({ playing: true, positionSec: 0 })
+      emit({ playing: true, positionSec: startPosition })
       scheduleFrame()
     },
 
+    pause() {
+      if (!playing) return
+      if (mode === 'buffer') {
+        if (context) fadeOutActiveSource(context)
+        resumeOffset = heldPosition
+      } else {
+        elementResumable = true
+        audio.pause()
+      }
+      markEnded()
+    },
+
     stop() {
-      if (mode === 'buffer') detachActiveSource()
-      else audio.pause()
+      resumeOffset = 0
+      elementResumable = false
+      if (mode === 'buffer') {
+        detachActiveSource()
+        heldPosition = 0
+      } else audio.pause()
       markEnded()
     },
 

@@ -51,3 +51,31 @@ describe('components/FilterPanel', () => {
     expect(onChange).toHaveBeenCalledWith([])
   })
 })
+
+describe('FilterPanel: diseno Libre (DEC-46)', () => {
+  const songs = [{ games: ['rse'] }, { games: ['rse', 'dp'] }, { games: ['dp'] }, { games: ['bw'] }]
+
+  it('FE-DSN-13 muestra "n DE m JUEGOS" y los juegos sin el prefijo Pokémon', () => {
+    render(<FilterPanel games={GAMES} selected={['rse', 'dp']} onChange={vi.fn()} onStart={vi.fn()} />)
+    expect(screen.getByText('2 DE 3 JUEGOS')).toBeTruthy()
+    expect(screen.getByRole('checkbox', { name: /Ruby/ })).toBeTruthy()
+    expect(document.body.textContent).not.toContain('Pokémon Ruby')
+  })
+
+  it('FE-DSN-13 con el catalogo: contador por juego y total de canciones distintas en juego', () => {
+    render(<FilterPanel games={GAMES} selected={['rse', 'dp']} songs={songs} onChange={vi.fn()} onStart={vi.fn()} />)
+    expect(screen.getByText('3 canciones en juego. Puedes jugar tantas como quieras.')).toBeTruthy()
+    expect(screen.getByRole('checkbox', { name: /Ruby/ }).closest('label')!.textContent).toMatch(/2$/)
+  })
+
+  it('FE-DSN-13 cada juego lleva su cuadradito de color del mapa unico', () => {
+    render(<FilterPanel games={GAMES} selected={[]} onChange={vi.fn()} onStart={vi.fn()} />)
+    expect(document.querySelectorAll('[data-game-swatch]').length).toBe(3)
+  })
+
+  it('FE-DSN-13 filtro vacio: sin el total de canciones y con el aviso', () => {
+    render(<FilterPanel games={GAMES} selected={[]} songs={songs} onChange={vi.fn()} onStart={vi.fn()} />)
+    expect(document.body.textContent).not.toMatch(/canciones en juego/)
+    expect(screen.getByRole('alert')).toBeTruthy()
+  })
+})

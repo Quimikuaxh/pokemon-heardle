@@ -24,29 +24,30 @@ export function ClipProgressBar({ clipSeconds, unlockedSec, positionSec, playing
       aria-valuemax={unlocked}
       aria-valuenow={position}
       data-playing={String(playing)}
-      className="relative h-6 w-full overflow-hidden rounded-md border border-slate-300 bg-slate-100 dark:border-slate-600 dark:bg-slate-800"
+      className="relative h-2.5 w-full rounded-sm bg-track"
     >
       <div
         data-zone="unlocked"
         data-locked="false"
-        className="absolute inset-y-0 bg-indigo-200 dark:bg-indigo-900"
+        className="absolute inset-y-0 rounded-sm bg-unlocked"
         style={{ left: '0%', width: percent(unlocked) }}
       />
       <div
         data-zone="locked"
         data-locked="true"
-        className="absolute inset-y-0 bg-slate-300/60 dark:bg-slate-700/60"
+        className="absolute inset-y-0 rounded-sm bg-track"
         style={{ left: percent(unlocked), width: percent(SCALE_SECONDS - unlocked) }}
       />
+      <div data-played className="absolute inset-y-0 left-0 rounded-sm bg-screen-ink" style={{ width: percent(position) }} />
       {clipSeconds.map((seconds) => (
         <div
           key={seconds}
           data-mark={seconds}
-          className="absolute inset-y-0 w-px bg-slate-500 dark:bg-slate-400"
+          className="absolute -inset-y-[3px] w-0.5 bg-screen"
           style={{ left: percent(seconds) }}
         />
       ))}
-      <div data-playhead className="absolute inset-y-0 w-0.5 bg-indigo-600 dark:bg-indigo-300" style={{ left: percent(position) }} />
+      <div data-playhead className="absolute -inset-y-px w-0.5 bg-played" style={{ left: percent(position) }} />
     </div>
   )
 }

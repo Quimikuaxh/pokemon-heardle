@@ -8,7 +8,7 @@ test('E2E-20_should_search_by_title_and_by_game_name_and_select', async ({ app }
 
   await d.type('cascade')
   await expect(d.options).toHaveCount(1)
-  await expect(d.option('Velvet Cascade')).toContainText('Pokemon Game Bravo')
+  await expect(d.option('Velvet Cascade')).toContainText('Game Bravo')
 
   await d.type('Bravo')
   await expect(d.options).toHaveCount(3)

@@ -159,3 +159,39 @@ describe('FullSongEmbed: foco', () => {
     expect(document.activeElement).toBe(box)
   })
 })
+
+describe('ResultPanel: diseno acierto / derrota (DEC-46)', () => {
+  it('FE-DSN-09 acierto: "¡ACERTASTE EN EL INTENTO n!", titulo, juego con su nombre completo y estado REGISTRADA (diario)', () => {
+    render(<ResultPanel view={mkFinished({ mode: 'daily', date: TODAY, attempt: 3 })} />)
+    expect(screen.getByRole('heading', { name: '¡ACERTASTE EN EL INTENTO 3!' })).toBeTruthy()
+    expect(screen.getByText('REGISTRADA')).toBeTruthy()
+    expect(screen.getByText('Pokémon Ruby / Sapphire / Emerald')).toBeTruthy()
+    expect(document.querySelector('[data-lens="won"]')).toBeTruthy()
+  })
+
+  it('FE-DSN-09 derrota: "¡LA CANCIÓN SE ESCAPÓ!", "Era…", SIN INTENTOS y lente roja', () => {
+    render(<ResultPanel view={mkFinished({ status: 'lost', attempt: 6, results: ['miss', 'miss', 'miss', 'miss', 'miss', 'skip'] })} />)
+    expect(screen.getByRole('heading', { name: '¡LA CANCIÓN SE ESCAPÓ!' })).toBeTruthy()
+    expect(screen.getByText('Era…')).toBeTruthy()
+    expect(screen.getByText('SIN INTENTOS')).toBeTruthy()
+    expect(document.querySelector('[data-lens="lost"]')).toBeTruthy()
+  })
+
+  it('FE-DSN-09 la fila de 6 marcas describe los resultados (sin revelar nada mas) y hay 6 marcas', () => {
+    render(<ResultPanel view={mkFinished({ attempt: 3, results: ['miss', 'game', 'hit'] })} />)
+    const marks = screen.getByRole('img', { name: /intentos: juego incorrecto, juego acertado, acertada/i })
+    expect(marks.children.length).toBe(6)
+  })
+
+  it('FE-DSN-09 el boton de la cancion completa es el rojo del diseno y sigue sin iframe hasta pulsarlo', () => {
+    render(<ResultPanel view={mkFinished()} />)
+    const button = screen.getByRole('button', { name: BUTTON })
+    expect(button.className).toContain('bg-lamp-red')
+    expect(iframes().length).toBe(0)
+  })
+
+  it('FE-DSN-09 con showNextDayNote=false el panel no pinta la nota del diario (la pinta el tablero)', () => {
+    render(<ResultPanel view={mkFinished({ mode: 'daily', date: TODAY })} showNextDayNote={false} />)
+    expect(document.body.textContent).not.toMatch(/vuelve ma[ñn]ana/i)
+  })
+})

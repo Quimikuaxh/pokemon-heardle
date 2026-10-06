@@ -123,6 +123,7 @@ describe('draft: duracion de las fuentes (DEC-40)', () => {
     const expected = structuredClone(existing.songs[0])
     expected.enabled = false
     expected.source.durationSec = 12.5
+    expected.source.leadingSilenceSec = 0 // [MOD] DEC-47: draft tambien mide el silencio inicial (startSec 3 = manual, no cambia)
     expect(s).toEqual(expected)
   })
 
@@ -132,6 +133,7 @@ describe('draft: duracion de las fuentes (DEC-40)', () => {
     await draft(dir, fakeRunner({ AAAAAAAAAAA: 200 }))
     const expected = structuredClone(existing.songs[0])
     expected.source.durationSec = 200
+    expected.source.leadingSilenceSec = 0 // [MOD] DEC-47
     expect(readCatalog(dir).songs[0]).toEqual(expected)
   })
 
@@ -140,7 +142,9 @@ describe('draft: duracion de las fuentes (DEC-40)', () => {
     const dir = makeDataDir({ catalog: existing, playlist: [A], sources: { AAAAAAAAAAA: {} } })
     const runner = fakeRunner({ AAAAAAAAAAA: 5 })
     await draft(dir, runner)
-    expect([runner.probed(), readCatalog(dir).songs[0]]).toEqual([[], existing.songs[0]])
+    const expected = structuredClone(existing.songs[0])
+    expected.source.leadingSilenceSec = 0 // [MOD] DEC-47: solo se completa el silencio inicial que faltaba
+    expect([runner.probed(), readCatalog(dir).songs[0]]).toEqual([[], expected])
   })
 
   it('SC-DR-02 idempotente: segunda ejecucion sin cambios en el catalogo', async () => {

@@ -28,23 +28,34 @@ export class Board {
   get skipButton() {
     return this.root.getByRole('button', { name: /^Saltar/ })
   }
+  /** El boton de play en cualquier estado (el nombre accesible cambia: Reproducir N s / Pausar / Reanudar / Cargando audio...). */
   get playButton() {
-    return this.root.getByRole('button', { name: /Reproducir/ })
+    return this.root.getByRole('button', { name: /^(Reproducir|Reanudar|Pausar|Cargando audio)/ })
   }
-  get resultHeading() {
-    return this.root.locator('section[aria-live="polite"] h2')
+  /** Boton de play sin sonar: "Reproducir N s" (posicion 0 o fragmento acabado) o "Reanudar" (pausado con posicion > 0). */
+  get playIdle() {
+    return this.root.getByRole('button', { name: /^(Reproducir|Reanudar)/ })
   }
-  get solution() {
-    return this.root.locator('section[aria-live="polite"] strong')
+  /** Solo "Reproducir N s": audio listo, sin sonar y en posicion 0. */
+  get playFromStart() {
+    return this.root.getByRole('button', { name: /^Reproducir/ })
+  }
+  get progressbar() {
+    return this.root.getByRole('progressbar')
+  }
+  /** Barras de la forma de onda (data-bar) del reproductor. */
+  get waveform() {
+    return this.root.locator('[data-waveform]')
   }
   get resultPanel() {
-    return this.root.locator('section[aria-live="polite"]')
+    return this.root.getByRole('region', { name: 'Resultado' })
   }
-  get shareButton() {
-    return this.root.getByRole('button', { name: 'Compartir resultado' })
+  get resultHeading() {
+    return this.resultPanel.getByRole('heading', { level: 2 })
   }
-  get shareText() {
-    return this.root.locator('section[aria-live="polite"] pre')
+  /** Titulo de la cancion revelada (sin rol propio: tipografia de pantalla `font-display`). */
+  get solution() {
+    return this.resultPanel.locator('.font-display')
   }
   get notice() {
     return this.root.getByRole('status')
@@ -55,7 +66,7 @@ export class Board {
 
   /** Espera a que el clip del intento actual este descargado (boton de reproducir habilitado). */
   async ready() {
-    await expect(this.playButton).toBeEnabled()
+    await expect(this.playIdle).toBeEnabled()
   }
 
   async type(query: string) {
@@ -88,19 +99,11 @@ export class Board {
     }
   }
 
-  async openStats() {
-    const details = this.root.locator('details', { hasText: 'Estadísticas' })
-    if ((await details.getAttribute('open')) === null) await details.locator('summary').click()
-  }
-
-  async stat(label: string): Promise<string> {
-    await this.openStats()
-    return (await this.root.locator('dl > div').filter({ has: this.page.getByText(label, { exact: true }) }).locator('dd').innerText()).trim()
-  }
-
   // Filtro (solo ilimitado)
+  /** Casilla de un juego: en la lista el nombre sale sin el prefijo "Pokémon " y con el contador al final. */
   gameCheckbox(name: string) {
-    return this.root.getByRole('checkbox', { name })
+    const short = name.replace(/^Pok[eé]mon\s+/i, '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    return this.root.getByRole('checkbox', { name: new RegExp(`^${short}(\\s|$)`) })
   }
   async setFilter(gameNames: string[]) {
     await this.root.getByRole('button', { name: 'Ninguno' }).click()

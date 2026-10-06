@@ -38,7 +38,7 @@ test('E2E-31_should_reveal_title_and_games_when_the_game_ends', async ({ app }) 
   const d = app.daily
   await app.goto()
   await d.skipAll()
-  await expect(d.resultHeading).toHaveText('Has agotado los intentos')
+  await expect(d.resultHeading).toHaveText('¡LA CANCIÓN SE ESCAPÓ!')
   await expect(d.solution).toHaveText(target.title)
   await expect(d.resultPanel).toContainText(gamesText(target))
   await expect(d.root.getByRole('button', { name: 'Escuchar la canción completa' })).toBeVisible()

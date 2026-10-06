@@ -10,7 +10,7 @@ test.describe('Ilimitado, filtro y feedback de juego', () => {
     await app.goto()
     await app.startUnlimited([CHARLIE])
     await u.guess(MULTI.title)
-    await expect(u.resultHeading).toHaveText('¡Acertaste en el intento 1!')
+    await expect(u.resultHeading).toHaveText('¡ACERTASTE EN EL INTENTO 1!')
     await expect(u.solution).toHaveText(MULTI.title)
     await expect(u.search).toHaveCount(0)
 
@@ -22,7 +22,7 @@ test.describe('Ilimitado, filtro y feedback de juego', () => {
     ])
     expect(res.status()).toBe(200)
     await u.ready()
-    await expect(u.rows.nth(0)).toContainText('Intento 1')
+    await expect(u.rows.nth(0)).toContainText('Escuchando')
     await expect(u.resultPanel).toHaveCount(0)
   })
 
@@ -35,10 +35,10 @@ test.describe('Ilimitado, filtro y feedback de juego', () => {
     await page.reload()
     await app.showUnlimited()
     await expect(u.rows.nth(0)).toContainText(LABEL.skip)
-    await expect(u.rows.nth(1)).toContainText('Intento 2')
+    await expect(u.rows.nth(1)).toContainText('Escuchando')
     await u.ready()
     await u.guess(MULTI.title)
-    await expect(u.resultHeading).toHaveText('¡Acertaste en el intento 2!')
+    await expect(u.resultHeading).toHaveText('¡ACERTASTE EN EL INTENTO 2!')
   })
 
   test('E2E-14_should_play_and_win_with_a_single_song_pool', async ({ app }) => {
@@ -46,7 +46,7 @@ test.describe('Ilimitado, filtro y feedback de juego', () => {
     await app.goto()
     await app.startUnlimited([DELTA])
     await u.guess(ONLY_D.title)
-    await expect(u.resultHeading).toHaveText('¡Acertaste en el intento 1!')
+    await expect(u.resultHeading).toHaveText('¡ACERTASTE EN EL INTENTO 1!')
     await expect(u.solution).toHaveText(ONLY_D.title)
   })
 
@@ -79,7 +79,7 @@ test.describe('Ilimitado, filtro y feedback de juego', () => {
     await u.root.getByText('Filtro para la próxima partida').click()
     await u.setFilter([DELTA])
     await u.skipAll()
-    await expect(u.resultHeading).toHaveText('Has agotado los intentos')
+    await expect(u.resultHeading).toHaveText('¡LA CANCIÓN SE ESCAPÓ!')
     await expect(u.solution, 'la partida en curso conserva su pool original').toHaveText(MULTI.title)
 
     const [res] = await Promise.all([
@@ -89,7 +89,7 @@ test.describe('Ilimitado, filtro y feedback de juego', () => {
     expect(res.status()).toBe(200)
     await u.ready()
     await u.guess(ONLY_D.title)
-    await expect(u.resultHeading).toHaveText('¡Acertaste en el intento 1!')
+    await expect(u.resultHeading).toHaveText('¡ACERTASTE EN EL INTENTO 1!')
     await expect(u.solution, 'la siguiente usa el nuevo filtro').toHaveText(ONLY_D.title)
   })
 
@@ -101,7 +101,7 @@ test.describe('Ilimitado, filtro y feedback de juego', () => {
     await u.guess(sameGame.title)
     await expect(u.rows.nth(0)).toContainText(LABEL.game)
     await expect(u.rows.nth(0)).toContainText(sameGame.title)
-    await expect(u.rows.nth(1)).toContainText('Intento 2')
+    await expect(u.rows.nth(1)).toContainText('Escuchando')
   })
 
   test('E2E-18_should_report_wrong_game_when_failed_song_shares_none', async ({ app }) => {

@@ -20,7 +20,7 @@ test.describe('Diario - catalogo R', () => {
     await d.ready()
     await d.guess(m3.title)
 
-    await expect(d.resultHeading).toHaveText('Has agotado los intentos')
+    await expect(d.resultHeading).toHaveText('¡LA CANCIÓN SE ESCAPÓ!')
     await expect(d.solution).toHaveText(target.title)
     await expect(d.resultPanel).toContainText(gamesText(target))
     await expect(d.search).toHaveCount(0)
@@ -43,10 +43,10 @@ test.describe('Diario - catalogo R', () => {
     await d.ready()
     await d.guess(target.title)
 
-    await expect(d.resultHeading).toHaveText('¡Acertaste en el intento 4!')
+    await expect(d.resultHeading).toHaveText('¡ACERTASTE EN EL INTENTO 4!')
     const labels = [outcomeOf(target, g1), outcomeOf(target, g2), 'skip', 'hit'] as const
     for (const [i, key] of labels.entries()) await expect(d.rows.nth(i)).toContainText(LABEL[key])
-    await expect(d.rows.nth(4)).toHaveText(/—|^\s*$/)
+    await expect(d.rows, 'al terminar solo quedan los intentos usados').toHaveCount(4)
   })
 
   test('E2E-06_should_give_same_daily_solution_in_two_independent_contexts', async ({ browser, baseURL }) => {
@@ -60,8 +60,8 @@ test.describe('Diario - catalogo R', () => {
         await expect(board.getByRole('button', { name: /Reproducir/ })).toBeEnabled()
         await board.getByRole('button', { name: /^Saltar/ }).click()
       }
-      await expect(board.locator('section[aria-live="polite"] strong')).toBeVisible()
-      solutions.push(await board.locator('section[aria-live="polite"] strong').innerText())
+      await expect(board.getByRole('region', { name: 'Resultado' }).locator('.font-display')).toBeVisible()
+      solutions.push(await board.getByRole('region', { name: 'Resultado' }).locator('.font-display').innerText())
       await context.close()
     }
     expect(solutions[0]).toBe(solutions[1])
@@ -83,7 +83,7 @@ test.describe('Diario - catalogo R', () => {
     await app.showDaily()
 
     await expect(d.rows.nth(0)).toContainText(LABEL.skip)
-    await expect(d.rows.nth(1)).toContainText('Intento 2')
+    await expect(d.rows.nth(1)).toContainText('Escuchando')
     expect((await app.localStorageDump())[`heardle:daily:${madridToday()}`], 'registro del diario intacto').toBe(before)
     await page.reload()
     await expect(d.rows.nth(0)).toContainText(LABEL.skip)
@@ -102,7 +102,7 @@ test.describe('Diario - catalogo R', () => {
 
     net.clear()
     await page.reload()
-    await expect(d.rows.nth(2)).toContainText('Intento 3')
+    await expect(d.rows.nth(2)).toContainText('Escuchando')
     await expect(d.rows.nth(0)).toContainText(LABEL.skip)
     await expect(d.rows.nth(1)).toContainText(LABEL[outcomeOf(target, g1)])
     await d.ready()
@@ -154,12 +154,12 @@ test.describe('Diario - catalogo R', () => {
     await expect(u.startButton).toBeEnabled()
     // Diario: se crea una partida nueva sin crash.
     await app.showDaily()
-    await expect(app.daily.rows.nth(0)).toContainText('Intento 1')
+    await expect(app.daily.rows.nth(0)).toContainText('Escuchando')
     await app.daily.ready()
     await app.showUnlimited()
     await u.startButton.click()
     await u.ready()
-    await expect(u.rows.nth(0)).toContainText('Intento 1')
+    await expect(u.rows.nth(0)).toContainText('Escuchando')
   })
 })
 
@@ -175,7 +175,7 @@ test.describe('Diario - catalogo M', () => {
 
     net.clear()
     await page.reload()
-    await expect(d.resultHeading).toHaveText('¡Acertaste en el intento 1!')
+    await expect(d.resultHeading).toHaveText('¡ACERTASTE EN EL INTENTO 1!')
     await expect(d.solution).toHaveText('Lonely Obelisk')
     await expect(d.playButton).toHaveCount(0)
     await expect(d.search).toHaveCount(0)
@@ -197,7 +197,7 @@ test.describe('Diario - catalogo M', () => {
     await skewed.clock.install({ time: Date.now() + 24 * 3600 * 1000 })
     await skewed.goto('/')
     const board = skewed.getByRole('region', { name: 'Partida diaria' })
-    await expect(board.locator('section[aria-live="polite"] strong')).toHaveText('Lonely Obelisk')
+    await expect(board.getByRole('region', { name: 'Resultado' }).locator('.font-display')).toHaveText('Lonely Obelisk')
     await expect(board.getByRole('button', { name: /Reproducir/ })).toHaveCount(0)
     const keys = await skewed.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith('heardle:daily:')))
     expect(keys, 'sin registro duplicado para la fecha del reloj desviado').toEqual([`heardle:daily:${today}`])

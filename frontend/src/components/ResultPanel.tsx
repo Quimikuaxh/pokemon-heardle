@@ -1,32 +1,63 @@
-import type { GameView } from '../../../shared/api'
+import type { GameView, ResultName } from '../../../shared/api'
 import { FullSongEmbed } from './FullSongEmbed'
+import { GameSwatch } from './GameSwatch'
+import { Lamps, SHELL_CLASS } from './Lamps'
+import { NextDayNote } from './NextDayNote'
+import { MAX_ATTEMPTS } from '../../../shared/rules'
+import { resultLabel } from '../game/view'
 
-export function ResultPanel({ view, onOpenFullSong }: { view: GameView; onOpenFullSong?: () => void }) {
+const MARK_BAR_CLASS: Record<ResultName, string> = {
+  hit: 'bg-played',
+  game: 'bg-near',
+  miss: 'bg-miss-bar',
+  skip: 'bg-skip-bar',
+}
+
+interface ResultPanelProps {
+  view: GameView
+  onOpenFullSong?: () => void
+  /** El tablero pinta la nota del diario al final de la pagina; sueltos (tests, otros usos) la lleva el panel. */
+  showNextDayNote?: boolean
+}
+
+export function ResultPanel({ view, onOpenFullSong, showNextDayNote = true }: ResultPanelProps) {
   if (view.status === 'playing') return null
   const won = view.status === 'won'
   // Un registro diario antiguo puede no traer youtubeId: se muestra la solucion y no el boton.
   const youtubeId = view.solution?.youtubeId
+  const firstGameId = view.solution?.games[0]?.id ?? ''
+  const statusLabel = won ? (view.mode === 'daily' ? 'REGISTRADA' : 'RESUELTA') : 'SIN INTENTOS'
+  const marksDescription = `Intentos: ${view.results.map((result) => resultLabel(result).toLowerCase()).join(', ')}`
 
   return (
-    <section
-      aria-live="polite"
-      className={`rounded-xl border-2 p-4 ${
-        won ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950' : 'border-rose-500 bg-rose-50 dark:bg-rose-950'
-      }`}
-    >
-      <h2 className="text-lg font-bold">{won ? `¡Acertaste en el intento ${view.attempt}!` : 'Has agotado los intentos'}</h2>
-      {view.solution && (
-        <p className="mt-1">
-          La canción era <strong>{view.solution.title}</strong>
-          <span className="block text-sm text-slate-600 dark:text-slate-300">
-            {view.solution.games.map((game) => game.name).join(' · ')}
-          </span>
-        </p>
-      )}
-      {youtubeId && <FullSongEmbed key={youtubeId} youtubeId={youtubeId} onOpen={onOpenFullSong} />}
-      {view.mode === 'daily' && (
-        <p className="mt-3 text-sm text-slate-600 dark:text-slate-300">Vuelve mañana para la siguiente canción del día.</p>
-      )}
-    </section>
+    <>
+      <section aria-label="Resultado" aria-live="polite" className={SHELL_CLASS}>
+        <Lamps lens={won ? 'won' : 'lost'} label={statusLabel} />
+        <div className="flex flex-col gap-3.5 rounded-md border-2 border-edge bg-screen px-4 pb-4 pt-[18px] text-screen-ink">
+          <h2 className={`m-0 font-mono text-xs font-normal tracking-[1px] ${won ? 'text-played' : 'text-lost-text'}`}>
+            {won ? `¡ACERTASTE EN EL INTENTO ${view.attempt}!` : '¡LA CANCIÓN SE ESCAPÓ!'}
+          </h2>
+          {view.solution && (
+            <div className="flex flex-col gap-1.5">
+              {!won && <span className="text-[13px] text-screen-dim">Era…</span>}
+              <span className="font-display text-[34px] leading-[1.05]">{view.solution.title}</span>
+              <span className="inline-flex items-center gap-2 self-start rounded bg-track py-1 pl-2 pr-2.5 text-[13px]">
+                <GameSwatch gameId={firstGameId} />
+                {view.solution.games.map((game) => game.name).join(' · ')}
+              </span>
+            </div>
+          )}
+          <div role="img" aria-label={marksDescription} className="flex gap-1.5">
+            {Array.from({ length: MAX_ATTEMPTS }, (_, index) => {
+              const result = view.results[index]
+              return <span key={index} className={`h-2.5 w-9 rounded-sm ${result ? MARK_BAR_CLASS[result] : 'bg-track'}`} />
+            })}
+          </div>
+        </div>
+        {youtubeId && <FullSongEmbed key={youtubeId} youtubeId={youtubeId} onOpen={onOpenFullSong} />}
+      </section>
+      {showNextDayNote && view.mode === 'daily' && <NextDayNote />}
+    </>
   )
 }
+

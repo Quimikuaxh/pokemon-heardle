@@ -1,19 +1,106 @@
 @import 'tailwindcss';
 
+/* Pokemon Solid: fuente de aficionados, solo uso personal y no comercial (ver README). */
+@font-face {
+  font-family: 'Pokemon Solid';
+  src: url('./assets/fonts/PokemonSolid.ttf') format('truetype');
+  font-display: swap;
+}
+
+/* Tokens del tema (DEC-46). Claro por defecto; oscuro con prefers-color-scheme, como antes. */
 :root {
   color-scheme: light dark;
+  --paper: #eceae4;
+  --ink: #17181b;
+  --edge: #17181b;
+  --muted: #5e5f66;
+  --shell: #c9c6be;
+  --field: #ffffff;
+  --chip: #eceae4;
+  --dim: #65666d;
+  --skipbg: #d3d0c8;
+  --amber-text: #8a5a0b;
+  --placeholder: #6e6f76;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: #141518;
+    --ink: #eceae4;
+    --edge: #050506;
+    --muted: #a3a5ac;
+    --shell: #2b2d33;
+    --field: #1e2026;
+    --chip: #2b2d33;
+    --dim: #8a8c93;
+    --skipbg: #3a3d44;
+    --amber-text: #f0b754;
+    --placeholder: #9a9ca3;
+  }
+}
+
+@theme inline {
+  --color-paper: var(--paper);
+  --color-ink: var(--ink);
+  --color-edge: var(--edge);
+  --color-muted: var(--muted);
+  --color-shell: var(--shell);
+  --color-field: var(--field);
+  --color-chip: var(--chip);
+  --color-dim: var(--dim);
+  --color-skipbg: var(--skipbg);
+  --color-amber-text: var(--amber-text);
+}
+
+/* Colores fijos de la pantalla del reproductor y de los resultados (iguales en claro y oscuro). */
+@theme {
+  --color-screen: #1d2026;
+  --color-track: #2c3038;
+  --color-unlocked: #4a5161;
+  --color-locked-bar: #3a3f49;
+  --color-screen-ink: #e9ede6;
+  --color-screen-dim: #9aa19a;
+  --color-played: #7fd3a0;
+  --color-lamp-red: #d7301f;
+  --color-lamp-yellow: #e5b92e;
+  --color-lamp-green: #3f9b5a;
+  --color-lens: #4fa3d9;
+  --color-hit: #2e7d4f;
+  --color-near: #e59a1e;
+  --color-miss: #b83227;
+  --color-miss-bar: #c0453a;
+  --color-skip-bar: #5a606c;
+  --color-lost-text: #f0a096;
+
+  --font-sans: 'Rubik', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'Space Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
+  --font-display: 'Lilita One', 'Rubik', system-ui, sans-serif;
+  --font-logo: 'Pokemon Solid', 'Lilita One', system-ui, sans-serif;
 }
 
 body {
   margin: 0;
-  background-color: #f8fafc;
-  color: #0f172a;
-  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  background-color: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-sans);
 }
 
-@media (prefers-color-scheme: dark) {
-  body {
-    background-color: #0f172a;
-    color: #f1f5f9;
+input::placeholder {
+  color: var(--placeholder);
+}
+
+/* Logo: amarillo con contorno azul. Tailwind no tiene utilidades para text-stroke/paint-order. */
+.logo {
+  color: #ffcb05;
+  -webkit-text-stroke: 3px #2a75bb;
+  paint-order: stroke fill;
+  letter-spacing: 1px;
+  line-height: 1.1;
+}
+
+@layer base {
+  :focus-visible {
+    outline: 3px solid #2a75bb;
+    outline-offset: 2px;
   }
 }

@@ -360,4 +360,39 @@ describe('shared/catalog validateCatalog', () => {
     c.songs[0].tooShort = false // persistido y falso: la regla derivada manda
     expect(validateCatalog(c).ok).toBe(false)
   })
+
+  it('SH-CAT-22 source.leadingSilenceSec ausente o numero finito >= 0 es valido; startSecManual booleano es valido', () => {
+    const c = base()
+    expect(validateCatalog(c).ok).toBe(true)
+    c.songs[0].source.leadingSilenceSec = 0
+    c.songs[1].source.leadingSilenceSec = 2.46
+    c.songs[0].startSecManual = true
+    expect(validateCatalog(c).ok).toBe(true)
+  })
+
+  for (const [label, value] of [['negativo', -0.1], ['NaN', NaN], ['Infinity', Infinity], ['string', '0.5'], ['null', null]] as Array<[string, unknown]>) {
+    it(`SH-CAT-22 source.leadingSilenceSec invalido (${label})`, () => {
+      const c = base()
+      c.songs[0].source.leadingSilenceSec = value
+      const r = validateCatalog(c)
+      expect(r.ok).toBe(false)
+      expect(errorsOf(r).some((e) => e.includes('rse-littleroot-town') && e.includes('leadingSilenceSec'))).toBe(true)
+    })
+  }
+
+  for (const value of ['si', 1, null]) {
+    it(`SH-CAT-22 startSecManual no booleano (${JSON.stringify(value)}) es invalido`, () => {
+      const c = base()
+      c.songs[0].startSecManual = value
+      expect(validateCatalog(c).ok).toBe(false)
+    })
+  }
+
+  it('SH-CAT-22 la regla de corta usa el startSec efectivo (el automatico incluido)', () => {
+    const c = base()
+    c.songs[0].source.durationSec = 16.3
+    expect(validateCatalog(c).ok).toBe(true)
+    c.songs[0].startSec = 0.45
+    expect(validateCatalog(c).ok).toBe(false)
+  })
 })

@@ -25,7 +25,7 @@ test('E2E-45_should_mark_failed_song_as_attempted_and_not_selectable', async ({ 
   await d.search.press('Enter')
   await net.settle()
   expect(net.count('POST', '/api/games/guess'), 'peticiones /games/guess tras pulsar la ya intentada').toBe(guessesBefore)
-  await expect(d.rows.nth(1), 'no se ha consumido otro intento').toContainText('Intento 2')
+  await expect(d.rows.nth(1), 'no se ha consumido otro intento').toContainText('Escuchando')
 
   // El resto se puede elegir.
   await d.type(y.title)

@@ -82,6 +82,8 @@ describe('build: canciones cortas (DEC-40)', () => {
     expected[2].source.durationSec = 7.4
     expected[0].source.durationSec = 120
     expected[1].source.durationSec = 130
+    expected[0].source.leadingSilenceSec = 0 // [MOD] DEC-47: build mide el silencio inicial de las activas largas
+    expected[1].source.leadingSilenceSec = 0
     expect(after.songs).toEqual(expected)
     expect(after.games).toEqual(original.games)
   })
@@ -125,7 +127,8 @@ describe('build: canciones cortas (DEC-40)', () => {
     await build(dir, runner)
     const clipCall = runner.ffmpegCalls().find((c) => c.args.at(-1)!.endsWith(`${L1.clipKey}.mp3`))!
     expect(clipCall.args).toContain('-reservoir')
-    expect(runner.ffmpegCalls().length).toBe(2) // master + un unico clip (antes eran 1 + 6)
+    // master + un unico clip (antes eran 1 + 6); la medicion del silencio inicial (DEC-47) no cuenta
+    expect(runner.ffmpegCalls().filter((c) => !c.args.includes('-hide_banner')).length).toBe(2)
   })
 
   it('SC-CLP-04 build borra el directorio antiguo out/clips/<clipKey>/ tras generar el nuevo (y no el de otras canciones)', async () => {

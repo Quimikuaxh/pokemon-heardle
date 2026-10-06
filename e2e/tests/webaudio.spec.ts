@@ -45,8 +45,7 @@ test.describe('Web Audio', () => {
     await app.goto()
     for (let i = 0; i < 6; i++) {
       await d.ready()
-      await d.playButton.click()
-      await d.playButton.click()
+      await d.playIdle.click()
       await app.showUnlimited()
       await app.showDaily()
       await net.settle()
@@ -110,7 +109,7 @@ test('E2E-75_should_play_a_full_game_with_the_audio_element_when_web_audio_is_mi
   await d.skip()
   await d.ready()
   await d.guess(target.title)
-  await expect(d.resultHeading).toHaveText('¡Acertaste en el intento 3!')
+  await expect(d.resultHeading).toHaveText('¡ACERTASTE EN EL INTENTO 3!')
   expect(consoleErrors, 'errores de consola').toEqual([])
 })
 
@@ -192,7 +191,7 @@ test.describe('Contexto interrumpido (iOS)', () => {
     })
     await expect(bar).toHaveAttribute('data-playing', 'false')
     await expect(d.playButton).toBeEnabled()
-    await expect(d.playButton).toContainText('Reproducir')
+    await expect(d.playButton).toHaveAccessibleName(/^(Reproducir|Reanudar)/)
 
     // Fin de la interrupcion: el siguiente toque reanuda la reproduccion.
     await page.evaluate(() => {

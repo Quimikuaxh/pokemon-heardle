@@ -43,7 +43,8 @@ Juego web estilo Heardle: adivinar la cancion de un juego de Pokemon a partir de
 
 ## 6. UI
 - Interfaz en espanol; nombres de canciones y juegos en ingles.
-- Responsive (movil) y modo oscuro.
+- Responsive (movil 375/390, tablet 768 y escritorio 1440) y modo oscuro; tactil >= 44 px y contraste AA.
+- Diseno visual "Pokedex" (DEC-46): logo "Pokémon Heardle" en una linea (fuente Pokemon Solid, solo uso personal/no comercial), reproductor con forma de onda real del audio ya desbloqueado, historial 01-06 con iconos por resultado, resultado de acierto/derrota y filtro del modo libre segun la maqueta aprobada. Sin sprites, sin estadisticas y sin compartir.
 - Cuidar autoplay en iOS (reproduccion tras gesto del usuario).
 
 ## 7. Criterios de aceptacion

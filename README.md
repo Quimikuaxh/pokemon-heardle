@@ -27,3 +27,12 @@ npm test              # shared + backend + scripts/catalog + frontend + admin-ui
 npm run typecheck     # tsc de shared, backend, scripts/catalog y admin-ui
 npm run build         # typecheck + build de producción del frontend y de admin-ui (dist/ de cada uno)
 ```
+
+## Tipografías
+
+- Interfaz: Rubik, Space Mono y Lilita One, alojadas en el proyecto con `@fontsource/*` (licencia OFL; sin peticiones a Google Fonts).
+- Logo: **Pokemon Solid** (`frontend/src/assets/fonts/PokemonSolid.ttf`).
+  - Origen: dafont.com/pokemon.font, familia "Pokemon" (variantes Solid y Hollow), actualizada en 2007.
+  - En esa página el autor y la licencia no constan claramente.
+  - Uso: proyecto de fans sin ánimo de lucro (no comercial), bajo responsabilidad del propietario del proyecto.
+  - El logo es un único componente (`frontend/src/components/Logo.tsx`), fácil de sustituir.

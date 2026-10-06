@@ -23,7 +23,7 @@ test.describe('Arranque en frio', () => {
     await expect(page.getByRole('alert')).toHaveCount(0)
     await app.daily.ready()
     await app.daily.skip()
-    await expect(app.daily.rows.nth(1)).toContainText('Intento 2')
+    await expect(app.daily.rows.nth(1)).toContainText('Escuchando')
   })
 
   test('E2E-34_should_show_error_with_retry_button_when_503_persists_past_the_limit', async ({ page }) => {
@@ -79,12 +79,12 @@ test.describe('Fallos de red y rate-limit', () => {
     await d.type(x.title)
     await d.option(x.title).click()
     await expect(d.notice.filter({ hasText: 'No se pudo conectar con el servidor' })).toBeVisible()
-    await expect(d.rows.nth(0)).toContainText('Intento 1')
+    await expect(d.rows.nth(0)).toContainText('Escuchando')
     expect((await app.localStorageDump())[`heardle:daily:${madridToday()}`], 'token sin cambios').toBe(tokenBefore)
 
     const res = await d.guess(x.title)
     expect(res.status()).toBe(200)
-    await expect(d.rows.nth(1)).toContainText('Intento 2')
+    await expect(d.rows.nth(1)).toContainText('Escuchando')
   })
 
   test.describe('con limite bajo', () => {
@@ -104,12 +104,12 @@ test.describe('Fallos de red y rate-limit', () => {
       const retryAfter = Number(limited.headers()['retry-after'])
       expect(retryAfter).toBeGreaterThan(0)
       await expect(d.notice.filter({ hasText: 'Demasiadas acciones seguidas' })).toContainText(`${retryAfter}`)
-      await expect(d.rows.nth(3)).toContainText('Intento 4')
+      await expect(d.rows.nth(3)).toContainText('Escuchando')
 
       await page.waitForTimeout((retryAfter + 1) * 1000)
       const ok = await d.skip()
       expect(ok.status()).toBe(200)
-      await expect(d.rows.nth(4)).toContainText('Intento 5')
+      await expect(d.rows.nth(4)).toContainText('Escuchando')
     })
   })
 })

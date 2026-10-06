@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { PlayIcon } from './icons'
 
 const YOUTUBE_ID_PATTERN = /^[A-Za-z0-9_-]{11}$/
 const EMBED_PREFIX = 'https://www.youtube-nocookie.com/embed/'
@@ -18,7 +19,7 @@ export function FullSongEmbed({ youtubeId, onOpen }: { youtubeId: string; onOpen
 
   if (opened) {
     return (
-      <div ref={frameBox} tabIndex={-1} className="mt-3 aspect-video w-full overflow-hidden rounded-lg outline-none">
+      <div ref={frameBox} tabIndex={-1} className="aspect-video w-full overflow-hidden rounded-lg border-2 border-edge outline-none">
         <iframe
           src={`${EMBED_PREFIX}${youtubeId}`}
           title="Canción completa en YouTube"
@@ -33,12 +34,13 @@ export function FullSongEmbed({ youtubeId, onOpen }: { youtubeId: string; onOpen
   return (
     <button
       type="button"
-      className="mt-3 min-h-11 rounded-lg bg-indigo-600 px-4 font-semibold text-white"
+      className="flex min-h-[52px] items-center justify-center gap-2.5 rounded-[26px] border-[3px] border-edge bg-lamp-red px-4 text-base font-semibold text-white shadow-[0_4px_0_var(--edge)]"
       onClick={() => {
         setOpened(true)
         onOpen?.()
       }}
     >
+      <PlayIcon size={20} />
       Escuchar la canción completa
     </button>
   )

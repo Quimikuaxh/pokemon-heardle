@@ -431,9 +431,9 @@ describe('ClipPlayer Web Audio: ciclo de vida (FE-WA-11, 19)', () => {
     expect(ctx.sources.length).toBe(0)
   })
 
-  it('FE-WA-18 la interfaz publica sigue siendo prepare/play/stop/subscribe/dispose', () => {
+  it('FE-WA-18 [MOD] la interfaz publica es prepare/play/pause/stop/subscribe/dispose (pause es nuevo, DEC-46)', () => {
     const { player } = setup()
-    expect(Object.keys(player).sort()).toEqual(['dispose', 'play', 'prepare', 'stop', 'subscribe'])
+    expect(Object.keys(player).sort()).toEqual(['dispose', 'pause', 'play', 'prepare', 'stop', 'subscribe'])
   })
 })
 
@@ -555,5 +555,232 @@ describe('ClipPlayer Web Audio: limpieza de nodos y listeners', () => {
     await player.prepare('/api/clips/a', 'k0')
     player.dispose()
     expect(remove).toHaveBeenCalledWith('statechange', expect.any(Function))
+  })
+})
+
+describe('ClipPlayer Web Audio: buffer decodificado para la onda (DEC-46)', () => {
+  it('FE-WF-13 onDecoded entrega el AudioBuffer del intento actual con su clave', async () => {
+    const onDecoded = vi.fn()
+    const { ctx, player } = setup({ onDecoded })
+    await player.prepare('/api/clips/a', 'k0')
+    expect(onDecoded).toHaveBeenLastCalledWith({ attemptKey: 'k0', buffer: ctx.buffers[0] })
+  })
+
+  it('FE-WF-13 al preparar otro intento se suelta primero el anterior (null) y luego llega el nuevo: nunca se reentrega el viejo', async () => {
+    const onDecoded = vi.fn()
+    const { ctx, player } = setup({ onDecoded })
+    await player.prepare('/api/clips/a', 'k0')
+    onDecoded.mockClear()
+    await player.prepare('/api/clips/b', 'k1')
+    expect(onDecoded.mock.calls.map((c) => [c[0].attemptKey, c[0].buffer === null])).toEqual([['k1', true], ['k1', false]])
+    expect(onDecoded.mock.calls.at(-1)![0].buffer).toBe(ctx.buffers[1])
+  })
+
+  it('FE-WF-13 un prepare fallido deja la onda sin datos (null) y no el buffer del intento anterior', async () => {
+    const onDecoded = vi.fn()
+    const { deps, player } = setup({ onDecoded })
+    await player.prepare('/api/clips/a', 'k0')
+    deps.fetchClip.mockRejectedValue(new ApiError('STORAGE_ERROR', 502))
+    await expect(player.prepare('/api/clips/b', 'k1')).rejects.toBeDefined()
+    expect(onDecoded.mock.calls.at(-1)![0]).toEqual({ attemptKey: 'k1', buffer: null })
+  })
+
+  it('FE-WF-13 en la ruta <audio> (sin Web Audio) no hay buffer: la onda queda neutra', async () => {
+    const onDecoded = vi.fn()
+    const { player } = setup({ onDecoded, createAudioContext: vi.fn(() => null) })
+    await player.prepare('/api/clips/a', 'k0')
+    expect(onDecoded.mock.calls.every((c) => c[0].buffer === null)).toBe(true)
+  })
+})
+
+describe('ClipPlayer: pausa y reanudacion (DEC-45/46)', () => {
+  async function playingAt(position: number, durations = [4.0229]) {
+    const env = setup()
+    env.ctx.durations = durations
+    const fn = vi.fn()
+    env.player.subscribe(fn)
+    await env.player.prepare('/api/clips/a', 'k0')
+    env.ctx.state = 'running'
+    env.ctx.currentTime = 10
+    env.player.play()
+    env.ctx.currentTime = 10 + position
+    return { ...env, fn }
+  }
+
+  it('FE-PLY-11 pause() para la fuente y emite { playing:false, positionSec: posicion actual }', async () => {
+    const { ctx, player, fn, frames } = await playingAt(1.5)
+    player.pause()
+    expect(ctx.sources[0].stop).toHaveBeenCalled()
+    expect(last(fn)).toEqual({ playing: false, positionSec: 1.5 })
+    expect(frames.pending()).toBe(0)
+  })
+
+  it('FE-PLY-11 el siguiente play() relanza la fuente con start(t0, offset) y sigue emitiendo desde el offset', async () => {
+    const { ctx, player, fn, frames } = await playingAt(1.5)
+    player.pause()
+    ctx.currentTime = 20
+    player.play()
+    expect(ctx.sources.length).toBe(2)
+    expect(ctx.sources[1].start).toHaveBeenCalledWith(20, 1.5)
+    expect(last(fn)).toEqual({ playing: true, positionSec: 1.5 })
+    ctx.currentTime = 20.5
+    frames.tick()
+    expect(last(fn)).toEqual({ playing: true, positionSec: 2 })
+  })
+
+  it('FE-PLY-11 el fundido de 50 ms se recalcula para el tramo que queda (d - offset)', async () => {
+    const { ctx, player } = await playingAt(1.5)
+    player.pause()
+    ctx.currentTime = 20
+    player.play()
+    const gain = ctx.gains[1].gain
+    const remaining = 4.0229 - 1.5
+    expect(gain.setValueAtTime.mock.calls[0]).toEqual([1, 20])
+    expect(gain.setValueAtTime.mock.calls[1][1]).toBeCloseTo(20 + remaining - 0.05, 9)
+    expect(gain.linearRampToValueAtTime.mock.calls[0][1]).toBeCloseTo(20 + remaining, 9)
+  })
+
+  it('FE-PLY-11 pausar dos veces seguidas no cambia la posicion ni emite de nuevo', async () => {
+    const { ctx, player, fn } = await playingAt(1)
+    player.pause()
+    const calls = fn.mock.calls.length
+    ctx.currentTime = 50
+    player.pause()
+    expect(fn.mock.calls.length).toBe(calls)
+    player.play()
+    expect(ctx.sources[1].start).toHaveBeenCalledWith(50, 1)
+  })
+
+  it('FE-PLY-11 pause() sin reproducir no hace nada', async () => {
+    const { player } = setup()
+    const fn = vi.fn()
+    player.subscribe(fn)
+    await player.prepare('/api/clips/a', 'k0')
+    player.pause()
+    expect(fn).not.toHaveBeenCalled()
+  })
+
+  it('FE-PLY-12 al acabar el fragmento el siguiente play() empieza desde 0 (no desde el final)', async () => {
+    const { ctx, player } = await playingAt(2)
+    ctx.sources[0].onended?.()
+    ctx.currentTime = 30
+    player.play()
+    expect(ctx.sources[1].start).toHaveBeenCalledWith(30)
+  })
+
+  it('FE-PLY-12 tras pausar y acabar no queda offset: play() desde 0', async () => {
+    const { ctx, player } = await playingAt(2)
+    player.pause()
+    player.play()
+    ctx.sources[1].onended?.()
+    player.play()
+    expect(ctx.sources[2].start.mock.calls[0].length).toBe(1)
+  })
+
+  it('FE-PLY-12 al cambiar de intento (prepare) se descarta la pausa: empieza desde 0', async () => {
+    const { ctx, player, fn } = await playingAt(2)
+    player.pause()
+    await player.prepare('/api/clips/b', 'k1')
+    expect(last(fn)).toEqual({ playing: false, positionSec: 0 })
+    ctx.currentTime = 40
+    player.play()
+    expect(ctx.sources.at(-1)!.start).toHaveBeenCalledWith(40)
+  })
+
+  it('FE-PLY-13 si ya suena, play() reinicia desde 0 (no continua)', async () => {
+    const { ctx, player } = await playingAt(2)
+    ctx.currentTime = 12
+    player.play()
+    expect(ctx.sources[1].start).toHaveBeenCalledWith(12)
+  })
+
+  it('FE-PLY-13 stop() (p. ej. al abrir la cancion completa) descarta la pausa: vuelve a 0', async () => {
+    const { ctx, player } = await playingAt(2)
+    player.pause()
+    player.stop()
+    ctx.currentTime = 60
+    player.play()
+    expect(ctx.sources[1].start).toHaveBeenCalledWith(60)
+  })
+
+  it('FE-PLY-14 una interrupcion del sistema (statechange) cuenta como pausa: el siguiente play() continua', async () => {
+    const { ctx, player, fn } = await playingAt(1.25)
+    ctx.setState('interrupted')
+    expect(last(fn)).toEqual({ playing: false, positionSec: 1.25 })
+    ctx.currentTime = 70
+    player.play()
+    expect(ctx.sources[1].start).toHaveBeenCalledWith(70, 1.25)
+  })
+
+  it('FE-PLY-15 un offset casi al final (menos de 50 ms) reinicia desde 0 en vez de reanudar un resto inaudible', async () => {
+    const { ctx, player } = await playingAt(4.0)
+    player.pause()
+    ctx.currentTime = 80
+    player.play()
+    expect(ctx.sources[1].start).toHaveBeenCalledWith(80)
+  })
+})
+
+describe('ClipPlayer Web Audio: sin chasquido al pausar y cambio de intento sonando', () => {
+  async function playingAt2(position: number) {
+    const env = setup()
+    env.ctx.durations = [4.0229]
+    const fn = vi.fn()
+    env.player.subscribe(fn)
+    await env.player.prepare('/api/clips/a', 'k0')
+    env.ctx.state = 'running'
+    env.ctx.currentTime = 10
+    env.player.play()
+    env.ctx.currentTime = 10 + position
+    return { ...env, fn }
+  }
+
+  it('FE-PLY-18 pause(): ganancia a 0 en 10 ms y fuente parada al final de la rampa; la posicion guardada es la de pulsar', async () => {
+    const { ctx, player, fn } = await playingAt2(1.5)
+    player.pause()
+    const gain = ctx.gains[0].gain
+    expect(gain.cancelScheduledValues).toHaveBeenCalledWith(11.5)
+    expect(gain.linearRampToValueAtTime).toHaveBeenLastCalledWith(0, 11.5 + 0.01)
+    expect(ctx.sources[0].stop).toHaveBeenCalledWith(11.5 + 0.01)
+    expect(last(fn)).toEqual({ playing: false, positionSec: 1.5 })
+  })
+
+  it('FE-PLY-18 la fuente que se apaga libera sus nodos al terminar y su "ended" no emite ni corta la reanudacion', async () => {
+    const { ctx, player, fn } = await playingAt2(1.5)
+    player.pause()
+    ctx.currentTime = 20
+    player.play()
+    const calls = fn.mock.calls.length
+    await flush() // llega el onended de la fuente parada
+    expect(ctx.sources[0].disconnect).toHaveBeenCalled()
+    expect(ctx.gains[0].disconnect).toHaveBeenCalled()
+    expect(fn.mock.calls.slice(calls).some((c) => c[0].playing === false)).toBe(false)
+    expect(ctx.sources[1].start).toHaveBeenCalledWith(20, 1.5)
+  })
+
+  it('FE-PLY-18 pausar dentro del fundido final (posicion >= d - 50 ms) corta sin rampa nueva', async () => {
+    const { ctx, player } = await playingAt2(3.99)
+    const before = ctx.gains[0].gain.linearRampToValueAtTime.mock.calls.length
+    player.pause()
+    expect(ctx.gains[0].gain.linearRampToValueAtTime.mock.calls.length).toBe(before)
+    expect(ctx.sources[0].stop).toHaveBeenCalled()
+  })
+
+  it('FE-PLY-19 sonando, un prepare nuevo emite { playing:false, positionSec:0 } al empezar y cancela el rAF mientras descarga', async () => {
+    const { ctx, player, fn, frames, deps } = await playingAt2(1)
+    frames.tick()
+    let release!: (blob: Blob) => void
+    deps.fetchClip.mockImplementationOnce(() => new Promise<Blob>((resolve) => (release = resolve)))
+    const pending = player.prepare('/api/clips/b', 'k1')
+    expect(last(fn)).toEqual({ playing: false, positionSec: 0 })
+    expect(frames.pending()).toBe(0)
+    frames.tick()
+    expect(fn.mock.calls.filter((c) => c[0].playing).length).toBeGreaterThan(0) // las emisiones anteriores existian
+    const calls = fn.mock.calls.length
+    frames.tick()
+    expect(fn.mock.calls.length).toBe(calls)
+    release(blob())
+    await pending
+    expect(ctx.sources[0].stop).toHaveBeenCalled()
   })
 })

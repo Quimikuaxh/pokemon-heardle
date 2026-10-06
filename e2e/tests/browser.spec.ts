@@ -6,8 +6,8 @@ import type { Page } from '@playwright/test'
 
 test.describe('Tema', () => {
   for (const [scheme, background, color] of [
-    ['dark', 'rgb(15, 23, 42)', 'rgb(241, 245, 249)'],
-    ['light', 'rgb(248, 250, 252)', 'rgb(15, 23, 42)'],
+    ['dark', 'rgb(20, 21, 24)', 'rgb(236, 234, 228)'],
+    ['light', 'rgb(236, 234, 228)', 'rgb(23, 24, 27)'],
   ] as const) {
     test.describe(scheme, () => {
       test.use({ colorScheme: scheme })
@@ -92,10 +92,12 @@ test.describe('Audio', () => {
     expect(net.clips()).toHaveLength(1)
     const decodes = (await log(page)).decodes
     expect(decodes).toBe(1)
-    await app.daily.playButton.click()
-    await app.daily.playButton.click()
-    await app.daily.playButton.click()
-    await expect.poll(async () => (await log(page)).starts).toBe(3)
+    // Pulsar play mientras suena PAUSA: se espera a que termine el clip (1 s) antes de cada repeticion.
+    for (let i = 1; i <= 3; i++) {
+      await app.daily.playIdle.click()
+      await expect.poll(async () => (await log(page)).starts).toBe(i)
+      await expect(app.daily.progressbar).toHaveAttribute('data-playing', 'false', { timeout: 5_000 })
+    }
     await net.settle()
     expect(net.clips(), 'peticiones de clip tras repetir').toHaveLength(1)
     expect((await log(page)).decodes, 'decodificaciones tras repetir').toBe(decodes)
@@ -118,10 +120,10 @@ test('E2E-43_should_stay_coherent_when_the_same_game_is_finished_in_another_tab'
   await expect(otherBoard.getByRole('button', { name: /Reproducir/ })).toBeEnabled()
   // Termina en la primera.
   await d.skip()
-  await expect(d.resultHeading).toHaveText('Has agotado los intentos')
+  await expect(d.resultHeading).toHaveText('¡LA CANCIÓN SE ESCAPÓ!')
   // La segunda aun tiene el token del intento 6: actua sobre una partida ya terminada.
   await otherBoard.getByRole('button', { name: /^Saltar/ }).click()
-  await expect(otherBoard.locator('section[aria-live="polite"] h2')).toBeVisible()
+  await expect(otherBoard.getByRole('region', { name: 'Resultado' }).getByRole('heading', { level: 2 })).toBeVisible()
   await expect(otherBoard.getByRole('alert')).toHaveCount(0)
-  await expect(otherBoard.locator('section[aria-live="polite"] strong')).toHaveText(dailyTargetR().title)
+  await expect(otherBoard.getByRole('region', { name: 'Resultado' }).locator('.font-display')).toHaveText(dailyTargetR().title)
 })

@@ -1,8 +1,13 @@
 // Tipos de catalog.json y su validador (lo usan backend y script de catalogo).
 export interface Game { id: string; name: string }
 export interface Song {
-  id: string; title: string; games: string[]; clipKey: string; startSec: number
-  enabled: boolean; reviewed: boolean; source: { youtubeId: string; videoTitle: string; durationSec?: number }
+  id: string; title: string; games: string[]; clipKey: string
+  /** Segundo de la fuente donde empieza el clip. Automatico (silencio inicial, DEC-47) salvo `startSecManual`. */
+  startSec: number
+  /** true: startSec lo fijo una persona y la medicion automatica nunca lo toca. */
+  startSecManual?: boolean
+  enabled: boolean; reviewed: boolean
+  source: { youtubeId: string; videoTitle: string; durationSec?: number; leadingSilenceSec?: number }
 }
 export interface Catalog { version: 1; generatedAt: string; games: Game[]; songs: Song[] }
 export type ValidationResult = { ok: true; catalog: Catalog } | { ok: false; errors: string[] }
@@ -111,7 +116,13 @@ function validateSong(
   if (typeof source.youtubeId !== 'string' || !YOUTUBE_ID_PATTERN.test(source.youtubeId)) {
     errors.push(`${label}: source.youtubeId invalido ${describeValue(source.youtubeId)} (se esperan 11 caracteres [A-Za-z0-9_-])`)
   }
-  const { durationSec } = source
+  const { durationSec, leadingSilenceSec } = source
+  if (leadingSilenceSec !== undefined && (typeof leadingSilenceSec !== 'number' || !Number.isFinite(leadingSilenceSec) || leadingSilenceSec < 0)) {
+    errors.push(`${label}: source.leadingSilenceSec debe ser un numero finito >= 0 (recibido ${describeValue(leadingSilenceSec)})`)
+  }
+  if (song.startSecManual !== undefined && typeof song.startSecManual !== 'boolean') {
+    errors.push(`${label}: startSecManual debe ser booleano`)
+  }
   if (durationSec !== undefined) {
     if (typeof durationSec !== 'number' || !Number.isFinite(durationSec) || durationSec <= 0) {
       errors.push(`${label}: source.durationSec debe ser un numero finito > 0 (recibido ${describeValue(durationSec)})`)

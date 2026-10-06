@@ -206,6 +206,33 @@ Datos de referencia (DEC-45): rampa de ganancia con `setValueAtTime(1,t0)`, `set
 5. E2E-03 usa un rango de duración porque cada navegador puede recortar el retardo del codificador de forma distinta.
 6. Resuelto (DEC-44, BE-CLP-03): el backend valida el tamano y los 5 offsets intermedios de cualquier intento, un fallo de formato no consume el ticket y la lectura invalida se expulsa de la cache (la siguiente peticion relee del almacen).
 
+### 0.3 Rediseño visual (DEC-46, rama `feature/rediseno-ui`)
+
+Prevalece sobre las filas anteriores con el mismo ID. El comportamiento no cambia salvo: el botón rojo PAUSA y REANUDA de verdad (`ClipPlayer.pause()`; `play()` continúa desde el offset con `start(t0, offset)` y fundido recalculado; el punto de reanudación vuelve a 0 al acabar el fragmento o cambiar de intento; antes reiniciaba); la fila actual del historial dice "Escuchando N s…" (antes "Intento N"); en listas el juego sale sin el prefijo "Pokémon "; el botón del modo libre se ve "Libre" con nombre accesible "Partida libre".
+
+**Modificados (selectores y textos, sin cambio de intención):**
+
+| ID | Cambio |
+|---|---|
+| E2E-01, 02, 04, 05, 06, 08, 10..12, 16, 31, 38, 43, 49, 55, 58, 59, 61, 73, 75 | Resultado: región "Resultado" y título en `<h2>` en mayúsculas ("¡ACERTASTE EN EL INTENTO n!" / "¡LA CANCIÓN SE ESCAPÓ!"); la canción revelada va en `.font-display`. Filas del historial: "Escuchando N s…" en vez de "Intento N" |
+| E2E-04 | Al terminar el historial solo muestra los intentos usados (n filas, no 6) |
+| E2E-13..19, 21 | Casillas del filtro con nombre corto ("Game Charlie") y contador al final: el Page Object `gameCheckbox` lo resuelve a partir del nombre completo |
+| E2E-20 | La opción del buscador muestra el juego sin prefijo ("Game Bravo") |
+| E2E-39 | Colores del tema: oscuro `rgb(20,21,24)` / `rgb(236,234,228)`; claro `rgb(236,234,228)` / `rgb(23,24,27)` |
+| E2E-42 | Repetir el clip: play mientras suena pausa, así que se espera a que termine (`data-playing=false`) antes de cada repetición; tras acabar, la repetición empieza desde 0 |
+| E2E-53 | Fondo oscuro `rgb(20,21,24)` |
+| E2E-79 | Nombre accesible del botón (`Reproducir N s` o `Reanudar` si la interrupción lo deja con posición > 0) en vez de texto |
+
+**Nuevos:**
+
+| ID | Nivel | Descripción | Resultado esperado | Cubre | P |
+|---|---|---|---|---|---|
+| E2E-80 | e2e | Forma de onda: en cada uno de los 6 intentos hay 48 barras; las `3·N` primeras (audio desbloqueado) tienen altura de datos reales y las restantes son planas (12 %); sin saltar no se pide ni cambia nada posterior al corte | Onda solo con audio desbloqueado | DEC-46, CA-1 | A |
+| E2E-81 | e2e | Play/pausa real: el botón pasa de "Reproducir N s" a "Pausar" y, en pausa con posición > 0, a "Reanudar" ("Reproducir N s" con posición 0, al acabar el fragmento o al cambiar de intento); pausar detiene la fuente y mantiene la posición; reanudar arranca `start(t0, offset)` con el offset de la pausa (no 0) y la barra continúa desde ahí; al acabar el fragmento la barra queda al final pero la siguiente reproducción empieza en offset 0; cambiar de intento deja la posición en 0 | Pausa sin reinicio | DEC-46, DEC-45 | A |
+| E2E-84 | e2e | Fuentes alojadas (`@fontsource`): ninguna petición a `fonts.googleapis.com` ni `fonts.gstatic.com` al cargar y cambiar de modo, ni `<link>` a Google Fonts | 0 peticiones | DEC-46 | A |
+| E2E-82 | e2e | Modo oscuro con `emulateMedia({colorScheme})` en caliente: fondo y carcasa cambian; contraste ≥ 4,5:1 en texto, botón Saltar y buscador, en claro y oscuro | Legible en ambos | DEC-46, RQ §6 | A |
+| E2E-83 | e2e | Layout a 375 y 1440 px: sin scroll horizontal (también con el desplegable abierto y en modo libre), controles ≥ 44 px dentro del viewport; en escritorio leyenda visible e historial a la derecha del reproductor; en móvil leyenda oculta e historial debajo | Layout correcto | DEC-46, CA-8 | A |
+
 ## 1. Alcance
 
 Dentro:
@@ -546,6 +573,7 @@ Resto del script:
 | SC-PT-02 | unit | Varios juegos, "OST", "(Extended)", unicode | - | Sin excepción | RQ §4 | M |
 | SC-PT-03 | unit | No parseable | - | Título completo, `games: []`; nunca lanza | DEC-26 | A |
 | SC-PT-04 | unit | Cadena vacía | - | Seguro | RQ §4 | B |
+| SC-FE-01..03 [NUEVO] | unit | `fetch` con yt-dlp simulado: una playlist guarda sus entradas en `playlist.json` y las descarga; una URL de vídeo suelto (el JSON no trae `entries`) cuenta como una lista de un vídeo; el formato pedido es `bestaudio[ext=m4a]/bestaudio` (YouTube da 403 a parte de las descargas webm) | `--data-dir` temporal | `playlist.json` correcto y descarga pedida | AR §6 | M |
 | SC-UP-01 | unit | `upload` ejecuta `validate` primero; si falla no sube | Cliente S3 simulado | 0 subidas | AR §6 | A |
 | SC-UP-02 | unit | Clips y por último `catalog.json` | Mock orden | Catálogo el último | AR §6 | A |
 | SC-UP-03 | unit | Nunca sube `data/work/` | - | 0 claves de work | DEC-16 | A |
@@ -807,6 +835,56 @@ Interfaz:
 | FE-AUD-03 | unit | Clip 410/404: nuevo ticket y reintento una vez | - | Recupera | DEC-04 | M |
 | FE-AUD-04 | unit | `revokeObjectURL` al cambiar de intento | Spy | Sin fugas | DEC-05 | B |
 | FE-UI-01 | unit | Textos en español; títulos y juegos tal cual | - | Aserciones | RQ §6 | B |
+
+### 2.15b Frontend - rediseño visual (DEC-46; rama `feature/rediseno-ui`)
+
+Marcas de la rama: [NUEVO] caso nuevo; [MOD] caso cuyo contenido cambia por el diseño. Todos con vitest + Testing Library; la onda, los colores y el logo no necesitan navegador.
+
+| ID | Nivel | Descripción | Resultado esperado | Cubre | P |
+|---|---|---|---|---|---|
+| FE-DSN-01 [NUEVO] | unit | Mapa de colores por juego: conocidos usan el mapa; un juego nuevo recibe un color de la paleta de reserva, estable por id; ids raros (`__proto__`, vacío) no lanzan | Color válido siempre | DEC-46 | A |
+| FE-DSN-02 [NUEVO] | unit | `shortGameName` quita el prefijo "Pokémon " (con o sin acento) | Nombre corto | DEC-46 | M |
+| FE-DSN-03 [NUEVO] | unit | `formatClock` (m:ss truncado, sin NaN) y `formatDayLabel` ("06 OCT") | Formatos exactos | DEC-46 | M |
+| FE-DSN-04 [NUEVO] | unit | Logo: h1 en una línea con fuente del logo; `@font-face` con el .ttf del repo; contorno azul; el .ttf es TrueType con glifo "é"; licencia en README | Cumple | DEC-46 | A |
+| FE-DSN-05 [NUEVO] | unit | `index.html` carga Rubik, Space Mono y Lilita One | Cumple | DEC-46 | B |
+| FE-DSN-06..08 [NUEVO] | unit | Player: "INTENTO n/6", lectura `m:ss / m:ss`, escala de segundos, lente y 3 luces; botón play con nombre "Reproducir N s"/"Pausar"/"Cargando audio..."; "Saltar +N s" y "(último intento)"; táctil ≥ 44 px; error de audio con reintento; sin NaN | Cumple | DEC-46, RQ §6 | A |
+| FE-DSN-09 [NUEVO] | unit | Resultado: "¡ACERTASTE EN EL INTENTO n!" / "¡LA CANCIÓN SE ESCAPÓ!", REGISTRADA / SIN INTENTOS, "Era…" solo en derrota, fila de 6 marcas con descripción accesible, botón rojo del embed | Cumple | DEC-46, DEC-41 | A |
+| FE-DSN-10 [NUEVO] | unit | Historial: solo los intentos usados al terminar (01..n); icono y etiqueta accesible por resultado; juego sin prefijo y "juego correcto" solo en ámbar; en curso, fila "Escuchando N s…" y pendientes con su duración | Cumple | DEC-46 | A |
+| FE-DSN-11 [NUEVO] | unit | Cabecera: logo h1, subtítulo "RETO DEL DÍA · dd MES" / "MODO LIBRE" y conmutador Diario/Libre (nombre accesible "Partida libre") | Cumple | DEC-46 | A |
+| FE-DSN-12 [NUEVO] | unit | Leyenda "CLAVE" oculta en móvil (`hidden`) y visible en escritorio (`lg:flex`) | Cumple | DEC-46 | M |
+| FE-DSN-13 [NUEVO] | unit | Filtro del modo libre: "n DE m JUEGOS", contador por juego y total de canciones distintas, cuadradito de color, sin total con el filtro vacío | Cumple | DEC-46 | A |
+| FE-WF-01..08 [NUEVO] | unit | `computePeaks`: 48 barras; solo lee muestras con índice < `unlockedSec * sampleRate` (Proxy que registra lecturas); el audio posterior no cambia el resultado; normalización; buffer corto; varios canales; silencio; sin muestras → null; `unlockedSec` ≤ 0 | Cumple | DEC-46, CA-1 | A |
+| FE-WF-09..12 [NUEVO] | unit | Componente de onda: picos reales en las desbloqueadas y planas en las bloqueadas; neutra sin datos; barras reproducidas distintas; decorativa y sin NaN | Cumple | DEC-46 | A |
+| FE-WF-13 [NUEVO] | unit | `ClipPlayer.onDecoded`: entrega solo el buffer del intento actual; suelta el anterior (null) al preparar otro y tras un prepare fallido; en la ruta `<audio>` siempre null | Cumple | DEC-46 | A |
+| FE-WF-14 [NUEVO] | unit | Tablero: con buffer decodificado con muestras la onda es real y solo normaliza con el audio desbloqueado; sin muestras (jsdom) es neutra | Cumple | DEC-46 | A |
+| FE-DSN-07 (tablero) [NUEVO] | unit | Pulsar play y luego "Pausar" para la fuente sin cerrar el contexto | Cumple | DEC-46 | M |
+| FE-PLY-11..15 [NUEVO] | unit | Pausa y reanudación con Web Audio: `pause()` para la fuente y emite la posición; `play()` relanza con `start(t0, offset)` y fundido recalculado para el tramo restante; doble pausa y pausa sin sonar no hacen nada; al acabar el fragmento, cambiar de intento, `stop()` u offset < 50 ms del final → desde 0; si ya suena, `play()` reinicia; una interrupción del sistema cuenta como pausa | Cumple | DEC-45, DEC-46 | A |
+| FE-PLY-18 [NUEVO] | unit | `pause()` sin chasquido: rampa de ganancia a 0 en 10 ms y `stop(t + 0.01)`; la posición guardada es la de pulsar; la fuente apagada libera nodos sin emitir ni cortar la reanudación; dentro del fundido final no hay rampa nueva | Cumple | DEC-45, DEC-46 | M |
+| FE-PLY-19 [NUEVO] | unit | Sonando, un `prepare` nuevo emite `{playing:false, positionSec:0}` al empezar y cancela el rAF mientras se descarga | Cumple | DEC-46 | M |
+| FE-DSN-16 [NUEVO] | unit | Botón rojo: "Reanudar" en pausa a mitad de clip, "Reproducir N s" en 0 o al acabar, "Pausar" sonando | Cumple | DEC-46 | M |
+| FE-PLY-16 [NUEVO] | unit | Ruta `<audio>`: `pause()`/`play()` sin reiniciar `currentTime`; `ended` y cambio de intento reinician | Cumple | DEC-46 | A |
+| FE-PLY-17 [NUEVO] | unit | Tablero: Pausar deja barra y lectura en la posición pausada; Reproducir continúa desde ahí; nombre accesible Reproducir N s / Pausar | Cumple | DEC-46 | A |
+| FE-WA-18 [MOD] | unit | La interfaz pública del player pasa a `prepare/play/pause/stop/subscribe/dispose` (`pause` es nuevo) | Cumple | DEC-46 | M |
+| FE-DSN-04 / FE-DSN-05 [MOD] | unit | La fuente del logo documenta origen y estado de la licencia en el README (decisión del usuario); Rubik, Space Mono y Lilita One se sirven desde `@fontsource/*` y `index.html` no llama a Google Fonts | Cumple | DEC-46 | M |
+| FE-DSN-14 [NUEVO] | unit | `AttemptList` y `SongSearch` no recalculan los índices del catálogo con las mismas props (repintado por frame) | Cumple | DEC-46 | M |
+| FE-DSN-15 [NUEVO] | unit | El conmutador Diario/Libre y sus ancestros no usan `overflow-hidden` (aro de foco no recortado); extremos redondeados en los botones | Cumple | DEC-46, WCAG 2.4.7 | A |
+| FE-GAM-04 / AttemptList [MOD] | unit | La fila de intento actual ya no dice "Intento 4" sino "Escuchando 7 s…" (cambio deliberado del diseño; el "INTENTO n/6" pasa a la carcasa del reproductor) | Cumple | DEC-46 | M |
+
+Textos que el diseño cambia sin tocar tests: el botón "Partida libre" pasa a mostrar "Libre" (mantiene el nombre accesible "Partida libre"); la etiqueta "juego acertado" sigue siendo la accesible (`sr-only`) y en pantalla se lee "juego correcto".
+
+### 2.11b Scripts de catálogo - silencio inicial (DEC-47)
+
+| ID | Nivel | Descripción | Resultado esperado | P |
+|---|---|---|---|---|
+| SC-SIL-01 [NUEVO] | unit | `parseLeadingSilence`: silencio que empieza en 0 (o -0,001) → `silence_end`; que no empieza al principio → 0; sin silencedetect → 0; sin fin → 10 s; solo el primero; acotado a [0, 10] | Cumple | A |
+| SC-SIL-02 [NUEVO] | unit | Argumentos: `-t 10`, `silencedetect=noise=-50dB:d=0.1`, ruta absoluta (ids con "-"), salida nula, ruta con espacios/comillas como un solo argumento | Cumple | A |
+| SC-SIL-03 [NUEVO] | unit | `measureLeadingSilence` lee stderr del runner; ffmpeg ausente → error que lo nombra | Cumple | M |
+| SC-SIL-04 [NUEVO] | unit | `autoStartSec`: floor a 0,01 s menos 0,05 s, nunca negativo (0,47→0,42; 0,05→0; 10→9,95) | Cumple | A |
+| SC-SIL-05 [NUEVO] | unit | `applyLeadingSilence`: `startSec` 0 sin marca → automático; `startSecManual` o `startSec` ≠ 0 → intacto (se guarda la medida); una sola vez | Cumple | A |
+| SC-SIL-06..07 [NUEVO] | unit | `draft`: fija `startSec` de las nuevas; idempotente; existentes con `startSec` 0 pasan a automático; manual respetado; fallo de medida no aborta; la regla de corta usa el `startSec` efectivo | Cumple | A |
+| SC-SIL-08..09 [NUEVO] | unit | `build`: mide las activas sin medida y recompila con el nuevo `startSec`; segundo build no mide ni corta; borrar la medida fuerza otra; manual respetado; desactivadas y cortas no se miden; fallo de silencedetect no aborta | Cumple | A |
+| SC-SIL-10 [NUEVO] | unit (cond.) | Con ffmpeg real sobre ficheros sintéticos: ~0,5 s y ~2,4 s medidos (±50 ms), tono sin silencio → 0, silencio > 10 s → 10, nombre con "-" y espacios | Cumple (se omite sin ffmpeg) | A |
+| SC-DR-03 / SC-BU-05 / SC-CLP-01 [MOD] | unit | Las entradas ahora también reciben `source.leadingSilenceSec` (0 con el runner simulado) y la cuenta de llamadas a ffmpeg de `build` excluye la medición del silencio | Cumple | M |
 
 ### 2.16 Frontend - barra de reproducción (DEC-42)
 

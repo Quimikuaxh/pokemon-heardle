@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { PublicCatalog } from '../../../shared/api'
 import { CLIP_SECONDS } from '../../../shared/rules'
 import { createClipPlayer } from '../audio/clipPlayer'
@@ -13,7 +13,12 @@ import { FilterPanel } from './FilterPanel'
 import { NoticeBanner } from './NoticeBanner'
 import { ResultPanel } from './ResultPanel'
 import { SongSearch } from './SongSearch'
-import { ClipProgressBar } from './ClipProgressBar'
+import { Legend } from './Legend'
+import { NextDayNote } from './NextDayNote'
+import { Player } from './Player'
+import type { AudioStatus } from './Player'
+import { computePeaks } from '../audio/waveform'
+import type { AudioBufferLike } from '../audio/clipPlayer'
 
 interface GameBoardProps {
   mode: 'daily' | 'unlimited'
@@ -23,8 +28,6 @@ interface GameBoardProps {
   store: Store
 }
 
-type AudioStatus = 'loading' | 'ready' | 'error'
-
 export function GameBoard({ mode, controller, api, catalog, store }: GameBoardProps) {
   const state = useGameState(controller)
   const { view, phase, notice, busy, gameSeq } = state
@@ -32,6 +35,7 @@ export function GameBoard({ mode, controller, api, catalog, store }: GameBoardPr
   const [audio, setAudio] = useState<{ key: string; status: AudioStatus } | null>(null)
   const [audioRetry, setAudioRetry] = useState(0)
   const [playback, setPlayback] = useState({ playing: false, positionSec: 0 })
+  const [decoded, setDecoded] = useState<{ attemptKey: string; buffer: AudioBufferLike | null } | null>(null)
 
   const player = useMemo(
     () =>
@@ -41,6 +45,7 @@ export function GameBoard({ mode, controller, api, catalog, store }: GameBoardPr
         createObjectURL: (blob) => URL.createObjectURL(blob),
         revokeObjectURL: (url) => URL.revokeObjectURL(url),
         createAudio: () => new Audio(),
+        onDecoded: setDecoded,
       }),
     [api, controller],
   )
@@ -97,80 +102,88 @@ export function GameBoard({ mode, controller, api, catalog, store }: GameBoardPr
     void controller.startUnlimited()
   }
 
+  // La onda usa solo el buffer del intento actual y solo su audio desbloqueado (nada de lo posterior).
+  const peaks = useMemo(
+    () => (decoded && decoded.attemptKey === attemptKey && seconds ? computePeaks(decoded.buffer, seconds) : null),
+    [decoded, attemptKey, seconds],
+  )
+
+  const selectSong = useCallback((songId: string) => void controller.guess(songId), [controller])
+  const togglePlay = () => (playback.playing ? player.pause() : player.play())
+
   return (
-    <section className="grid gap-4" aria-label={mode === 'daily' ? 'Partida diaria' : 'Partida libre'}>
-      {mode === 'daily' && view?.date && <p className="text-sm text-slate-600 dark:text-slate-300">Canción del día {view.date}</p>}
-      <NoticeBanner notice={notice} />
-      {store.writeFailed && (
-        <p role="status" className="text-sm text-amber-700 dark:text-amber-300">
-          Este navegador no permite guardar datos: no se conservará tu progreso al recargar.
-        </p>
-      )}
+    <section
+      aria-label={mode === 'daily' ? 'Partida diaria' : 'Partida libre'}
+      className="mx-auto flex w-full max-w-[460px] flex-col gap-3.5 lg:grid lg:max-w-[1040px] lg:grid-cols-[200px_460px_260px] lg:items-start lg:justify-center lg:gap-12"
+    >
+      <Legend />
 
-      {phase === 'loading' && <p role="status">Cargando partida...</p>}
+      <div className="flex min-w-0 flex-col gap-3.5 lg:gap-[18px]">
+        <NoticeBanner notice={notice} />
+        {store.writeFailed && (
+          <p role="status" className="m-0 text-sm font-medium text-amber-text">
+            Este navegador no permite guardar datos: no se conservará tu progreso al recargar.
+          </p>
+        )}
 
-      {phase === 'idle' && mode === 'daily' && (
-        <button
-          type="button"
-          className="min-h-11 rounded-lg bg-indigo-600 px-4 font-semibold text-white"
-          onClick={() => void controller.openDaily()}
-        >
-          Cargar la partida de hoy
-        </button>
-      )}
+        {phase === 'loading' && (
+          <p role="status" className="m-0 text-center text-muted">
+            Cargando partida...
+          </p>
+        )}
 
-      {view && <AttemptList view={view} catalog={catalog} />}
-
-      {isPlaying && (
-        <>
-          <ClipProgressBar
-            clipSeconds={view.clipSeconds}
-            unlockedSec={seconds ?? 0}
-            positionSec={playback.positionSec}
-            playing={playback.playing}
-          />
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              disabled={audioStatus !== 'ready'}
-              onClick={() => player.play()}
-              className="min-h-11 min-w-32 rounded-full bg-indigo-600 px-5 font-semibold text-white disabled:opacity-40"
-            >
-              {audioStatus === 'loading' ? 'Cargando audio...' : `▶ Reproducir ${seconds} s`}
-            </button>
-            {audioStatus === 'error' && (
-              <button
-                type="button"
-                className="min-h-11 rounded-lg border border-rose-500 px-3 text-sm"
-                onClick={() => setAudioRetry((count) => count + 1)}
-              >
-                No se pudo cargar el audio. Reintentar
-              </button>
-            )}
-          </div>
-          <SongSearch catalog={catalog} guesses={view.guesses} readOnly={busy} onSelect={(songId) => void controller.guess(songId)} />
+        {phase === 'idle' && mode === 'daily' && (
           <button
             type="button"
-            disabled={busy}
-            onClick={() => void controller.skip()}
-            className="min-h-11 rounded-lg border border-slate-400 px-4 font-medium disabled:opacity-40"
+            className="min-h-11 rounded-full border-[3px] border-edge bg-lamp-red px-4 font-semibold text-white shadow-[0_4px_0_var(--edge)]"
+            onClick={() => void controller.openDaily()}
           >
-            {nextSeconds ? `Saltar (+${nextSeconds - (seconds ?? 0)} s)` : 'Saltar (último intento)'}
+            Cargar la partida de hoy
           </button>
-        </>
+        )}
+
+        {isPlaying && view && (
+          <>
+            <Player
+              attempt={view.attempt}
+              maxAttempts={view.maxAttempts}
+              clipSeconds={view.clipSeconds}
+              unlockedSec={seconds ?? 0}
+              nextSeconds={nextSeconds}
+              positionSec={playback.positionSec}
+              playing={playback.playing}
+              audioStatus={audioStatus}
+              peaks={peaks}
+              skipDisabled={busy}
+              onTogglePlay={togglePlay}
+              onSkip={() => void controller.skip()}
+              onRetryAudio={() => setAudioRetry((count) => count + 1)}
+            />
+            <SongSearch catalog={catalog} guesses={view.guesses} readOnly={busy} onSelect={selectSong} />
+          </>
+        )}
+
+        {phase === 'finished' && view && <ResultPanel view={view} showNextDayNote={false} onOpenFullSong={() => player.stop()} />}
+
+        {mode === 'unlimited' && phase !== 'loading' && !view && (
+          <FilterPanel games={catalog.games} songs={catalog.songs} selected={filter} onChange={changeFilter} onStart={startUnlimited} />
+        )}
+        {mode === 'unlimited' && phase !== 'loading' && view && (
+          <details open={!isPlaying} className="rounded-xl">
+            <summary className="min-h-11 cursor-pointer py-2.5 font-semibold">
+              {isPlaying ? 'Filtro para la próxima partida' : 'Nueva partida'}
+            </summary>
+            <FilterPanel games={catalog.games} songs={catalog.songs} selected={filter} onChange={changeFilter} onStart={startUnlimited} />
+          </details>
+        )}
+      </div>
+
+      {view && <AttemptList view={view} catalog={catalog} />}
+      {phase === 'finished' && view?.mode === 'daily' && (
+        <div className="lg:col-start-2">
+          <NextDayNote />
+        </div>
       )}
-
-      {phase === 'finished' && view && <ResultPanel view={view} onOpenFullSong={() => player.stop()} />}
-
-      {mode === 'unlimited' && phase !== 'loading' && (
-        <details open={!isPlaying} className="rounded-xl">
-          <summary className="min-h-11 cursor-pointer py-2 font-semibold">
-            {isPlaying ? 'Filtro para la próxima partida' : 'Nueva partida'}
-          </summary>
-          <FilterPanel games={catalog.games} selected={filter} onChange={changeFilter} onStart={startUnlimited} />
-        </details>
-      )}
-
     </section>
   )
 }

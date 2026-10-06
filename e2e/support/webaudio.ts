@@ -9,7 +9,7 @@ export interface WebAudioLog {
   /** Llamadas a setValueAtTime / linearRampToValueAtTime en orden. */
   params: Array<{ fn: string; value: number; time: number }>
   /** `when` de cada source.start() y currentTime del contexto en ese momento. */
-  starts: Array<{ when: number; now: number }>
+  starts: Array<{ when: number; now: number; offset: number }>
   /** Llamadas a source.stop(). */
   stops: number
   resumes: number
@@ -40,9 +40,9 @@ export const INSTRUMENT_WEBAUDIO = () => {
     const ctx = this
     const source = create.call(this)
     const start = source.start
-    source.start = function (when?: number) {
-      log.starts.push({ when: when ?? 0, now: ctx.currentTime })
-      return start.call(source, when)
+    source.start = function (when?: number, offset?: number, duration?: number) {
+      log.starts.push({ when: when ?? 0, now: ctx.currentTime, offset: offset ?? 0 })
+      return start.call(source, when, offset, duration)
     }
     const stop = source.stop
     source.stop = function (when?: number) {

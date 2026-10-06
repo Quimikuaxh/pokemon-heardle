@@ -72,3 +72,69 @@ describe('GameBoard + Web Audio', () => {
     expect(screen.getByRole('button', { name: /reproducir 1 s/i })).toBeTruthy()
   })
 })
+
+describe('GameBoard: onda real y pausa (DEC-46)', () => {
+  function stubRealBuffer() {
+    const data = new Float32Array(44100 * 2)
+    data.forEach((_, i) => (data[i] = i < 44100 ? 0.2 : 0.9))
+    const buffer = { duration: 2, sampleRate: 44100, numberOfChannels: 1, getChannelData: () => data }
+    class Real extends FakeContext {
+      constructor() {
+        super()
+        this.decodeAudioData = vi.fn(async () => buffer) as any
+      }
+    }
+    vi.stubGlobal('AudioContext', Real)
+  }
+
+  it('FE-WF-14 con un buffer decodificado la onda es real y solo usa el audio desbloqueado del intento (1 s)', async () => {
+    stubRealBuffer()
+    const { container } = board()
+    await screen.findByRole('button', { name: /reproducir 1 s/i })
+    expect(container.querySelector('[data-waveform]')!.getAttribute('data-waveform')).toBe('real')
+    const bars = [...container.querySelectorAll('[data-bar]')] as HTMLElement[]
+    // el segundo de audio (0,9) posterior al corte no existe en la onda: normaliza con lo desbloqueado (0,2)
+    expect(new Set(bars.slice(0, 3).map((b) => b.style.height))).toEqual(new Set(['100%']))
+    expect(new Set(bars.slice(3).map((b) => b.style.height)).size).toBe(1)
+  })
+
+  it('FE-WF-14 sin AudioBuffer con muestras (jsdom) la onda es neutra', async () => {
+    const { container } = board()
+    await screen.findByRole('button', { name: /reproducir 1 s/i })
+    expect(container.querySelector('[data-waveform]')!.getAttribute('data-waveform')).toBe('neutral')
+  })
+
+  it('FE-DSN-07 pulsar play y luego "Pausar" detiene la fuente sin cerrar el contexto', async () => {
+    board()
+    fireEvent.click(await screen.findByRole('button', { name: /reproducir 1 s/i }))
+    const ctx = FakeContext.instances[0]
+    fireEvent.click(await screen.findByRole('button', { name: 'Pausar' }))
+    expect(ctx.sources[0].stop).toHaveBeenCalled()
+    expect(ctx.close).not.toHaveBeenCalled()
+    expect(await screen.findByRole('button', { name: /reproducir 1 s/i })).toBeTruthy()
+  })
+})
+
+describe('GameBoard: pausa y reanudacion con el boton rojo (DEC-46)', () => {
+  it('FE-PLY-17 Pausar deja la barra y la lectura en la posicion pausada y Reproducir continua desde ahi', async () => {
+    board()
+    fireEvent.click(await screen.findByRole('button', { name: /reproducir 1 s/i }))
+    const ctx = FakeContext.instances[0]
+    const t0 = ctx.currentTime
+    ctx.currentTime = t0 + 0.4
+    await act(async () => frames.tick())
+    fireEvent.click(screen.getByRole('button', { name: 'Pausar' }))
+    expect(Number(screen.getByRole('progressbar').getAttribute('aria-valuenow'))).toBeCloseTo(0.4, 5)
+    expect(screen.getByText('0:00 / 0:01')).toBeTruthy()
+    ctx.currentTime = t0 + 5
+    fireEvent.click(screen.getByRole('button', { name: 'Reanudar' }))
+    expect(ctx.sources[1].start).toHaveBeenCalledWith(t0 + 5, expect.closeTo(0.4, 5))
+  })
+
+  it('FE-PLY-17 el nombre accesible alterna Reproducir N s / Pausar / Reproducir N s', async () => {
+    board()
+    fireEvent.click(await screen.findByRole('button', { name: /reproducir 1 s/i }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Pausar' }))
+    expect(await screen.findByRole('button', { name: /reproducir 1 s/i })).toBeTruthy()
+  })
+})

@@ -12,6 +12,7 @@ import { draftCatalog } from './draft'
 import { defaultRunner, findSourceFile, measureDuration } from './duration'
 import type { Runner } from './duration'
 import { clipArgs, clipOutputPath, masterArgs } from './ffmpegArgs'
+import { applyLeadingSilence, measureLeadingSilence } from './silence'
 import { listAvailableVideos } from './playlist'
 import { createS3ObjectStore, readS3Settings } from './s3ObjectStore'
 import { runUpload } from './upload'
@@ -106,14 +107,17 @@ async function fetchPlaylist(paths: DataPaths, run: Runner, playlistUrl: string,
   if (!/^https?:\/\//.test(playlistUrl)) throw new Error('La URL de la playlist debe empezar por http:// o https://')
   mkdirSync(paths.work, { recursive: true })
   const { stdout } = await run('yt-dlp', ['--flat-playlist', '-J', '--', playlistUrl])
-  const videos = listAvailableVideos(JSON.parse(stdout).entries ?? [])
+  // Una URL de vídeo suelto (sin lista) devuelve el propio vídeo en lugar de `entries`.
+  const info = JSON.parse(stdout)
+  const videos = listAvailableVideos(info.entries ?? (info.id ? [info] : []))
   writeJson(paths.playlist, videos)
   io.log(`Playlist: ${videos.length} videos. Descargando audio nuevo...`)
   try {
     await run('yt-dlp', [
       '--ignore-errors',
+      // m4a primero: YouTube responde 403 a parte de las descargas del formato webm (251).
       '-f',
-      'bestaudio',
+      'bestaudio[ext=m4a]/bestaudio',
       '--download-archive',
       paths.archive,
       '-o',
@@ -130,44 +134,79 @@ async function fetchPlaylist(paths: DataPaths, run: Runner, playlistUrl: string,
 
 type Measurement = number | null | Error
 
-/** Aplica una medicion ya hecha a `song`: guarda durationSec y desactiva la corta. Nunca activa nada. */
-function applyMeasurement(song: Song, measurement: Measurement | undefined, io: Io): void {
-  if (song.source.durationSec !== undefined || measurement === undefined) return
-  if (measurement instanceof Error) {
-    io.error(`Aviso: no se pudo medir ${song.id}: ${measurement.message}`)
+/** Mediciones de la fuente de un video: duracion (ffprobe) y silencio inicial (ffmpeg silencedetect). */
+interface SourceMeasurement {
+  duration?: Measurement
+  leadingSilence?: number | Error
+}
+
+/**
+ * Aplica las mediciones ya hechas a `song`: silencio inicial (mueve startSec si es automatico, DEC-47), duracion y
+ * desactivacion de la corta con el startSec EFECTIVO. Nunca activa nada. Cada campo solo se rellena una vez.
+ */
+function applyMeasurement(song: Song, measurement: SourceMeasurement | undefined, io: Io): void {
+  if (!measurement) return
+  const { leadingSilence, duration } = measurement
+  if (song.source.leadingSilenceSec === undefined && leadingSilence !== undefined) {
+    if (leadingSilence instanceof Error) io.error(`Aviso: no se pudo medir el silencio inicial de ${song.id}: ${leadingSilence.message}`)
+    else {
+      const before = song.startSec
+      applyLeadingSilence(song, leadingSilence)
+      if (song.startSec !== before) io.log(`${song.id}: empieza en ${song.startSec} s (silencio inicial de ${leadingSilence} s).`)
+    }
+  }
+  if (song.source.durationSec !== undefined || duration === undefined) return
+  if (duration instanceof Error) {
+    io.error(`Aviso: no se pudo medir ${song.id}: ${duration.message}`)
     return
   }
-  if (measurement === null) {
+  if (duration === null) {
     io.error(`Aviso: no se pudo medir la duracion de ${song.id} (ffprobe no devolvio un valor).`)
     return
   }
-  song.source.durationSec = measurement
-  if (song.enabled && tooShort(measurement, song.startSec)) {
+  song.source.durationSec = duration
+  if (song.enabled && tooShort(duration, song.startSec)) {
     song.enabled = false
-    io.log(`Aviso: ${song.id} es demasiado corta (${measurement} s, hacen falta ${song.startSec + 16} s): desactivada.`)
+    io.log(`Aviso: ${song.id} es demasiado corta (${duration} s, hacen falta ${song.startSec + 16} s): desactivada.`)
   }
 }
 
-// ffprobe tarda: las mediciones se hacen ANTES de store.update. Dentro del mutator solo hay codigo sincrono,
+const asError = (error: unknown) => (error instanceof Error ? error : new Error(String(error)))
+
+// ffprobe y ffmpeg tardan: las mediciones se hacen ANTES de store.update. Dentro del mutator solo hay codigo sincrono,
 // asi una edicion del admin hecha mientras se mide no se pierde (lectura-modificacion-escritura corta).
 async function measureNewSources(
   existing: Catalog,
   videos: Array<{ youtubeId: string }>,
   paths: DataPaths,
   run: Runner,
-): Promise<Map<string, Measurement>> {
-  const alreadyMeasured = new Set(existing.songs.filter((song) => song.source.durationSec !== undefined).map((song) => song.source.youtubeId))
+): Promise<Map<string, SourceMeasurement>> {
+  const hasDuration = new Set(existing.songs.filter((song) => song.source.durationSec !== undefined).map((song) => song.source.youtubeId))
+  const hasSilence = new Set(existing.songs.filter((song) => song.source.leadingSilenceSec !== undefined).map((song) => song.source.youtubeId))
   const candidates = new Set([...videos.map((video) => video.youtubeId), ...existing.songs.map((song) => song.source.youtubeId)])
-  const measurements = new Map<string, Measurement>()
+  const measurements = new Map<string, SourceMeasurement>()
   for (const youtubeId of candidates) {
-    if (alreadyMeasured.has(youtubeId)) continue
+    const needDuration = !hasDuration.has(youtubeId)
+    const needSilence = !hasSilence.has(youtubeId)
+    if (!needDuration && !needSilence) continue
     const file = findSourceFile(paths.work, youtubeId)
     if (!file) continue
-    try {
-      measurements.set(youtubeId, await measureDuration(file, run))
-    } catch (error) {
-      measurements.set(youtubeId, error as Error)
+    const measurement: SourceMeasurement = {}
+    if (needDuration) {
+      try {
+        measurement.duration = await measureDuration(file, run)
+      } catch (error) {
+        measurement.duration = asError(error)
+      }
     }
+    if (needSilence) {
+      try {
+        measurement.leadingSilence = await measureLeadingSilence(file, run)
+      } catch (error) {
+        measurement.leadingSilence = asError(error)
+      }
+    }
+    measurements.set(youtubeId, measurement)
   }
   return measurements
 }
@@ -201,27 +240,37 @@ function sourceFingerprint(song: Song, paths: DataPaths): string {
   return `${stats.size}-${Math.floor(stats.mtimeMs)}`
 }
 
-// Mide SIEMPRE las fuentes activas antes de cortar y desactiva las cortas. Las mediciones se completan
-// antes de escribir: si ffprobe falla no se modifica el catalogo.
+// Mide SIEMPRE la duracion de las fuentes activas antes de cortar (y las cortas se desactivan) y, solo si falta, el
+// silencio inicial (DEC-47). Las mediciones se completan antes de escribir: si ffprobe falla no se modifica el catalogo.
 async function measureAndDisableShort(paths: DataPaths, run: Runner, io: Io): Promise<Catalog> {
   const store = createCatalogStore({ file: paths.catalog })
   const { catalog } = await store.readTolerant()
-  const measured = new Map<string, number | null>()
+  const measured = new Map<string, SourceMeasurement>()
   for (const song of (catalog.songs as Song[]).filter((candidate) => candidate.enabled)) {
     const file = findSourceFile(paths.work, song.source.youtubeId)
     if (!file) throw new Error(`No hay audio descargado para ${song.id} (${song.source.youtubeId})`)
-    measured.set(song.clipKey, await measureDuration(file, run))
+    const measurement: SourceMeasurement = { duration: await measureDuration(file, run) }
+    // Una fuente que ya es corta con el startSec actual no se va a cortar: no hace falta medirle el silencio.
+    const alreadyShort = typeof measurement.duration === 'number' && tooShort(measurement.duration, song.startSec)
+    if (song.source.leadingSilenceSec === undefined && !alreadyShort) {
+      try {
+        measurement.leadingSilence = await measureLeadingSilence(file, run)
+      } catch (error) {
+        measurement.leadingSilence = asError(error)
+      }
+    }
+    measured.set(song.clipKey, measurement)
   }
   return store.update((current: Catalog) => {
     for (const song of current.songs.filter((candidate) => candidate.enabled)) {
-      const seconds = measured.get(song.clipKey)
-      if (seconds === undefined) continue
-      if (seconds === null) {
-        io.error(`Aviso: no se pudo medir la duracion de ${song.id}.`)
-        continue
-      }
-      song.source.durationSec = seconds
-      if (tooShort(seconds, song.startSec)) {
+      const measurement = measured.get(song.clipKey)
+      if (!measurement) continue
+      if (measurement.duration === null) io.error(`Aviso: no se pudo medir la duracion de ${song.id}.`)
+      // La duracion de un build siempre sustituye a la guardada (es la medida que cuenta, DEC-40).
+      if (typeof measurement.duration === 'number') song.source.durationSec = measurement.duration
+      applyMeasurement(song, { leadingSilence: measurement.leadingSilence }, io)
+      const seconds = song.source.durationSec
+      if (typeof measurement.duration === 'number' && tooShort(seconds, song.startSec)) {
         song.enabled = false
         io.log(`Aviso: ${song.id} es demasiado corta (${seconds} s): desactivada, no se genera.`)
       }
