@@ -15,5 +15,6 @@
     "strict": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["src", "vite.config.ts", "vitest.config.ts", "../../../shared/*.ts"]
+  "include": ["src", "vite.config.ts", "vitest.config.ts", "../../../shared/*.ts"],
+  "exclude": ["../../../shared/vitest.config.ts"]
 }
