@@ -23,7 +23,7 @@ test('E2E-94_should_trap_focus_in_settings_and_be_operable_with_the_keyboard', a
   await page.keyboard.press('Enter')
   await expect(app.settingsDialog).toBeVisible()
   await expect(app.settingsDialog).toHaveAttribute('aria-modal', 'true')
-  await expect(app.settingsDialog).toHaveAccessibleName('Ajustes')
+  await expect(app.settingsDialog).toHaveAccessibleName('Pistas')
 
   // Foco atrapado: tantas pulsaciones de Tab (y Shift+Tab) como controles tiene y nunca sale del dialogo.
   for (let i = 0; i < 6; i++) {

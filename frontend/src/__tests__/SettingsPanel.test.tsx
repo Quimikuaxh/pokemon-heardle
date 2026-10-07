@@ -1,5 +1,5 @@
 // FE-SET-01..05, 10, 12, 13, 14: panel de ajustes (DEC-52). Contrato: SettingsPanel({ settings, onChange(next) }) es controlado y contiene
-// el engranaje (boton "Ajustes") y el dialogo (role=dialog, aria-modal, titulo, dos role=switch, boton "Cerrar").
+// el boton "Pistas" (engranaje + texto) y el dialogo (role=dialog, aria-modal, titulo, dos role=switch, boton "Cerrar").
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { render, screen, fireEvent, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -24,7 +24,7 @@ function Harness({ initial = { consoleHint: false, dateHint: false }, onChange }
   )
 }
 
-const gear = () => screen.getByRole('button', { name: /^ajustes$/i })
+const gear = () => screen.getByRole('button', { name: /^pistas$/i })
 const open = async (user = userEvent.setup()) => {
   await user.click(gear())
   return screen.getByRole('dialog')
@@ -33,13 +33,13 @@ const consoleSwitch = () => screen.getByRole('switch', { name: /pista de consola
 const dateSwitch = () => screen.getByRole('switch', { name: /pista de fecha/i })
 
 describe('SettingsPanel', () => {
-  it('FE-SET-01 el engranaje con nombre "Ajustes" abre un role=dialog aria-modal=true con titulo', async () => {
+  it('FE-SET-01 el boton "Pistas" (engranaje + texto) abre un role=dialog aria-modal=true con titulo', async () => {
     render(<Harness />)
     expect(screen.queryByRole('dialog')).toBeNull()
     const dialog = await open()
     expect(dialog.getAttribute('aria-modal')).toBe('true')
     const labelledBy = dialog.getAttribute('aria-labelledby')
-    expect((labelledBy && document.getElementById(labelledBy)?.textContent) || dialog.getAttribute('aria-label')).toMatch(/ajustes/i)
+    expect((labelledBy && document.getElementById(labelledBy)?.textContent) || dialog.getAttribute('aria-label')).toMatch(/pistas/i)
   })
 
   it('FE-SET-01 el engranaje expone aria-haspopup/expanded coherentes', async () => {

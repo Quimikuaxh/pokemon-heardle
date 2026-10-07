@@ -418,6 +418,7 @@ Referencia (DEC-50/51/53):
 | ID | Nivel | Descripción | Precondiciones | Resultado esperado | Cubre | P |
 |---|---|---|---|---|---|---|
 | FE-SET-01 | unit | Engranaje con nombre "Ajustes" abre `role="dialog"` `aria-modal="true"` con título | - | Accesible | DEC-52 | A |
+| FE-SET-01 [MOD] | unit | El botón de pistas muestra el engranaje y el texto visible "Pistas" (nombre accesible "Pistas"); abre un `role="dialog"` `aria-modal="true"` titulado "Pistas" | - | Accesible | DEC-52 | A |
 | FE-SET-02 | unit | Foco atrapado dentro del diálogo | - | Ciclo de foco | DEC-52 | A |
 | FE-SET-03 | unit | Escape cierra y el foco vuelve al engranaje | - | Restaurado | DEC-52 | A |
 | FE-SET-04 | unit | Dos `role="switch"` "Pista de consola" y "Pista de fecha", desactivados por defecto | Storage vacío | `aria-checked="false"` | DEC-52 | A |

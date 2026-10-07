@@ -46,7 +46,7 @@ function DateArrow({ order }: { order: AttemptHint['order'] }) {
       aria-label={`La canción buscada es de un juego ${isEarlier ? 'anterior' : 'posterior'}`}
       className="inline-flex h-6 w-[5.5rem] flex-none items-center justify-center gap-1 rounded-full border-2 border-edge bg-chip text-[11px] font-semibold text-ink"
     >
-      {isEarlier ? <ArrowUpIcon size={10} /> : <ArrowDownIcon size={10} />}
+      {isEarlier ? <ArrowDownIcon size={10} /> : <ArrowUpIcon size={10} />}
       <span aria-hidden="true">{isEarlier ? 'Anterior' : 'Posterior'}</span>
     </span>
   )

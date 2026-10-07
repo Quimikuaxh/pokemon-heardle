@@ -88,13 +88,13 @@ export function SettingsPanel({ settings, onChange }: SettingsPanelProps) {
       <button
         ref={gearRef}
         type="button"
-        aria-label="Ajustes"
         aria-haspopup="dialog"
         aria-expanded={isOpen}
         onClick={() => setIsOpen(true)}
-        className="flex size-11 items-center justify-center rounded-full border-2 border-edge bg-chip text-ink"
+        className="inline-flex h-11 items-center justify-center gap-1.5 rounded-full border-2 border-edge bg-chip px-3 text-[13px] font-semibold text-ink"
       >
         <GearIcon />
+        Pistas
       </button>
       {isOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onKeyDown={handleKeyDown}>
@@ -106,7 +106,7 @@ export function SettingsPanel({ settings, onChange }: SettingsPanelProps) {
             className="flex w-full max-w-sm flex-col gap-4 rounded-xl border-[3px] border-edge bg-screen p-4 text-screen-ink shadow-[0_4px_0_var(--edge)]"
           >
             <h2 id={titleId} className="m-0 font-display text-xl">
-              Ajustes
+              Pistas
             </h2>
             <SwitchRow
               label="Pista de consola"

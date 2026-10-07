@@ -148,7 +148,7 @@ export class HeardlePage {
   }
 
   get settingsButton() {
-    return this.page.getByRole('button', { name: 'Ajustes' })
+    return this.page.getByRole('button', { name: 'Pistas' })
   }
   get settingsDialog() {
     return this.page.getByRole('dialog')
@@ -157,7 +157,7 @@ export class HeardlePage {
     return this.settingsDialog.getByRole('switch', { name: which === 'console' ? /Pista de consola/ : /Pista de fecha/ })
   }
 
-  /** Abre Ajustes, deja las pistas como se pide (solo pulsa lo que cambia) y cierra con "Cerrar". */
+  /** Abre el panel de pistas, deja las pistas como se pide (solo pulsa lo que cambia) y cierra con "Cerrar". */
   async setHints(hints: { console?: boolean; date?: boolean }) {
     await this.settingsButton.click()
     await expect(this.settingsDialog).toBeVisible()
