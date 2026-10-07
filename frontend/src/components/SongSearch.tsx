@@ -15,17 +15,14 @@ interface SongSearchProps {
   onSelect(songId: string): void
 }
 
-const MAX_VISIBLE_OPTIONS = 50
-
 export const SongSearch = memo(function SongSearch({ catalog, guesses, disabled = false, readOnly = false, onSelect }: SongSearchProps) {
   const [query, setQuery] = useState('')
   const [activeId, setActiveId] = useState<string | null>(null)
   const listId = useId()
   const inputId = `${listId}-input`
 
-  const allResults = useMemo(() => searchSongs(catalog, query), [catalog, query])
-  const results = allResults.slice(0, MAX_VISIBLE_OPTIONS)
-  const hiddenCount = allResults.length - results.length
+  // Se muestran todos los resultados; la lista tiene altura máxima y scroll.
+  const results = useMemo(() => searchSongs(catalog, query), [catalog, query])
   const attempted = useMemo(() => new Set(guesses), [guesses])
   const selectable = results.filter((song) => !attempted.has(song.id))
   const isOpen = query.trim().length > 0
@@ -122,7 +119,6 @@ export const SongSearch = memo(function SongSearch({ catalog, guesses, disabled 
               </li>
             )
           })}
-          {hiddenCount > 0 && <li className="px-3 py-2 text-xs text-muted">y {hiddenCount} más… afina la búsqueda</li>}
         </ul>
       )}
     </div>

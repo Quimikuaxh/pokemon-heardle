@@ -27,11 +27,11 @@ describe('SongSearch: Enter, readOnly y truncado', () => {
     expect(onSelect).not.toHaveBeenCalled()
   })
 
-  it('al truncar a 50 resultados avisa con "y N mas"', () => {
+  it('FE-SRC-18 muestra todos los resultados, sin limite ni aviso de "y N mas"', () => {
     const songs = Array.from({ length: 60 }, (_, i) => ({ id: `s-${i}`, title: `Tema ${i}`, games: ['rse'] }))
     const { type } = setup({}, { ...mkCatalog(), songs })
     type('tema')
-    expect(screen.getAllByRole('option').length).toBe(50)
-    expect(screen.getByText(/y 10 más/)).toBeTruthy()
+    expect(screen.getAllByRole('option').length).toBe(60)
+    expect(screen.queryByText(/más…/)).toBeNull()
   })
 })
