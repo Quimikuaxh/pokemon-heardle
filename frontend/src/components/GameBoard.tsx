@@ -117,7 +117,7 @@ export function GameBoard({ mode, controller, api, catalog, store, settings = DE
   return (
     <section
       aria-label={mode === 'daily' ? 'Partida diaria' : 'Partida libre'}
-      className="mx-auto flex w-full max-w-[460px] flex-col gap-3.5 lg:grid lg:max-w-[1360px] lg:grid-cols-[160px_minmax(0,460px)_minmax(0,1fr)] lg:items-start lg:justify-center lg:gap-8 xl:grid-cols-[200px_460px_minmax(0,1fr)] xl:gap-12"
+      className="mx-auto flex w-full max-w-[460px] flex-col gap-3.5 lg:grid lg:max-w-[1360px] lg:grid-cols-[minmax(0,460px)_minmax(0,1fr)] lg:items-start lg:justify-center lg:gap-8 xl:grid-cols-[200px_460px_minmax(0,1fr)] xl:gap-12"
     >
       <Legend />
 

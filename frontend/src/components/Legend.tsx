@@ -6,9 +6,10 @@ const KEY_ITEMS = [
 ]
 
 /** Leyenda de colores del historial; solo en escritorio (en movil no hay sitio). */
+// Solo desde xl (1280 px): entre 1024 y 1279 su columna deja sin sitio al historial con pistas.
 export function Legend() {
   return (
-    <aside aria-label="Leyenda" className="hidden w-[200px] flex-col gap-3 pt-3 text-[13px] text-muted lg:flex">
+    <aside aria-label="Leyenda" className="hidden w-[200px] flex-col gap-3 pt-3 text-[13px] text-muted xl:flex">
       <span className="font-mono text-[11px] font-bold tracking-[1px] text-ink">CLAVE</span>
       {KEY_ITEMS.map((item) => (
         <span key={item.label} className="flex items-center gap-2.5">

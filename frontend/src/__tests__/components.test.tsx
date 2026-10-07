@@ -225,13 +225,13 @@ describe('App: cabecera y tablero (DEC-46)', () => {
     expect(screen.getByRole('button', { name: 'Partida libre' }).getAttribute('aria-pressed')).toBe('true')
   })
 
-  it('FE-DSN-12 la leyenda (CLAVE) existe en el tablero, oculta en movil por clases y visible en escritorio', async () => {
+  it('FE-DSN-12 la leyenda (CLAVE) existe en el tablero, oculta por debajo de xl (1280 px) y visible desde xl', async () => {
     route()
     render(<App />)
     await screen.findByRole('button', { name: /^Diario$/ })
     const legend = (await screen.findAllByRole('complementary', { hidden: true }))[0]
     expect(legend.className).toMatch(/\bhidden\b/)
-    expect(legend.className).toMatch(/lg:flex/)
+    expect(legend.className).toMatch(/xl:flex/)
     expect(legend.textContent).toContain('CLAVE')
   })
 })
