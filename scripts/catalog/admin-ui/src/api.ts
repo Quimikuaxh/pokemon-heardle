@@ -1,3 +1,5 @@
+import type { ConsoleName } from '../../../../shared/rules'
+
 export interface AdminSong {
   id: string
   title: string
@@ -16,7 +18,19 @@ export interface AdminSong {
 export interface AdminGame {
   id: string
   name: string
+  consoles: ConsoleName[]
+  /** Grupo de seleccion efectivo (DEC-54): el propio id si el juego no tiene grupo. */
+  selectionGroup: string
+  /** El juego tiene canciones activas y ninguna consola: validate y upload lo rechazan. */
+  missingConsoles: boolean
   songCount: number
+}
+
+export interface GamePatch {
+  name?: string
+  consoles?: ConsoleName[]
+  /** null: el juego vuelve a su propio grupo. */
+  selectionGroup?: string | null
 }
 
 export interface AdminCatalog {
@@ -29,6 +43,7 @@ export interface AdminApi {
   patchSong(id: string, patch: Record<string, unknown>): Promise<AdminSong>
   createGame(name: string): Promise<{ id: string; name: string }>
   renameGame(id: string, name: string): Promise<{ id: string; name: string }>
+  patchGame(id: string, patch: GamePatch): Promise<{ id: string; name: string; consoles: ConsoleName[]; selectionGroup: string }>
 }
 
 export class AdminApiError extends Error {}
@@ -89,5 +104,6 @@ export function createAdminApi(options: { fetchFn?: typeof fetch } = {}): AdminA
     patchSong: (id, patch) => mutate('PATCH', `/api/songs/${encodeURIComponent(id)}`, patch),
     createGame: (name) => mutate('POST', '/api/games', { name }),
     renameGame: (id, name) => mutate('PATCH', `/api/games/${encodeURIComponent(id)}`, { name }),
+    patchGame: (id, patch) => mutate('PATCH', `/api/games/${encodeURIComponent(id)}`, patch),
   }
 }

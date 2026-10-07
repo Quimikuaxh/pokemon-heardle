@@ -12,6 +12,18 @@ const CATALOG_DIR = join(E2E_DIR, '..', 'scripts', 'catalog')
 const TSX = join(CATALOG_DIR, 'node_modules', '.bin', 'tsx')
 export const ADMIN_UI_DIST = join(CATALOG_DIR, 'admin-ui', 'dist')
 
+/** Ejecuta `validate` del CLI real contra un directorio de datos TEMPORAL. Sin ffmpeg falla por los clips; interesan sus mensajes. */
+export function runValidate(dataDir: string): Promise<{ code: number | null; output: string }> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(TSX, [join(CATALOG_DIR, 'src', 'main.ts'), 'validate', '--data-dir', dataDir], { cwd: CATALOG_DIR })
+    let output = ''
+    child.stdout.on('data', (chunk) => (output += chunk))
+    child.stderr.on('data', (chunk) => (output += chunk))
+    child.on('error', reject)
+    child.on('close', (code) => resolve({ code, output }))
+  })
+}
+
 export interface AdminHandle {
   url: string
   port: number

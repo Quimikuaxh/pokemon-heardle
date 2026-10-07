@@ -4,11 +4,17 @@
   "games": [
     {
       "id": "rse",
-      "name": "Pokemon Ruby / Sapphire / Emerald"
+      "name": "Pokemon Ruby / Sapphire / Emerald",
+      "consoles": [
+        "GBA"
+      ]
     },
     {
       "id": "dp",
-      "name": "Pokemon Diamond / Pearl"
+      "name": "Pokemon Diamond / Pearl",
+      "consoles": [
+        "DS"
+      ]
     }
   ],
   "songs": [
@@ -29,10 +35,9 @@
       }
     },
     {
-      "id": "rse-dp-example-shared-theme",
-      "title": "Example Shared Theme",
+      "id": "dp-example-theme",
+      "title": "Example Theme",
       "games": [
-        "rse",
         "dp"
       ],
       "clipKey": "0123456789abcdef",
@@ -41,7 +46,7 @@
       "reviewed": false,
       "source": {
         "youtubeId": "yyyyyyyyyyy",
-        "videoTitle": "ejemplo: cancion en varios juegos",
+        "videoTitle": "ejemplo: cancion corta desactivada",
         "durationSec": 7.4
       }
     }

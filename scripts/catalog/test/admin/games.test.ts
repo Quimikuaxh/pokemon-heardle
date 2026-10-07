@@ -95,7 +95,7 @@ describe('AD-GAM juegos', () => {
     const before = readCatalog(f.dataDir)
     const r = await rename(f, 'rse', { name: 'Pokemon Ruby / Sapphire / Emerald (RSE)' })
     expect(r.status).toBe(200)
-    expect(r.json).toEqual({ id: 'rse', name: 'Pokemon Ruby / Sapphire / Emerald (RSE)' })
+    expect(r.json).toEqual({ id: 'rse', name: 'Pokemon Ruby / Sapphire / Emerald (RSE)', consoles: ['GBA'], selectionGroup: 'rse' })
     const after = readCatalog(f.dataDir)
     expect(after.songs).toEqual(before.songs)
     expect(after.games.find((g: any) => g.id === 'rse').name).toBe('Pokemon Ruby / Sapphire / Emerald (RSE)')

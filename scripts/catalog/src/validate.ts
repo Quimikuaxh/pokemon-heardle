@@ -74,6 +74,14 @@ export function checkClipFormat(file: Buffer): string[] {
   return problems
 }
 
+/** `draft` crea los juegos sin consolas (DEC-51): hay que asignarlas antes de publicar un juego con canciones activas. */
+function gamesMissingConsoles(catalog: Catalog): string[] {
+  const gamesWithActiveSongs = new Set(catalog.songs.filter((song) => song.enabled).flatMap((song) => song.games))
+  return catalog.games
+    .filter((game) => gamesWithActiveSongs.has(game.id) && !(Array.isArray(game.consoles) && game.consoles.length > 0))
+    .map((game) => `juego ${game.id}: faltan las consolas (consoles); asignalas en el admin o en catalog.json`)
+}
+
 /**
  * Comprueba los clips generados: un `<clipKey>.mp3` por cancion activa con el formato de DEC-44, duracion de
  * 16 s (-30 ms / +60 ms, ver MAX_EXCESS_SEC) y sin etiquetas de metadatos.
@@ -86,6 +94,8 @@ export async function validateOutput(options: {
   const errors: string[] = []
   const structure = validateCatalog(options.catalog)
   if (!structure.ok) errors.push(...structure.errors.map((message) => `catalogo: ${message}`))
+
+  errors.push(...gamesMissingConsoles(options.catalog))
 
   for (const song of options.catalog.songs.filter((candidate) => candidate.enabled)) {
     const file = clipOutputPath(options.outDir, song.clipKey)

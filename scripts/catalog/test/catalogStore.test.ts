@@ -299,4 +299,16 @@ describe('catalogStore: uso desde draft y build', () => {
       expect(text, `${f} escribe el catalogo directamente`).not.toMatch(/writeJson\(\s*paths\.catalog|writeFileSync\([^)]*catalog\.json/)
     }
   })
+
+  it('SC-CS-13 update conserva selectionGroup, consoles y el orden de games', async () => {
+    const games = [
+      { id: 'sm', name: 'Sun/Moon', consoles: ['3DS'] },
+      { id: 'xy', name: 'X/Y', consoles: ['3DS'] },
+      { id: 'usum', name: 'USUM', consoles: ['3DS'], selectionGroup: 'sm' },
+      { id: 'za', name: 'Z-A', consoles: ['Switch', 'Switch 2'] },
+    ]
+    const { file } = setup(catalogOf([song({ id: 'one', clipKey: '1111111111111111', youtubeId: 'vid00000001', games: ['sm'] })], games))
+    await createCatalogStore({ file }).update((c) => void (c.songs[0].title = 'otro'))
+    expect(JSON.parse(readFileSync(file, 'utf8')).games).toEqual(games)
+  })
 })

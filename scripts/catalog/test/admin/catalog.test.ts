@@ -9,13 +9,13 @@ import { catalogOf, song } from '../helpers/data'
 const byId = (r: any, id: string) => r.json.songs.find((s: any) => s.id === id)
 
 describe('AD-CAT catalogo del admin', () => {
-  it('AD-CAT-01 forma: games[{id,name,songCount}] y songs[AdminSong] con durationSec, tooShort, hasSource, errors', async () => {
+  it('AD-CAT-01 forma: games[{id,name,consoles,selectionGroup,missingConsoles,songCount}] y songs[AdminSong] con durationSec, tooShort, hasSource, errors', async () => {
     const f = await startFixture()
     const r = await f.req('GET', '/api/catalog')
     expect(r.status).toBe(200)
     expect(r.json.games.length).toBe(3)
     expect(r.json.songs.length).toBe(5)
-    for (const g of r.json.games) expect(Object.keys(g).sort()).toEqual(['id', 'name', 'songCount'])
+    for (const g of r.json.games) expect(Object.keys(g).sort()).toEqual(['consoles', 'id', 'missingConsoles', 'name', 'selectionGroup', 'songCount'])
     const s = byId(r, 'rse-littleroot-town')
     expect([typeof s.tooShort, typeof s.hasSource, Array.isArray(s.errors), s.durationSec]).toEqual(['boolean', 'boolean', true, 183.42])
     expect([s.id, s.title, s.games, s.enabled, s.reviewed, s.clipKey, s.startSec]).toEqual(['rse-littleroot-town', 'Littleroot Town', ['rse'], true, true, '1111111111111111', 0])
@@ -135,5 +135,26 @@ describe('admin: catalogo invalido sin source', () => {
     expect((await f.req('GET', '/api/catalog')).status).toBe(200)
     const r = await f.mutate('PATCH', '/api/songs/rse-oldale-town', { enabled: true })
     expect(r.status).toBeLessThan(500)
+  })
+
+  it('AD-CAT-09 errors de la cancion incluyen "exactamente un juego" con 0 o 2 juegos (catalogo tolerante)', async () => {
+    const f = await startFixture({
+      catalog: catalogOf(
+        [
+          song({ id: 'sin-juego', clipKey: '1111111111111111', youtubeId: 'LLLLLLLLLL1', games: [] }),
+          song({ id: 'dos-juegos', clipKey: '2222222222222222', youtubeId: 'LLLLLLLLLL2', games: ['rse', 'dp'] }),
+          song({ id: 'un-juego', clipKey: '3333333333333333', youtubeId: 'SSSSSSSSSS1', games: ['rse'] }),
+        ],
+        [
+          { id: 'rse', name: 'RSE', consoles: ['GBA'] },
+          { id: 'dp', name: 'DP', consoles: ['DS'] },
+        ],
+      ),
+    })
+    const r = await f.req('GET', '/api/catalog')
+    expect(r.status).toBe(200)
+    expect(byId(r, 'sin-juego').errors.join(' ')).toMatch(/exactamente un juego/i)
+    expect(byId(r, 'dos-juegos').errors.join(' ')).toMatch(/exactamente un juego/i)
+    expect(byId(r, 'un-juego').errors).toEqual([])
   })
 })

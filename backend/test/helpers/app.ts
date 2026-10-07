@@ -58,7 +58,7 @@ export interface TestApp {
 }
 
 export interface StartOptions {
-  catalog?: CatalogFixture
+  catalog?: any
   env?: Record<string, string>
   nowMs?: number
   randomInt?: (max: number) => number
@@ -74,7 +74,7 @@ export async function closeAllTestApps() {
 }
 
 export async function startTestApp(opts: StartOptions = {}): Promise<TestApp> {
-  const catalog = opts.catalog ?? catalogR()
+  const catalog: any = opts.catalog ?? catalogR()
   const dir = writeStore(catalog, catalog.songs)
   const config = loadConfig(testEnv(dir, opts.env))
   const clock = { now: opts.nowMs ?? T.JUL_01_NOON }

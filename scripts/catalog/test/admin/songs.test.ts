@@ -2,7 +2,7 @@
 import { describe, it, expect } from 'vitest'
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { startFixture } from '../helpers/admin'
+import { adminCatalog, startFixture } from '../helpers/admin'
 import { readCatalog } from '../helpers/data'
 
 const PATCH = (f: Awaited<ReturnType<typeof startFixture>>, id: string, body: unknown) => f.mutate('PATCH', `/api/songs/${id}`, body)
@@ -57,35 +57,40 @@ describe('AD-PAT edicion de canciones', () => {
     expect(songOnDisk(f, 'rse-oldale-town').title).toBe(title)
   })
 
-  it('AD-PAT-04 games con varios juegos existentes, en el orden recibido', async () => {
+  it('AD-PAT-04 [MOD] games con exactamente UN juego existente se guarda (DEC-53)', async () => {
     const f = await startFixture()
-    const r = await PATCH(f, 'rse-oldale-town', { games: ['dp', 'rse'] })
-    expect([r.status, songOnDisk(f, 'rse-oldale-town').games]).toEqual([200, ['dp', 'rse']])
+    const r = await PATCH(f, 'rse-oldale-town', { games: ['dp'] })
+    expect([r.status, songOnDisk(f, 'rse-oldale-town').games]).toEqual([200, ['dp']])
   })
+
+  for (const games of [['dp', 'rse'], ['rse', 'dp'], ['rse', 'rse']]) {
+    it(`AD-PAT-04 [MOD] games con ${games.length} elementos (${games.join(',')}) -> 400 VALIDATION_ERROR sin cambios`, async () => {
+      const f = await startFixture()
+      const before = readCatalog(f.dataDir)
+      const r = await PATCH(f, 'rse-oldale-town', { games })
+      expect([r.status, r.json.error.code]).toEqual([400, 'VALIDATION_ERROR'])
+      expect(readCatalog(f.dataDir)).toEqual(before)
+    })
+  }
 
   it('AD-PAT-05 games con juego inexistente -> 400 sin cambios', async () => {
     const f = await startFixture()
     const before = readCatalog(f.dataDir)
-    const r = await PATCH(f, 'rse-oldale-town', { games: ['rse', 'no-existe'] })
+    const r = await PATCH(f, 'rse-oldale-town', { games: ['no-existe'] })
     expect([r.status, r.json.error.code]).toEqual([400, 'VALIDATION_ERROR'])
     expect(readCatalog(f.dataDir)).toEqual(before)
   })
 
-  it('AD-PAT-06 games con ids repetidos -> 400 sin cambios', async () => {
-    const f = await startFixture()
-    const before = readCatalog(f.dataDir)
-    expect((await PATCH(f, 'rse-oldale-town', { games: ['rse', 'rse'] })).status).toBe(400)
-    expect(readCatalog(f.dataDir)).toEqual(before)
-  })
+  // AD-PAT-06 (games con ids repetidos) esta RETIRADO: lo cubren AD-PAT-04/07 (0 o 2+ juegos -> 400).
 
-  it('AD-PAT-07 games [] (vaciar): permitido (errors la marca) o rechazado (400); nunca queda un estado que el admin no pueda corregir', async () => {
+  it('AD-PAT-07 [MOD] games [] (vaciar) -> 400 sin cambios (o, si se permite para dejarla pendiente, errors la marca y se puede corregir)', async () => {
     const f = await startFixture()
     const r = await PATCH(f, 'rse-oldale-town', { games: [] })
     if (r.status === 200) {
-      expect(r.json.errors.length).toBeGreaterThan(0)
+      expect(r.json.errors.join(' ')).toMatch(/exactamente un juego/i)
       expect((await PATCH(f, 'rse-oldale-town', { games: ['rse'] })).status).toBe(200)
     } else {
-      expect(r.status).toBe(400)
+      expect([r.status, r.json.error.code]).toEqual([400, 'VALIDATION_ERROR'])
       expect(songOnDisk(f, 'rse-oldale-town').games).toEqual(['rse'])
     }
   })
@@ -206,7 +211,16 @@ describe('AD-PAT edicion de canciones', () => {
   it('AD-PAT-19 activar una cancion con games [] : permitido (errors la marca) o rechazado; nunca silencioso', async () => {
     const f = await startFixture()
     const r = await PATCH(f, 'dp-twinleaf-town', { enabled: true })
-    if (r.status === 200) expect(r.json.errors.length).toBeGreaterThan(0)
+    if (r.status === 200) expect(r.json.errors.join(' ')).toMatch(/exactamente un juego/i)
+    else expect([400, 409]).toContain(r.status)
+  })
+
+  it('AD-PAT-19 activar una cancion importada a mano con 2 juegos: permitido (errors la marca) o rechazado; nunca silencioso', async () => {
+    const cat = adminCatalog()
+    cat.songs[1].games = ['rse', 'dp'] // rse-oldale-town, desactivada
+    const f = await startFixture({ catalog: cat })
+    const r = await PATCH(f, 'rse-oldale-town', { enabled: true })
+    if (r.status === 200) expect(r.json.errors.join(' ')).toMatch(/exactamente un juego/i)
     else expect([400, 409]).toContain(r.status)
   })
 

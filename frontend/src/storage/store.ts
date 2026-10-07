@@ -10,6 +10,14 @@ export interface UnlimitedRecord {
   token: string
 }
 
+/** Pistas opcionales (DEC-52): ambas desactivadas por defecto; se aplican de forma retroactiva a lo ya jugado. */
+export interface HintSettings {
+  consoleHint: boolean
+  dateHint: boolean
+}
+
+export const DEFAULT_SETTINGS: HintSettings = { consoleHint: false, dateHint: false }
+
 export interface Store {
   /** true tras un fallo de escritura (cuota excedida o almacenamiento bloqueado). */
   readonly writeFailed: boolean
@@ -17,6 +25,8 @@ export interface Store {
   setFilter(ids: string[]): void
   getDaily(date: string): DailyRecord | null
   setDaily(date: string, record: DailyRecord): void
+  getSettings(): HintSettings
+  setSettings(settings: HintSettings): void
   getUnlimited(): UnlimitedRecord | null
   setUnlimited(record: UnlimitedRecord | null): void
 }
@@ -32,6 +42,14 @@ const isDailyRecord = (value: unknown): value is DailyRecord =>
   (value.view === undefined || isRecord(value.view))
 
 const isUnlimitedRecord = (value: unknown): value is UnlimitedRecord => isRecord(value) && typeof value.token === 'string'
+
+function parseSettings(value: unknown): HintSettings | null {
+  if (!isRecord(value)) return null
+  const { consoleHint, dateHint } = value
+  // Un campo con tipo incorrecto invalida todo el objeto; uno ausente vale false.
+  if ((consoleHint !== undefined && typeof consoleHint !== 'boolean') || (dateHint !== undefined && typeof dateHint !== 'boolean')) return null
+  return { consoleHint: consoleHint === true, dateHint: dateHint === true }
+}
 
 const RETIRED_KEY_PREFIX = `${PREFIX}stats`
 
@@ -53,6 +71,8 @@ function removeRetiredKeys(storage: Storage): void {
 /** Ninguna operacion lanza: si localStorage falla, la app sigue sin persistir. */
 export function createStore(storage: Storage): Store {
   let writeFailed = false
+  // Si no se puede escribir, los ajustes siguen funcionando en memoria.
+  let memorySettings: HintSettings | null = null
   removeRetiredKeys(storage)
 
   function read<T>(key: string, isValid: (value: unknown) => value is T): T | null {
@@ -90,6 +110,11 @@ export function createStore(storage: Storage): Store {
     setFilter: (ids) => write('filter', ids),
     getDaily: (date) => read(`daily:${date}`, isDailyRecord),
     setDaily: (date, record) => write(`daily:${date}`, record),
+    getSettings: () => memorySettings ?? parseSettings(read('settings', isRecord)) ?? DEFAULT_SETTINGS,
+    setSettings: (settings) => {
+      memorySettings = { consoleHint: settings.consoleHint, dateHint: settings.dateHint }
+      write('settings', memorySettings)
+    },
     getUnlimited: () => read('unlimited', isUnlimitedRecord),
     setUnlimited: (record) => (record ? write('unlimited', record) : remove('unlimited')),
   }

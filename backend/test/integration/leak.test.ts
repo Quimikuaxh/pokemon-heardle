@@ -9,7 +9,7 @@ import { TicketService } from '../../src/game/tickets'
 
 afterEach(closeAllTestApps)
 
-const ALLOWED_KEYS = ['token', 'mode', 'date', 'status', 'attempt', 'maxAttempts', 'clipSeconds', 'results', 'guesses', 'clipUrl', 'solution']
+const ALLOWED_KEYS = ['token', 'mode', 'date', 'status', 'attempt', 'maxAttempts', 'clipSeconds', 'results', 'guesses', 'hints', 'clipUrl', 'solution']
 
 function serialize(r: Res): string {
   const h: string[] = []

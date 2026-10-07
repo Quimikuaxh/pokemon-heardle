@@ -45,9 +45,15 @@ export const SONGS = [
   { id: 'rse-littleroot-town', title: 'Littleroot Town', games: ['rse'] },
   { id: 'rse-oldale-town', title: 'Oldale Town', games: ['rse'] },
   { id: 'dp-twinleaf-town', title: 'Twinleaf Town', games: ['dp'] },
-  { id: 'rse-dp-shared-cafe', title: 'Café Théme', games: ['rse', 'dp'] },
+  { id: 'dp-cafe-theme', title: 'Café Théme', games: ['dp'] }, // DEC-53: un solo juego por cancion
   { id: 'bw-castle', title: "N's Castle", games: ['bw'] },
 ]
+
+/** Catalogo de n canciones del mismo juego (listas largas, burbuja, rendimiento). */
+export function bigCatalog(n: number, gameId = 'rse'): any {
+  const songs = Array.from({ length: n }, (_, i) => ({ id: `${gameId}-tema-${String(i).padStart(4, '0')}`, title: `Tema numero ${i}`, games: [gameId] }))
+  return { version: 1, games: GAMES, songs: [...songs, ...SONGS.filter((s) => s.games[0] !== gameId)] }
+}
 
 export function mkCatalog(): any {
   return { version: 1, games: GAMES, songs: SONGS }

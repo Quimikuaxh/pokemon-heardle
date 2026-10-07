@@ -51,8 +51,8 @@ export function adminCatalog(): any {
       song({ id: 'dp-dash', title: 'Dash Song', games: ['dp'], clipKey: '5555555555555555', youtubeId: '-BRQ_XVwg-M', enabled: true, reviewed: false, durationSec: 90 }),
     ],
     [
-      { id: 'rse', name: 'Pokemon Ruby / Sapphire / Emerald' },
-      { id: 'dp', name: 'Pokemon Diamond / Pearl' },
+      { id: 'rse', name: 'Pokemon Ruby / Sapphire / Emerald', consoles: ['GBA'] },
+      { id: 'dp', name: 'Pokemon Diamond / Pearl', consoles: ['DS'] },
       { id: 'unused', name: 'Pokemon Unused' },
     ],
   )

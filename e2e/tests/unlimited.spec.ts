@@ -1,6 +1,8 @@
 import { test, expect } from '../support/test.ts'
-import { LABEL, MULTI, ONLY_D, byId, gamesText, nonTargets } from '../support/oracle.ts'
+import { ENABLED_R, LABEL, SOLO_C, ONLY_D, byId } from '../support/oracle.ts'
+import { INSTRUMENT_WEBAUDIO, identifyByTone } from '../support/webaudio.ts'
 
+const ALPHA = 'Pokemon Game Alpha'
 const CHARLIE = 'Pokemon Game Charlie'
 const DELTA = 'Pokemon Game Delta'
 
@@ -9,9 +11,9 @@ test.describe('Ilimitado, filtro y feedback de juego', () => {
     const u = app.unlimited
     await app.goto()
     await app.startUnlimited([CHARLIE])
-    await u.guess(MULTI.title)
+    await u.guess(SOLO_C.title)
     await expect(u.resultHeading).toHaveText('¡ACERTASTE EN EL INTENTO 1!')
-    await expect(u.solution).toHaveText(MULTI.title)
+    await expect(u.solution).toHaveText(SOLO_C.title)
     await expect(u.search).toHaveCount(0)
 
     await expect(u.root.getByText('Nueva partida', { exact: true })).toBeVisible()
@@ -37,7 +39,7 @@ test.describe('Ilimitado, filtro y feedback de juego', () => {
     await expect(u.rows.nth(0)).toContainText(LABEL.skip)
     await expect(u.rows.nth(1)).toContainText('Escuchando')
     await u.ready()
-    await u.guess(MULTI.title)
+    await u.guess(SOLO_C.title)
     await expect(u.resultHeading).toHaveText('¡ACERTASTE EN EL INTENTO 2!')
   })
 
@@ -80,7 +82,7 @@ test.describe('Ilimitado, filtro y feedback de juego', () => {
     await u.setFilter([DELTA])
     await u.skipAll()
     await expect(u.resultHeading).toHaveText('¡LA CANCIÓN SE ESCAPÓ!')
-    await expect(u.solution, 'la partida en curso conserva su pool original').toHaveText(MULTI.title)
+    await expect(u.solution, 'la partida en curso conserva su pool original').toHaveText(SOLO_C.title)
 
     const [res] = await Promise.all([
       app.page.waitForResponse((r) => r.url().endsWith('/api/games') && r.request().method() === 'POST'),
@@ -93,15 +95,20 @@ test.describe('Ilimitado, filtro y feedback de juego', () => {
     await expect(u.solution, 'la siguiente usa el nuevo filtro').toHaveText(ONLY_D.title)
   })
 
-  test('E2E-17_should_report_game_correct_when_failed_song_shares_a_game', async ({ app }) => {
+  test('E2E-17_should_report_game_correct_when_failed_song_is_of_the_same_game', async ({ app, page }) => {
     const u = app.unlimited
+    await page.addInitScript(INSTRUMENT_WEBAUDIO)
     await app.goto()
-    await app.startUnlimited([CHARLIE]) // objetivo fija: MULTI (juegos A y C)
-    const sameGame = byId('a-one-song-01')
-    await u.guess(sameGame.title)
+    await app.startUnlimited([ALPHA]) // dos canciones de Alpha: el objetivo se identifica por el tono del clip
+    const alpha = ENABLED_R.filter((song) => song.games[0] === 'game-alpha')
+    const target = await identifyByTone(page, alpha)
+    const other = alpha.find((song) => song.id !== target.id)!
+    await u.guess(other.title)
     await expect(u.rows.nth(0)).toContainText(LABEL.game)
-    await expect(u.rows.nth(0)).toContainText(sameGame.title)
+    await expect(u.rows.nth(0)).toContainText(other.title)
     await expect(u.rows.nth(1)).toContainText('Escuchando')
+    await u.skipAll(5)
+    await expect(u.solution).toHaveText(target.title)
   })
 
   test('E2E-18_should_report_wrong_game_when_failed_song_shares_none', async ({ app }) => {
@@ -111,17 +118,5 @@ test.describe('Ilimitado, filtro y feedback de juego', () => {
     const other = byId('b-one-song-03')
     await u.guess(other.title)
     await expect(u.rows.nth(0)).toContainText(LABEL.miss)
-  })
-
-  test('E2E-19_should_report_game_correct_for_a_shared_game_of_a_multi_game_target', async ({ app }) => {
-    const u = app.unlimited
-    await app.goto()
-    await app.startUnlimited([CHARLIE])
-    // MULTI pertenece a A y C: una cancion solo de A comparte juego; el buscador no esta limitado al filtro.
-    await u.guess(byId('a-two-song-02').title)
-    await expect(u.rows.nth(0)).toContainText(LABEL.game)
-    await u.skipAll(5)
-    await expect(u.solution).toHaveText(MULTI.title)
-    await expect(u.resultPanel).toContainText(gamesText(MULTI))
   })
 })

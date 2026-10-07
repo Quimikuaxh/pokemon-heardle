@@ -27,7 +27,7 @@ const song = (id: string, clipKey: string, enabled = true, durationSec?: number)
   reviewed: true,
   source: { youtubeId: 'vid00000001', videoTitle: 'x', ...(durationSec === undefined ? {} : { durationSec }) },
 })
-const catalog = (songs: any[]): any => ({ version: 1, generatedAt: 'x', games: [{ id: 'g', name: 'G' }], songs })
+const catalog = (songs: any[]): any => ({ version: 1, generatedAt: 'x', games: [{ id: 'g', name: 'G', consoles: ['GBA'] }], songs })
 
 /** probe simulado sobre el fichero entero: 16 s + desviacion, sin etiquetas. */
 const probeOk = (deviationSec = 0, tags: Record<string, string> = {}) => async (_file: string) => ({ durationSec: 16 + deviationSec, tags })
@@ -263,6 +263,100 @@ describe('validateOutput: cancion corta (DEC-40) y games vacio', () => {
     const out = io()
     expect(await runCliSafe(['validate', '--data-dir', dir], out)).not.toBe(0)
     expect(out.text()).toContain('tema-corto')
+  })
+})
+
+describe('validateOutput: consolas (DEC-51), un juego por cancion (DEC-53) y grupos (DEC-54)', () => {
+  const full = (games: any[], songs: any[]) => ({ version: 1, generatedAt: 'x', games, songs })
+  const G = { id: 'g', name: 'G', consoles: ['GBA'] }
+  const check = async (cat: any, keys = [K1]) => {
+    const d = dirWith(keys)
+    return validateOutput({ catalog: cat, outDir: d, probe: probeOk() })
+  }
+
+  it('SC-CON-01 falla si un juego con canciones ACTIVAS no tiene consoles y nombra el juego', async () => {
+    const r = await check(full([{ id: 'sin-consola', name: 'Sin Consola' }], [{ ...song('a', K1), games: ['sin-consola'] }]))
+    expect(r.ok).toBe(false)
+    expect(r.errors.join('\n')).toContain('sin-consola')
+    expect(r.errors.join('\n')).toMatch(/consol/i)
+  })
+
+  it('SC-CON-01 el comando validate (runCli, --data-dir temporal) sale con codigo != 0 y nombra el juego', async () => {
+    const { makeDataDir, catalogOf, song: mk, io, runCliSafe } = await import('./helpers/data')
+    const dir = makeDataDir({ catalog: catalogOf([mk({ id: 'a', clipKey: K1, youtubeId: 'vid00000001', games: ['sin-consola'] })], [{ id: 'sin-consola', name: 'Sin Consola' }]) })
+    writeClip(join(dir, 'out', 'clips'), K1)
+    const out = io()
+    expect(await runCliSafe(['validate', '--data-dir', dir], out)).not.toBe(0)
+    expect(out.text()).toContain('sin-consola')
+  })
+
+  it('SC-CON-02 pasa si el juego sin consoles solo tiene canciones desactivadas', async () => {
+    const cat = full([G, { id: 'off', name: 'Off' }], [song('a', K1), { ...song('b', K2, false), games: ['off'] }])
+    expect(await check(cat)).toEqual({ ok: true, errors: [] })
+  })
+
+  it('SC-CON-02 un juego sin canciones tampoco necesita consoles', async () => {
+    expect((await check(full([G, { id: 'vacio', name: 'Vacio' }], [song('a', K1)]))).ok).toBe(true)
+  })
+
+  for (const [label, consoles] of [
+    ['vacias', []],
+    ['desconocidas', ['PS5']],
+    ['desordenadas', ['Switch 2', 'Switch']],
+    ['repetidas', ['GBA', 'GBA']],
+  ] as Array<[string, string[]]>) {
+    it(`SC-CON-03 validate falla con consoles ${label}`, async () => {
+      const r = await check(full([{ ...G, consoles }], [song('a', K1)]))
+      expect(r.ok).toBe(false)
+      expect(r.errors.join('\n')).toContain('g')
+    })
+  }
+
+  for (const [label, games] of [['0 juegos', []], ['2 juegos', ['g', 'h']]] as Array<[string, string[]]>) {
+    it(`SC-CON-04 validate falla si una cancion activa tiene ${label} y nombra la cancion`, async () => {
+      const cat = full([G, { id: 'h', name: 'H', consoles: ['DS'] }], [{ ...song('cancion-rara', K1), games }])
+      const r = await check(cat)
+      expect(r.ok).toBe(false)
+      expect(r.errors.join('\n')).toContain('cancion-rara')
+    })
+  }
+
+  it('SC-CON-05 upload no sube nada si falta alguna consola (S3 simulado, validate real)', async () => {
+    const { runUpload } = await import('../src/upload')
+    const cat = full([{ id: 'g', name: 'G' }], [song('a', K1)])
+    const d = dirWith([K1])
+    const puts: string[] = []
+    const store = {
+      list: async () => new Map(),
+      put: async (key: string) => void puts.push(key),
+      delete: async (key: string) => void puts.push(`delete ${key}`),
+    }
+    await expect(runUpload({ catalog: cat, outDir: d, store, validate: () => validateOutput({ catalog: cat, outDir: d, probe: probeOk() }) })).rejects.toThrow()
+    expect(puts).toEqual([])
+  })
+
+  const grouped = (patch: Record<string, unknown>) =>
+    full([G, { id: 'h', name: 'H', consoles: ['DS'], ...patch }], [song('a', K1), { ...song('b', K2), games: ['h'] }])
+
+  it('SC-VA-10 selectionGroup correcto (miembro -> cabeza) pasa', async () => {
+    expect((await check(grouped({ selectionGroup: 'g' }), [K1, K2])).ok).toBe(true)
+  })
+
+  it('SC-VA-10 selectionGroup inexistente falla y nombra juego y grupo', async () => {
+    const r = await check(grouped({ selectionGroup: 'fantasma' }), [K1, K2])
+    expect(r.ok).toBe(false)
+    expect(r.errors.join('\n')).toMatch(/h/)
+    expect(r.errors.join('\n')).toContain('fantasma')
+  })
+
+  it('SC-VA-10 selectionGroup en cadena (g -> h -> g) falla', async () => {
+    const cat = grouped({ selectionGroup: 'g' })
+    cat.games[0] = { ...G, selectionGroup: 'h' }
+    expect((await check(cat, [K1, K2])).ok).toBe(false)
+  })
+
+  it('SC-VA-10 selectionGroup de tipo invalido falla', async () => {
+    expect((await check(grouped({ selectionGroup: 5 }), [K1, K2])).ok).toBe(false)
   })
 })
 

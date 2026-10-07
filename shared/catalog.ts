@@ -1,5 +1,14 @@
 // Tipos de catalog.json y su validador (lo usan backend y script de catalogo).
-export interface Game { id: string; name: string }
+import { CONSOLES } from './rules'
+import type { ConsoleName } from './rules'
+export interface Game {
+  id: string
+  name: string
+  /** Consolas del juego (varias en Legends: Z-A); en orden canonico. Opcional aqui, `validate` del script la exige. */
+  consoles?: ConsoleName[]
+  /** Juego "cabeza" del grupo de seleccion (DEC-54). Ausente: el juego es su propio grupo. */
+  selectionGroup?: string
+}
 export interface Song {
   id: string; title: string; games: string[]; clipKey: string
   /** Segundo de la fuente donde empieza el clip. Automatico (silencio inicial, DEC-47) salvo `startSecManual`. */
@@ -50,8 +59,46 @@ function validateGames(rawGames: unknown, errors: string[]): Set<string> {
     if (typeof name !== 'string' || name.trim() === '') {
       errors.push(`games[${index}].name debe ser un texto no vacio (juego ${describeValue(id)})`)
     }
+    if (game.consoles !== undefined) validateConsoles(game.consoles, describeValue(id), errors)
   })
+  validateSelectionGroups(rawGames, gameIds, errors)
   return gameIds
+}
+
+function validateConsoles(consoles: unknown, gameLabel: string, errors: string[]): void {
+  const known: readonly string[] = CONSOLES
+  if (!Array.isArray(consoles) || consoles.length === 0 || !consoles.every((name) => typeof name === 'string' && known.includes(name))) {
+    errors.push(`juego ${gameLabel}: consoles debe ser una lista no vacia con valores de ${CONSOLES.join(', ')} (recibido ${describeValue(consoles)})`)
+    return
+  }
+  if (new Set(consoles).size !== consoles.length) {
+    errors.push(`juego ${gameLabel}: consoles tiene valores repetidos (${describeValue(consoles)})`)
+    return
+  }
+  const positions = consoles.map((name) => known.indexOf(name as string))
+  if (positions.some((position, index) => index > 0 && position < positions[index - 1])) {
+    errors.push(`juego ${gameLabel}: consoles debe ir en orden canonico (${CONSOLES.join(', ')}), recibido ${describeValue(consoles)}`)
+  }
+}
+
+/** selectionGroup: id de un juego "cabeza" (cuyo propio grupo es el mismo): sin cadenas ni ciclos (DEC-54). */
+function validateSelectionGroups(rawGames: unknown[], gameIds: Set<string>, errors: string[]): void {
+  const groupOf = new Map<string, string>()
+  for (const game of rawGames) {
+    if (!isRecord(game) || typeof game.id !== 'string') continue
+    groupOf.set(game.id, typeof game.selectionGroup === 'string' ? game.selectionGroup : game.id)
+  }
+  for (const game of rawGames) {
+    if (!isRecord(game) || typeof game.id !== 'string' || game.selectionGroup === undefined) continue
+    const { id, selectionGroup } = game
+    if (typeof selectionGroup !== 'string' || !GAME_ID_PATTERN.test(selectionGroup)) {
+      errors.push(`juego ${id}: selectionGroup debe ser un id de juego (recibido ${describeValue(selectionGroup)})`)
+    } else if (!gameIds.has(selectionGroup)) {
+      errors.push(`juego ${id}: selectionGroup apunta a un juego inexistente (${selectionGroup})`)
+    } else if (groupOf.get(selectionGroup) !== selectionGroup) {
+      errors.push(`juego ${id}: selectionGroup ${selectionGroup} no es un juego cabeza de grupo (ya pertenece a ${groupOf.get(selectionGroup)}); no se permiten cadenas`)
+    }
+  }
 }
 
 function validateSong(
@@ -88,18 +135,11 @@ function validateSong(
     seenClipKeys.add(song.clipKey)
   }
 
-  if (!Array.isArray(song.games) || song.games.length === 0) {
-    errors.push(`${label}: games debe ser un array no vacio`)
-  } else {
-    const seenGames = new Set<unknown>()
-    for (const gameId of song.games) {
-      if (typeof gameId !== 'string' || !gameIds.has(gameId)) {
-        errors.push(`${label}: referencia a juego inexistente ${describeValue(gameId)}`)
-      } else if (seenGames.has(gameId)) {
-        errors.push(`${label}: juego repetido ${gameId}`)
-      }
-      seenGames.add(gameId)
-    }
+  // Cada cancion pertenece a un solo juego (DEC-53); el formato sigue siendo un array.
+  if (!Array.isArray(song.games) || song.games.length !== 1) {
+    errors.push(`${label}: games debe tener exactamente un juego (recibido ${describeValue(song.games)})`)
+  } else if (typeof song.games[0] !== 'string' || !gameIds.has(song.games[0])) {
+    errors.push(`${label}: referencia a juego inexistente ${describeValue(song.games[0])}`)
   }
 
   if (typeof song.startSec !== 'number' || !Number.isFinite(song.startSec) || song.startSec < 0) {

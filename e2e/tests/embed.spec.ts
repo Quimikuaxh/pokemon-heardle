@@ -3,7 +3,7 @@ import { stubYoutube } from '../support/youtube.ts'
 import { INSTRUMENT_WEBAUDIO } from '../support/webaudio.ts'
 import type { WebAudioLog } from '../support/webaudio.ts'
 import { RECORD_AUDIO_SRC, expectNoLeak } from '../support/leak.ts'
-import { MULTI, ONLY_D, dailyTargetR, madridToday, nonTargets } from '../support/oracle.ts'
+import { SOLO_C, ONLY_D, dailyTargetR, madridToday, nonTargets } from '../support/oracle.ts'
 import { M_SONGS } from '../fixtures/catalogs.ts'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -211,11 +211,11 @@ test.describe('Cancion completa - catalogo R', () => {
     await stubYoutube(page)
     const u = app.unlimited
     await app.goto()
-    await app.startUnlimited(['Pokemon Game Charlie']) // objetivo fijo: MULTI
-    await u.guess(MULTI.title)
+    await app.startUnlimited(['Pokemon Game Charlie']) // objetivo fijo: SOLO_C
+    await u.guess(SOLO_C.title)
     await u.root.getByRole('button', { name: BUTTON }).click()
     await expect(page.locator('iframe')).toHaveCount(1)
-    await expect(page.locator('iframe')).toHaveAttribute('src', new RegExp(`${MULTI.source.youtubeId}$`))
+    await expect(page.locator('iframe')).toHaveAttribute('src', new RegExp(`${SOLO_C.source.youtubeId}$`))
 
     // Nueva partida con otro filtro: el siguiente objetivo es ONLY_D.
     net.clear()
@@ -229,7 +229,7 @@ test.describe('Cancion completa - catalogo R', () => {
     expect(page.frames()).toHaveLength(1)
     await net.settle()
     const dom = await page.content()
-    expect(dom).not.toContain(MULTI.source.youtubeId)
+    expect(dom).not.toContain(SOLO_C.source.youtubeId)
     expect(dom).not.toContain(ONLY_D.source.youtubeId)
     for (const res of net.responses.filter((r) => r.path.startsWith('/api/games'))) {
       expect(res.body!.toString('utf8'), res.path).not.toContain(ONLY_D.source.youtubeId)

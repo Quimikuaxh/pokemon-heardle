@@ -21,3 +21,29 @@ export function searchSongs(catalog: PublicCatalog, query: string): SearchResult
   }
   return results
 }
+
+export interface CatalogSearch {
+  games: Array<{ id: string; name: string }>
+  songs: SearchResult[]
+}
+
+/**
+ * Busqueda del combobox (DEC-49): grupo Juegos (nombre cumple todas las palabras, orden de catalog.games) y grupo
+ * Canciones. Con burbuja de juego solo salen canciones de ese juego, y con texto vacio todas las suyas.
+ */
+export function searchCatalog(catalog: PublicCatalog, query: string, gameId: string | null): CatalogSearch {
+  const hasText = normalizeText(query) !== ''
+  if (!hasText && gameId === null) return { games: [], songs: [] }
+  const games = hasText ? catalog.games.filter((game) => matchesAllWords(query, [game.name])).map(({ id, name }) => ({ id, name })) : []
+  const songs = hasText ? searchSongs(catalog, query) : allSongs(catalog)
+  return { games, songs: gameId === null ? songs : songs.filter((song) => song.games.some((game) => game.id === gameId)) }
+}
+
+function allSongs(catalog: PublicCatalog): SearchResult[] {
+  const gameNames = new Map(catalog.games.map((game) => [game.id, game.name]))
+  return catalog.songs.map((song) => ({
+    id: song.id,
+    title: song.title,
+    games: song.games.map((id) => ({ id, name: gameNames.get(id) ?? id })),
+  }))
+}

@@ -35,10 +35,17 @@ export interface FakeSong {
   errors: string[]
 }
 
-export const GAMES = [
-  { id: 'rse', name: 'Pokémon Ruby / Sapphire / Emerald' },
-  { id: 'dp', name: 'Pokémon Diamond / Pearl' },
-  { id: 'unused', name: 'Pokémon Unused' },
+export interface FakeGame {
+  id: string
+  name: string
+  consoles?: string[]
+  selectionGroup?: string
+}
+
+export const GAMES: FakeGame[] = [
+  { id: 'rse', name: 'Pokémon Ruby / Sapphire / Emerald', consoles: ['GBA'] },
+  { id: 'dp', name: 'Pokémon Diamond / Pearl', consoles: ['DS'] },
+  { id: 'unused', name: 'Pokémon Unused', consoles: ['3DS'] },
 ]
 
 export function mkSong(over: Partial<FakeSong> & { id: string }): FakeSong {
@@ -64,7 +71,7 @@ export function baseSongs(): FakeSong[] {
     mkSong({ id: 'rse-oldale-town', title: 'Oldale Town', games: ['rse'], enabled: false, reviewed: false, source: { youtubeId: 'AAAAAAAAAA2', videoTitle: 'Pokemon RSE - Oldale Town', durationSec: 120.5 } }),
     mkSong({ id: 'rse-badge', title: 'Obtained a Badge', games: ['rse'], enabled: false, reviewed: true, durationSec: 7.4, tooShort: true, source: { youtubeId: 'AAAAAAAAAA3', videoTitle: 'Obtained a Badge', durationSec: 7.4 } }),
     mkSong({ id: 'dp-twinleaf-town', title: 'Twinleaf Town', games: [], enabled: false, reviewed: false, hasSource: false, errors: ['dp-twinleaf-town: games debe ser un array no vacio'], source: { youtubeId: 'AAAAAAAAAA4', videoTitle: 'Twinleaf Town - Diamond' } }),
-    mkSong({ id: 'dp-dash', title: 'Dash Song', games: ['dp', 'rse'], enabled: true, reviewed: false, source: { youtubeId: '-BRQ_XVwg-M', videoTitle: 'Dash', durationSec: 90 } }),
+    mkSong({ id: 'dp-dash', title: 'Dash Song', games: ['dp'], enabled: true, reviewed: false, source: { youtubeId: '-BRQ_XVwg-M', videoTitle: 'Dash', durationSec: 90 } }),
   ]
 }
 
@@ -78,14 +85,21 @@ export interface RequestLog {
 type Override = (req: RequestLog) => { status: number; body: unknown } | undefined
 
 /** Servidor del admin simulado en memoria (fetch). Aplica las reglas basicas del contrato de AR 6.1. */
-export function fakeAdmin(initial: { songs?: FakeSong[]; games?: Array<{ id: string; name: string }> } = {}) {
+export function fakeAdmin(initial: { songs?: FakeSong[]; games?: FakeGame[] } = {}) {
   const state = { songs: structuredClone(initial.songs ?? baseSongs()), games: structuredClone(initial.games ?? GAMES) }
   const log: RequestLog[] = []
   let override: Override | undefined
   let sessionFailures = 0
 
   const catalogBody = () => ({
-    games: state.games.map((g) => ({ ...g, songCount: state.songs.filter((s) => s.games.includes(g.id)).length })),
+    games: state.games.map((g) => ({
+      id: g.id,
+      name: g.name,
+      consoles: g.consoles ?? [],
+      selectionGroup: g.selectionGroup ?? g.id, // grupo efectivo
+      missingConsoles: (g.consoles ?? []).length === 0 && state.songs.some((s) => s.enabled && s.games.includes(g.id)),
+      songCount: state.songs.filter((s) => s.games.includes(g.id)).length,
+    })),
     songs: structuredClone(state.songs),
   })
   const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
@@ -120,7 +134,10 @@ export function fakeAdmin(initial: { songs?: FakeSong[]; games?: Array<{ id: str
       if (body.title !== undefined && String(body.title).trim() === '') return err(400, 'VALIDATION_ERROR', 'El titulo no puede estar vacio')
       if (body.enabled === true && song.tooShort) return err(409, 'TOO_SHORT', 'La cancion es demasiado corta para activarla')
       if (body.title !== undefined) song.title = String(body.title).trim()
-      if (body.games !== undefined) song.games = body.games
+      if (body.games !== undefined) {
+        if (!Array.isArray(body.games) || body.games.length !== 1) return err(400, 'VALIDATION_ERROR', 'Una cancion pertenece a exactamente un juego')
+        song.games = body.games
+      }
       if (body.enabled !== undefined) song.enabled = body.enabled
       if (body.reviewed !== undefined) song.reviewed = body.reviewed
       return json(200, structuredClone(song))
@@ -137,11 +154,25 @@ export function fakeAdmin(initial: { songs?: FakeSong[]; games?: Array<{ id: str
     if (m && method === 'PATCH') {
       const game = state.games.find((g) => g.id === m![1])
       if (!game) return err(404, 'NOT_FOUND')
-      const name = String(body.name ?? '').trim()
-      if (!name) return err(400, 'VALIDATION_ERROR', 'El nombre no puede estar vacio')
-      if (state.games.some((g) => g.id !== game.id && g.name.toLowerCase() === name.toLowerCase())) return err(400, 'VALIDATION_ERROR', 'Ya existe un juego con ese nombre')
-      game.name = name
-      return json(200, { id: game.id, name })
+      if (body.name !== undefined) {
+        const name = String(body.name ?? '').trim()
+        if (!name) return err(400, 'VALIDATION_ERROR', 'El nombre no puede estar vacio')
+        if (state.games.some((g) => g.id !== game.id && g.name.toLowerCase() === name.toLowerCase())) return err(400, 'VALIDATION_ERROR', 'Ya existe un juego con ese nombre')
+        game.name = name
+      }
+      if (body.consoles !== undefined) {
+        if (!Array.isArray(body.consoles) || body.consoles.length === 0) return err(400, 'VALIDATION_ERROR', 'Elige al menos una consola')
+        game.consoles = body.consoles
+      }
+      if (body.selectionGroup !== undefined) {
+        if (body.selectionGroup === null || body.selectionGroup === game.id) delete game.selectionGroup
+        else {
+          const head = state.games.find((g) => g.id === body.selectionGroup)
+          if (!head || head.selectionGroup) return err(400, 'VALIDATION_ERROR', 'El grupo de seleccion no es valido')
+          game.selectionGroup = head.id
+        }
+      }
+      return json(200, { id: game.id, name: game.name, consoles: game.consoles ?? [], selectionGroup: game.selectionGroup ?? game.id })
     }
     return err(404, 'NOT_FOUND')
   })

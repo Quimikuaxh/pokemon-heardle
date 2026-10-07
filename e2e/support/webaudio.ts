@@ -99,3 +99,18 @@ export function dominantFrequency(samples: number[], sampleRate: number, candida
   }
   return best
 }
+
+/**
+ * Identifica la cancion objetivo por el tono del primer segundo del clip decodificado (cada cancion del fixture
+ * tiene un tono base distinto). Sirve de oraculo en el modo libre cuando el pool tiene varias canciones.
+ */
+export async function identifyByTone<T extends { toneHz: number }>(page: import('@playwright/test').Page, candidates: T[]): Promise<T> {
+  const clip = await page.evaluate(() => {
+    const log = (window as any).__wa as WebAudioLog
+    const buffer = log.buffers[log.buffers.length - 1]
+    const data = buffer.getChannelData(0)
+    return { samples: Array.from(data.subarray(2000, 2000 + 8820)), rate: buffer.sampleRate }
+  })
+  const found = dominantFrequency(clip.samples, clip.rate, candidates.map((candidate) => candidate.toneHz))
+  return candidates.find((candidate) => candidate.toneHz === found)!
+}

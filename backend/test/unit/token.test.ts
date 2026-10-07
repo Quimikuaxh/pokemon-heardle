@@ -1,3 +1,4 @@
+import { madridDate } from '../../../shared/date'
 import { describe, it, expect } from 'vitest'
 import { encryptToken, decryptToken } from '../../src/game/token'
 import { SECRET_A, SECRET_B } from '../helpers/secrets'
@@ -230,5 +231,23 @@ describe('token: forma canonica y q <= r (DEC-21)', () => {
   it('q con tantos elementos como r es valido', () => {
     const p = payload({ r: ['M', 'S'], q: ['1111111111111111', '2222222222222222'] })
     expect(decryptToken(encryptToken(p, SECRET_A), SECRET_A, NOW_MS)).toEqual(p)
+  })
+
+  it('BE-TOK-19 el token no guarda pistas: claves v,n,m,d,k,r,q,iat,exp y longitud constante con 0..6 fallos', async () => {
+    const { createPayload, applyGuess } = await import('../../src/game/engine')
+    const { indexCatalog } = await import('../../src/catalog')
+    const { hintsCatalog } = await import('../helpers/fixtures')
+    const index = indexCatalog(hintsCatalog() as any)
+    const misses = ['gsc-song-1', 'bw-song-1', 'xy-song-1', 'swsh-song-1', 'za-song-1', 'sw2only-song-1']
+    let p: any = createPayload({ mode: 'daily', target: index.songById('rby-song-1')!, date: madridDate(NOW_MS), nowMs: NOW_MS }) // fecha coherente con NOW_MS: un token de otro dia ya habria caducado
+    const lengths = new Set<number>()
+    for (let n = 0; n <= 6; n++) {
+      expect(Object.keys(p).sort()).toEqual(['d', 'exp', 'iat', 'k', 'm', 'n', 'q', 'r', 'v'])
+      const token = encryptToken(p, SECRET_A)
+      lengths.add(token.length)
+      expect(JSON.stringify(decryptToken(token, SECRET_A, NOW_MS))).not.toMatch(/hint|console|order|earlier|later/)
+      if (n < 6) p = applyGuess(p, misses[n], index).payload
+    }
+    expect(lengths.size).toBe(1)
   })
 })

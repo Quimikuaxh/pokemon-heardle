@@ -6,7 +6,7 @@ import { join } from 'node:path'
 import { catalogOf, fakeRunner, io, makeDataDir, readCatalog, song, runCliSafe } from './helpers/data'
 
 const L1 = song({ id: 'long-one', clipKey: '1111111111111111', youtubeId: 'LLLLLLLLLL1', reviewed: true, title: 'Larga Uno' })
-const L2 = song({ id: 'long-two', clipKey: '2222222222222222', youtubeId: 'LLLLLLLLLL2', reviewed: false, games: ['rse', 'dp'] })
+const L2 = song({ id: 'long-two', clipKey: '2222222222222222', youtubeId: 'LLLLLLLLLL2', reviewed: false, games: ['dp'] })
 const SH = song({ id: 'short-one', clipKey: '3333333333333333', youtubeId: 'SSSSSSSSSS1', reviewed: true })
 const OFF = song({ id: 'off-one', clipKey: '4444444444444444', youtubeId: 'OOOOOOOOOO1', enabled: false, durationSec: 7.4 })
 

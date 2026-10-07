@@ -7,7 +7,8 @@ import type { GameController } from '../game/controller'
 import { madridDate } from '../../../shared/date'
 import { currentClipSeconds } from '../game/view'
 import { useGameState } from '../hooks/useGameState'
-import type { Store } from '../storage/store'
+import { DEFAULT_SETTINGS } from '../storage/store'
+import type { HintSettings, Store } from '../storage/store'
 import { AttemptList } from './AttemptList'
 import { FilterPanel } from './FilterPanel'
 import { NoticeBanner } from './NoticeBanner'
@@ -26,9 +27,11 @@ interface GameBoardProps {
   api: Pick<ApiClient, 'fetchClip'>
   catalog: PublicCatalog
   store: Store
+  /** Pistas visibles (DEC-52). Las guarda y edita la App; el tablero solo las aplica. */
+  settings?: HintSettings
 }
 
-export function GameBoard({ mode, controller, api, catalog, store }: GameBoardProps) {
+export function GameBoard({ mode, controller, api, catalog, store, settings = DEFAULT_SETTINGS }: GameBoardProps) {
   const state = useGameState(controller)
   const { view, phase, notice, busy, gameSeq } = state
   const [filter, setFilter] = useState(() => controller.getFilter())
@@ -114,7 +117,7 @@ export function GameBoard({ mode, controller, api, catalog, store }: GameBoardPr
   return (
     <section
       aria-label={mode === 'daily' ? 'Partida diaria' : 'Partida libre'}
-      className="mx-auto flex w-full max-w-[460px] flex-col gap-3.5 lg:grid lg:max-w-[1040px] lg:grid-cols-[200px_460px_260px] lg:items-start lg:justify-center lg:gap-12"
+      className="mx-auto flex w-full max-w-[460px] flex-col gap-3.5 lg:grid lg:max-w-[1360px] lg:grid-cols-[160px_minmax(0,460px)_minmax(0,1fr)] lg:items-start lg:justify-center lg:gap-8 xl:grid-cols-[200px_460px_minmax(0,1fr)] xl:gap-12"
     >
       <Legend />
 
@@ -159,7 +162,7 @@ export function GameBoard({ mode, controller, api, catalog, store }: GameBoardPr
               onSkip={() => void controller.skip()}
               onRetryAudio={() => setAudioRetry((count) => count + 1)}
             />
-            <SongSearch catalog={catalog} guesses={view.guesses} readOnly={busy} onSelect={selectSong} />
+            <SongSearch key={gameSeq} catalog={catalog} guesses={view.guesses} readOnly={busy} onSelect={selectSong} />
           </>
         )}
 
@@ -178,7 +181,7 @@ export function GameBoard({ mode, controller, api, catalog, store }: GameBoardPr
         )}
       </div>
 
-      {view && <AttemptList view={view} catalog={catalog} />}
+      {view && <AttemptList view={view} catalog={catalog} settings={settings} />}
       {phase === 'finished' && view?.mode === 'daily' && (
         <div className="lg:col-start-2">
           <NextDayNote />

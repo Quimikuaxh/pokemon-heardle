@@ -28,7 +28,14 @@ const countIn = (haystack: string, needles: string[]) => needles.filter((n) => h
  * E2E-26: escanea red, almacenamiento, DOM y audio con la partida en curso.
  * `own` son las canciones que la persona ya ha jugado (aparecen legitimamente en `guesses` y en la lista).
  */
-export async function expectNoLeak(page: Page, net: NetLog, target: FixtureSong, own: FixtureSong[] = []) {
+export async function expectNoLeak(
+  page: Page,
+  net: NetLog,
+  target: FixtureSong,
+  own: FixtureSong[] = [],
+  /** Id y nombre del juego de la objetivo: no pueden aparecer en /api/games*, cabeceras, clips ni almacenamiento (DEC-50). */
+  gameNeedles: string[] = [],
+) {
   await net.settle()
   expect(net.responses.some((r) => r.path === '/api/games'), 'hay respuestas de /api/games que escanear').toBe(true)
   expect(net.clips().length, 'hay clips que escanear').toBeGreaterThan(0)
@@ -46,17 +53,18 @@ export async function expectNoLeak(page: Page, net: NetLog, target: FixtureSong,
       expect(countIn(text, FORBIDDEN_KEYS), `campos internos en ${label}`).toEqual([])
       continue
     }
-    expect(countIn(headers, [...secrets(target), ...identity(target)]), `cabeceras de ${label}`).toEqual([])
+    expect(countIn(headers, [...secrets(target), ...identity(target), ...gameNeedles]), `cabeceras de ${label}`).toEqual([])
     if (res.path.startsWith('/api/clips/')) {
       expect(latin.startsWith('ID3'), `clip con ID3 en ${label}`).toBe(false)
       const body = res.body!
       expect(body.length, `bytes del clip capturados en ${label}`).toBeGreaterThan(1000)
-      for (const needle of [...secrets(target), ...identity(target)]) {
+      for (const needle of [...secrets(target), ...identity(target), ...gameNeedles]) {
         expect(body.includes(Buffer.from(needle)), `"${needle}" dentro de los bytes del clip`).toBe(false)
       }
       continue
     }
-    expect(countIn(text, [...secrets(target), ...identity(target)]), `cuerpo de ${label}`).toEqual([])
+    const gameScope = res.path.startsWith('/api/games') ? gameNeedles : []
+    expect(countIn(text, [...secrets(target), ...identity(target), ...gameScope]), `cuerpo de ${label}`).toEqual([])
     if (res.path.startsWith('/api/games')) expect(countIn(text, FORBIDDEN_KEYS), `campos internos en ${label}`).toEqual([])
   }
 
@@ -78,6 +86,10 @@ export async function expectNoLeak(page: Page, net: NetLog, target: FixtureSong,
   for (const [name, value] of Object.entries({ ...storage, cookies })) {
     if (name === 'audioSrcs') continue
     expect(countIn(value as string, needles), `${name} contiene datos de la objetivo`).toEqual([])
+    // El id/nombre del juego solo es legitimo en el DOM (la lista de juegos) y en el filtro propio del libre.
+    if (['local', 'session', 'cookie', 'indexedDb', 'cookies'].includes(name) && !(name === 'local' && storage.local.includes('heardle:filter'))) {
+      expect(countIn(value as string, gameNeedles), `${name} contiene el juego de la objetivo`).toEqual([])
+    }
   }
   // Con Web Audio no hay <audio>; si la ruta de reserva asigna un src, debe ser un blob opaco.
   for (const src of storage.audioSrcs) {

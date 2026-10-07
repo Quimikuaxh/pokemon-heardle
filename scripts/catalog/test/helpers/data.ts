@@ -64,8 +64,8 @@ export function catalogOf(songs: any[], games?: Array<{ id: string; name: string
     version: 1,
     generatedAt: '2026-10-04T10:00:00Z',
     games: games ?? [
-      { id: 'rse', name: 'Pokemon Ruby / Sapphire / Emerald' },
-      { id: 'dp', name: 'Pokemon Diamond / Pearl' },
+      { id: 'rse', name: 'Pokemon Ruby / Sapphire / Emerald', consoles: ['GBA'] },
+      { id: 'dp', name: 'Pokemon Diamond / Pearl', consoles: ['DS'] },
     ],
     songs,
   }

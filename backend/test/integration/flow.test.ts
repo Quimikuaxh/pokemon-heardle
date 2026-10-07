@@ -167,11 +167,7 @@ describe('Partida ilimitada: ganar, perder, skip, recuperar', () => {
     expect((await app.guess(g.json.token, A2)).json.results).toEqual(['game'])
   })
 
-  it('BE-ENG-04 interseccion parcial: objetivo en A, elegida {A,B} -> game', async () => {
-    const app = await startTestApp({ randomInt: () => 0 })
-    const g = await app.createUnlimited(['A'])
-    expect((await app.guess(g.json.token, AB)).json.results).toEqual(['game'])
-  })
+  // BE-ENG-04 (cancion con varios juegos) esta RETIRADO: DEC-53, una cancion pertenece a un solo juego.
 
   it('BE-ENG-06 con filtro {A} se acepta una cancion de B (fuera del pool) y se evalua miss', async () => {
     const app = await startTestApp({ randomInt: () => 0 })

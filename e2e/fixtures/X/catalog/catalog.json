@@ -3,8 +3,11 @@
   "generatedAt": "2026-10-03T12:00:00Z",
   "games": [
     {
-      "id": "A",
-      "name": "Pokemon Game Alpha"
+      "id": "game-alpha",
+      "name": "Pokemon Game Alpha",
+      "consoles": [
+        "GB"
+      ]
     }
   ],
   "songs": [
@@ -12,7 +15,7 @@
       "id": "mono-song-only1",
       "title": "Lonely Obelisk",
       "games": [
-        "A"
+        "game-alpha"
       ],
       "clipKey": "aaaaaaaaaaaaaaaa",
       "startSec": 7,

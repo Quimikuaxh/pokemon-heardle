@@ -80,7 +80,7 @@ export function AdminApp({ fetchFn }: { fetchFn?: typeof fetch }) {
             games={catalog.games}
             totalSongs={catalog.songs.length}
             onCreate={(name) => run(() => api.createGame(name))}
-            onRename={(id, name) => run(() => api.renameGame(id, name))}
+            onPatchGame={(id, patch) => run(() => api.patchGame(id, patch))}
             onInvalid={setError}
           />
           <FilterBar games={catalog.games} filters={filters} onChange={setFilters} />

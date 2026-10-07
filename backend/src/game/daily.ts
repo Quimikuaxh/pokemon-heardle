@@ -1,11 +1,16 @@
 import { createHmac } from 'node:crypto'
+import type { Song } from '../../../shared/catalog'
+import { buildSelectionGroups } from './selectionGroups'
+import type { GroupedGame } from './selectionGroups'
 
-const compareById = (a: { id: string }, b: { id: string }) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)
-
-/** Cancion del dia comun a todos: HMAC(seed, "daily|v1|"+fecha) sobre todo el catalogo habilitado (DEC-09). */
-export function selectDaily<T extends { id: string; enabled: boolean }>(songs: T[], seed: string, date: string): T {
-  const candidates = songs.filter((song) => song.enabled).sort(compareById)
-  if (candidates.length === 0) throw new Error('No hay canciones habilitadas para el diario')
-  const mac = createHmac('sha256', seed).update(`daily|v1|${date}`).digest()
-  return candidates[mac.readUIntBE(0, 6) % candidates.length]
+/**
+ * Cancion del dia comun a todos (DEC-09 v2, DEC-54): HMAC(seed, "daily|v2|"+fecha); los bytes 0-5 eligen un grupo de
+ * seleccion (todos equiprobables) y los bytes 6-11 una cancion del grupo.
+ */
+export function selectDaily(songs: readonly Song[], games: readonly GroupedGame[], seed: string, date: string): Song {
+  const groups = buildSelectionGroups(songs, games)
+  if (groups.length === 0) throw new Error('No hay canciones habilitadas para el diario')
+  const mac = createHmac('sha256', seed).update(`daily|v2|${date}`).digest()
+  const group = groups[mac.readUIntBE(0, 6) % groups.length]
+  return group.songs[mac.readUIntBE(6, 6) % group.songs.length]
 }

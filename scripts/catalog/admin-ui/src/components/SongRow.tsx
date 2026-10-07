@@ -17,12 +17,9 @@ interface SongRowProps {
 export function SongRow({ song, games, onPatch, onInvalid }: SongRowProps) {
   // Borradores locales: una recarga del catalogo no debe pisar lo que se esta escribiendo.
   const [titleDraft, setTitleDraft] = useState<string | null>(null)
-  const [gamesDraft, setGamesDraft] = useState<string[] | null>(null)
+  const [gameDraft, setGameDraft] = useState<string | null>(null)
   const title = titleDraft ?? song.title
-  const selectedGames = gamesDraft ?? song.games
-
-  const toggleGame = (gameId: string) =>
-    setGamesDraft(selectedGames.includes(gameId) ? selectedGames.filter((id) => id !== gameId) : [...selectedGames, gameId])
+  const selectedGame = gameDraft ?? song.games[0] ?? null
 
   return (
     <li data-song-id={song.id} className="rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-800">
@@ -64,10 +61,10 @@ export function SongRow({ song, games, onPatch, onInvalid }: SongRowProps) {
         </button>
       </div>
 
-      <div role="group" aria-label="Juegos" className="mb-2 flex flex-wrap items-center gap-x-4 gap-y-1">
+      <div role="group" aria-label="Juego" className="mb-2 flex flex-wrap items-center gap-x-4 gap-y-1">
         {games.map((game) => (
           <label key={game.id} className="flex min-h-8 items-center gap-2 text-sm">
-            <input type="checkbox" checked={selectedGames.includes(game.id)} onChange={() => toggleGame(game.id)} />
+            <input type="radio" name={`game-${song.id}`} checked={selectedGame === game.id} onChange={() => setGameDraft(game.id)} />
             {game.name}
           </label>
         ))}
@@ -75,10 +72,11 @@ export function SongRow({ song, games, onPatch, onInvalid }: SongRowProps) {
           type="button"
           className={buttonClass}
           onClick={async () => {
-            if (await onPatch({ games: games.filter((game) => selectedGames.includes(game.id)).map((game) => game.id) })) setGamesDraft(null)
+            if (selectedGame === null) return onInvalid('Elige el juego de la canción.')
+            if (await onPatch({ games: [selectedGame] })) setGameDraft(null)
           }}
         >
-          Guardar juegos
+          Guardar juego
         </button>
       </div>
 

@@ -33,7 +33,7 @@ const song = (id: string, clipKey: string, enabled = true): any => ({
   reviewed: true,
   source: { youtubeId: 'vid00000001', videoTitle: 'x' },
 })
-const catalog = (songs: any[]): any => ({ version: 1, generatedAt: 'x', games: [{ id: 'g', name: 'G' }], songs })
+const catalog = (songs: any[]): any => ({ version: 1, generatedAt: 'x', games: [{ id: 'g', name: 'G', consoles: ['GBA'] }], songs })
 
 function setup(keys: string[]) {
   const data = tmp('up-')

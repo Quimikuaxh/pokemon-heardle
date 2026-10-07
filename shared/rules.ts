@@ -1,6 +1,10 @@
 export const CLIP_SECONDS: readonly number[] = [1, 2, 4, 7, 11, 16]
 export const MAX_ATTEMPTS = 6
 
+/** Consolas de los juegos, en orden canonico de salida (DEC-50, DEC-51). Unico origen: nadie mas lista consolas. */
+export const CONSOLES = ['GB', 'GBC', 'GBA', 'DS', '3DS', 'Switch', 'Switch 2'] as const
+export type ConsoleName = (typeof CONSOLES)[number]
+
 // Formato del clip unico de 16 s (DEC-44): MPEG-1 Layer III, 128 kbps CBR, 44,1 kHz, estereo, sin Xing.
 const SAMPLE_RATE = 44_100
 const SAMPLES_PER_FRAME = 1_152

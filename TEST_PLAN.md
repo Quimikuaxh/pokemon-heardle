@@ -233,6 +233,365 @@ Prevalece sobre las filas anteriores con el mismo ID. El comportamiento no cambi
 | E2E-82 | e2e | Modo oscuro con `emulateMedia({colorScheme})` en caliente: fondo y carcasa cambian; contraste ≥ 4,5:1 en texto, botón Saltar y buscador, en claro y oscuro | Legible en ambos | DEC-46, RQ §6 | A |
 | E2E-83 | e2e | Layout a 375 y 1440 px: sin scroll horizontal (también con el desplegable abierto y en modo libre), controles ≥ 44 px dentro del viewport; en escritorio leyenda visible e historial a la derecha del reproductor; en móvil leyenda oculta e historial debajo | Layout correcto | DEC-46, CA-8 | A |
 
+### 0.4 Burbuja de juego en el buscador, pistas, consolas y un juego por canción (DEC-49 a DEC-53)
+
+Prevalece sobre las filas anteriores con el mismo ID. Fuentes: REQUISITOS.md §3, criterios 9 y 10, §9; ARQUITECTURA.md DEC-48 a DEC-53, §5 (`GameView`), §6, §6.1, §7 y §11.
+
+Referencia (DEC-50/51/53):
+- `GameView.hints: Array<AttemptHint | null>`, misma longitud que `results`; `null` en skip y en hit. `AttemptHint = { console: { label, match } | null, order: 'earlier' | 'later' | null }`.
+- `order` describe el juego de la BUSCADA respecto al de la elegida; `null` si es el mismo juego.
+- Consola: `match = consoles(elegida) ∩ consoles(buscada) ≠ ∅`; `label` = primera consola común en orden canónico `CONSOLES = ['GB','GBC','GBA','DS','3DS','Switch','Switch 2']`, o la primera consola de la ELEGIDA si no hay coincidencia. Z-A = `['Switch','Switch 2']`.
+- Una canción = exactamente un juego. `Game.consoles` es opcional en `shared` y obligatorio en `validate`/`upload` para juegos con canciones activas.
+
+**Retirados** (el ID no se reutiliza): BE-ENG-04 y BE-ENG-05 (canciones con varios juegos; lo cubre BE-ENG-02), BE-CAT-02 (canción multi-juego en el pool; sustituido por SH-CAT-08/12), AD-PAT-06 (`games` con ids repetidos; ver AD-PAT-04/07), FE-SRC-06 (canción multi-juego una vez), E2E-19 (juego compartido por canción multi-juego; lo cubre E2E-17).
+
+**Modificados — shared, backend, admin y UI del admin**
+
+| ID | Nivel | Descripción | Precondiciones | Resultado esperado | Cubre | P |
+|---|---|---|---|---|---|---|
+| SH-CAT-01 | unit | Catálogo válido mínimo y `catalog.example.json`, cada canción con UN juego y cada juego con `consoles` válidas en orden canónico | - | Sin errores | AR §6, DEC-51, DEC-53 | A |
+| SH-CAT-08 | unit | `games` de una canción con 0 elementos y con 2 o más (distintos o repetidos) | - | Error en cada caso que nombra la canción y dice "exactamente un juego" | DEC-26, DEC-53 | A |
+| SH-CAT-12 | unit | `games: ["a","a"]` y `games: ["a","b"]` | - | Error en ambos | DEC-53 | M |
+| BE-CAT-01 | unit | Pool = canciones `enabled:true` cuyo único juego está en el filtro; deshabilitadas fuera | Deshabilitadas y juegos distintos | Correcto | DEC-10, DEC-53 | A |
+| BE-CAT-06 | unit (int) | `GET /catalog`: por canción solo `id,title,games` (un id); juegos `{id,name}` (más `consoles` solo si la implementación las expone; el test documenta cuál); sin `clipKey,startSec,enabled,reviewed,source,youtubeId,videoTitle,durationSec,selectionGroup`; sin `hints`; sin canciones deshabilitadas | Catálogo con `source.youtubeId`, `durationSec` y `consoles` | Cumple; ningún `youtubeId` en el JSON | DEC-11, DEC-41, CA-1 | A |
+| BE-ENG-03 | unit | Fallo con juego correcto: elegida distinta pero del MISMO juego | Objetivo y elegida de un mismo juego | `G` -> `game` | CA-3, DEC-53 | A |
+| BE-LEAK-06 | unit (int) | Diario (dos fechas) e ilimitado (dos objetivos). Claves de `GameView`: `token,mode,date?,status,attempt,maxAttempts,clipSeconds,results,guesses,hints,clipUrl?,solution?`; `hints` con la longitud de `results` | - | Cero coincidencias; claves exactas | CA-1, DEC-50 | A |
+| AD-CAT-01 | unit (int) | Respuesta: `games[{id,name,consoles?,songCount}]` y `songs[AdminSong]` con `durationSec`, `tooShort`, `hasSource`, `errors` | Fixture de 5 canciones | Campos y tipos correctos | AR §6.1, DEC-51 | A |
+| AD-PAT-04 | unit (int) | `games` con exactamente un juego existente | - | Guardado | DEC-53 | A |
+| AD-PAT-07 | unit (int) | `games: []` y `games` con 2 o más juegos | - | 400 `VALIDATION_ERROR` sin cambios (si se permite `[]` para dejar la canción pendiente, documentarlo y marcarlo en `errors`) | DEC-26, DEC-53 | M |
+| AD-PAT-19 | unit (int) | Activar una canción con `games: []` o con 2 juegos (importada a mano) | - | Comportamiento definido y documentado (409/400, o permitido con `errors` visible y `validate` fallando) | DEC-26, DEC-53 | M |
+| AU-FIL-01 | unit | Filtro por juego | Catálogo cliente | Canciones de ese juego | AR §6.1, DEC-53 | A |
+| AU-UI-08 | unit | Editar el juego de una canción con selección ÚNICA; envía `PATCH {games:[id]}`; solo ofrece juegos existentes | - | Correcto | DEC-53 | A |
+| AU-UI-09 | unit | Crear juego: `POST /api/games {name}`; aparece sin consolas y con la marca "Sin consola"; nombre vacío o duplicado muestra error | - | Correcto | DEC-39, DEC-51 | A |
+
+**Modificados — frontend**
+
+| ID | Nivel | Descripción | Precondiciones | Resultado esperado | Cubre | P |
+|---|---|---|---|---|---|---|
+| FE-SRC-02 | unit | Búsqueda por nombre de juego ("ruby"): el grupo "Juegos" lista ese juego y "Canciones" todas sus canciones | `mkCatalog()` | Ambos grupos correctos | DEC-17, DEC-49 | A |
+| FE-SRC-04 | unit | Se busca sobre TODO el catálogo, también juegos y canciones fuera del filtro del modo libre | Filtro libre = {A}; canción y juego de B | Aparecen | DEC-17, DEC-49 | A |
+| FE-SRC-05 | unit | Cada opción de canción muestra el título y su ÚNICO juego | - | Visible | DEC-17, DEC-53 | M |
+| FE-SRC-17 | unit | ↓ sin activa va a la primera y ↑ a la última, con vuelta, recorriendo ambos grupos como una sola lista; la activa se desplaza a la vista | Búsqueda con juegos y canciones | Juegos y luego canciones; scroll correcto | RQ §6, DEC-49 | M |
+| FE-SRC-18 | unit | Sin límite: 60 canciones coincidentes -> 60 opciones de canción; sin aviso "y N más" | Catálogo de 60 canciones | Todas visibles | DEC-48 | M |
+| FE-NOF-03 | unit | Tras partidas completas, las únicas claves `heardle:` son `filter`, `settings` (solo si se abrió el panel), `daily:<fecha>` y `unlimited` (en curso); ninguna `stats:*` ni clave por la burbuja | Storage vacío | Conjunto exacto | DEC-43, DEC-49, DEC-52 | A |
+
+**Modificados — E2E**
+
+| ID | Nivel | Módulo | Descripción | Precondiciones | Resultado esperado | Cubre | P |
+|---|---|---|---|---|---|---|---|
+| E2E-20 | e2e | Buscador | Buscar por título y por juego: grupos "Juegos" y "Canciones" (el vacío no se pinta); elegir una canción envía el intento | Catálogo R | Grupos y orden correctos | DEC-17, DEC-49 | A |
+| E2E-21 | e2e | Buscador | Con filtro libre {A}, el buscador ofrece juegos y canciones de B; en diario, todo el catálogo | Catálogo R | Lista completa | DEC-17, DEC-49 | A |
+| E2E-26 | e2e | Fuga | Antes de terminar, en `/api/games*`, clips, token, storage, DOM y bundle: ni `clipKey`, `startSec`, `source`, fichero, `videoTitle`, `durationSec`, `youtubeId` ni el id y NOMBRE del juego de la objetivo (salvo `/api/catalog`, el desplegable y `guesses` propias), con las pistas activadas y desactivadas | Juego objetivo con id y nombre únicos | Cero coincidencias fuera de lo legítimo | CA-1, DEC-41, DEC-50 | A |
+| E2E-73 | e2e | Estado | Diario ganado e ilimitado perdido: sin compartir ni estadísticas; `localStorage` solo con `filter`, `settings` (si se tocó), `daily:<fecha>` y `unlimited` en curso; recargar el diario no lo repite | Catálogo M y R | Correcto | DEC-43, DEC-52, CL | A |
+
+**Nuevos — shared**
+
+| ID | Nivel | Descripción | Precondiciones | Resultado esperado | Cubre | P |
+|---|---|---|---|---|---|---|
+| SH-CON-01 | unit | `CONSOLES` exacto y en orden: `['GB','GBC','GBA','DS','3DS','Switch','Switch 2']` | - | Igual | DEC-50 | A |
+| SH-CON-02 | unit | El tipo `ConsoleName` admite exactamente esos 7 valores (`expectTypeOf`) | - | Coincide | DEC-50 | M |
+| SH-CON-03 | unit | Un único origen: backend, script, admin-ui y frontend importan `CONSOLES` de `shared/rules` | Análisis estático | Sin literales duplicados | DEC-50, DEC-12 | M |
+| SH-CAT-22 | unit | `Game.consoles` ausente es válido en `shared` | - | Sin error | DEC-51 | A |
+| SH-CAT-23 | unit | `consoles` válida: una (`['GBA']`) o varias en orden canónico (`['Switch','Switch 2']`) | - | Sin error | DEC-51 | A |
+| SH-CAT-24 | unit | `consoles: []` | - | Error | DEC-51 | A |
+| SH-CAT-25 | unit | Nombre desconocido (`'PS5'`, `'switch'`, `'Switch2'`, `''`) o tipo erróneo (string, número, objeto, `null`) | - | Error que nombra el juego | DEC-51 | A |
+| SH-CAT-26 | unit | `consoles` desordenada (`['Switch 2','Switch']`) | - | Error "orden canónico" | DEC-51 | A |
+| SH-CAT-27 | unit | `consoles` con repetidos | - | Error | DEC-51 | A |
+
+**Nuevos — script de catálogo**
+
+| ID | Nivel | Descripción | Precondiciones | Resultado esperado | Cubre | P |
+|---|---|---|---|---|---|---|
+| SC-CON-01 | unit | `validate` falla si un juego con canciones ACTIVAS no tiene `consoles`; nombra el juego | - | Código != 0 | DEC-51 | A |
+| SC-CON-02 | unit | `validate` pasa si el juego sin `consoles` solo tiene canciones desactivadas | - | Código 0 por este motivo | DEC-51 | A |
+| SC-CON-03 | unit | `validate` falla con `consoles` vacías, desconocidas, desordenadas o repetidas | Un caso por vuelta | Código != 0 | DEC-51 | A |
+| SC-CON-04 | unit | `validate` falla si una canción activa tiene 0 o 2 juegos | - | Código != 0 y nombra la canción | DEC-53 | A |
+| SC-CON-05 | unit | `upload` no sube nada si falta alguna consola | S3 simulado | 0 subidas | DEC-51 | A |
+| SC-CON-06 | unit | `draft` añade el juego nuevo AL FINAL de `games`, sin `consoles` ni reordenar los existentes | Catálogo con 3 juegos | Posición final; resto intacto | DEC-48, DEC-51 | A |
+| SC-CON-07 | unit | `draft` con un título que parseTitle asigna a dos juegos nunca persiste `games.length == 2` sin que `validate` falle (documentar la elección) | Título ambiguo | Correcto | DEC-53, DEC-26 | M |
+| SC-CON-08 | unit | `DESARROLLO.md` y el README del script avisan de mover el juego nuevo a su sitio en `games` y asignarle consolas | Documentos | Aviso presente | DEC-48, DEC-51 | B |
+
+**Nuevos — backend: `computeHint` y `buildGameView`** (catálogo de prueba en orden de salida: `rby` GB, `gsc` GBC, `rse` GBA, `bw` DS, `xy` 3DS, `swsh` Switch, `za` Switch + Switch 2; además `sw2only` Switch 2 y `noconsole` sin consolas)
+
+| ID | Nivel | Descripción | Precondiciones | Resultado esperado | Cubre | P |
+|---|---|---|---|---|---|---|
+| BE-HNT-01 | unit | Consola coincide: elegida y buscada de `rse` | - | `{label:'GBA', match:true}` | DEC-50, criterio 9 | A |
+| BE-HNT-02 | unit | No coincide: elegida `rse`, buscada `bw` | - | `{label:'GBA', match:false}`; el label es de la ELEGIDA | DEC-50 | A |
+| BE-HNT-03 | unit | Z-A 1: elegida Z-A, buscada Switch | - | `{label:'Switch', match:true}` | DEC-50 | A |
+| BE-HNT-04 | unit | Z-A 2: elegida Z-A, buscada solo Switch 2 | - | `{label:'Switch 2', match:true}` | DEC-50 | A |
+| BE-HNT-05 | unit | Z-A 3: elegida Z-A, buscada de otra consola (`rse`, `bw`, `rby`) | - | `{label:'Switch', match:false}` | DEC-50 | A |
+| BE-HNT-06 | unit | Z-A 4a: buscada Z-A, elegida Switch | - | `{label:'Switch', match:true}` | DEC-50 | A |
+| BE-HNT-07 | unit | Z-A 4b: buscada Z-A, elegida solo Switch 2 | - | `{label:'Switch 2', match:true}` | DEC-50 | A |
+| BE-HNT-08 | unit | Z-A contra Z-A | - | `{label:'Switch', match:true}`, `order: null` | DEC-50 | M |
+| BE-HNT-09 | unit | Producto cartesiano de juegos: el label nunca es una consola que la elegida no tenga | - | `label` ∈ consolas de la elegida | DEC-50 | A |
+| BE-HNT-10 | unit | Elegida o buscada sin `consoles` | `noconsole` | `console: null`; `order` calculado | DEC-50, DEC-51 | A |
+| BE-HNT-11 | unit | Fecha: elegida `rse`, buscada `rby` | - | `order: 'earlier'` | DEC-50, DEC-48 | A |
+| BE-HNT-12 | unit | Fecha: elegida `rby`, buscada `za` | - | `order: 'later'` | DEC-50 | A |
+| BE-HNT-13 | unit | Mismo juego | - | `order: null` | DEC-50 | A |
+| BE-HNT-14 | unit | Reordenar `games` invierte las flechas | `games` permutado | `earlier` <-> `later` | DEC-48, DEC-50 | A |
+| BE-HNT-15 | unit | Juego fuera de `games` (catálogo corrupto) | - | Sin excepción; `order: null` | DEC-50 | B |
+| BE-HNT-16 | unit | `buildGameView`: `hints.length === results.length`; `null` en skip y hit; objeto en miss y game (en game: `match:true`, `order:null`) | Secuencias mixtas | Alineación correcta | DEC-50 | A |
+| BE-HNT-17 | unit | Skips intercalados `S,M,S,G,M` con `q=[k1,k2,k3]` | - | `[null,h(k1),null,h(k2),h(k3)]` | DEC-50 | A |
+| BE-HNT-18 | unit | 6 fallos -> 6 hints; ganada en el 3.º tras 2 fallos -> `[h,h,null]`; solo skips -> todo `null` | - | Correcto | DEC-50 | A |
+| BE-HNT-19 | unit (int) | `POST /games`, `guess`, `skip` y `state` traen siempre `hints`, en diario e ilimitado, y se recuperan tras recarga | - | Presente y estable | DEC-50 | A |
+| BE-HNT-20 | unit (int) | El servidor ignora ajustes del cliente en el cuerpo (`settings`, `consoleHint`, `dateHint`, `hints`) | Cuerpos con campos extra | Respuesta idéntica | DEC-31, DEC-52 | M |
+| BE-HNT-21 | unit (int) | Cambiar `consoles` en el catálogo y recargarlo cambia las pistas de la misma partida sin invalidar el token | Catálogo recargado | Pistas nuevas, token válido | DEC-50 | M |
+| BE-HNT-22 | unit (int) | `AttemptHint` tiene exactamente `console` (`label`,`match`) y `order` | Respuesta real | Claves exactas | DEC-50, criterio 9 | A |
+| BE-HNT-23 | unit (int) | El label de una pista roja nunca es una consola de la buscada | Buscada `bw`, elegidas de los demás | Todos los labels rojos ∉ consolas de la buscada | DEC-50 | A |
+| BE-HNT-24 | unit (int) | Alcance de lo revelado: una pista verde revela una consola de la buscada y la flecha un lado del orden; nada más (ver BE-LEAK-17..19) | - | Alcance exacto | DEC-50 | M |
+| BE-TOK-19 | unit | El token no guarda pistas: claves `v,n,m,d,k,r,q,iat,exp` y longitud constante con 0..6 fallos | - | Mismas claves y longitud | DEC-50, DEC-03 | A |
+| BE-CAT-12 | unit (int) | `GET /catalog` devuelve `games` en el orden de `catalog.json` | `games` permutados | Orden idéntico | DEC-48 | A |
+| BE-CAT-13 | unit (int) | Una canción con 0 o 2 juegos en el catálogo cargado: `/health` 503 `CATALOG_UNAVAILABLE` | Fixture inválido | 503 | DEC-53 | M |
+| BE-LEAK-17 | unit (int) | Partida con 5 fallos y pistas: el id y el nombre del juego objetivo (y subcadenas ≥4) no aparecen en cuerpos ni cabeceras de `/games*` antes del final | Juego objetivo con id y nombre únicos | Cero coincidencias | CA-1, DEC-50, criterio 9 | A |
+| BE-LEAK-18 | unit (int) | Igual con pistas verdes (misma consola, Z-A): se revela la consola, no el id ni el nombre del juego | - | Solo `label` y `match` | DEC-50 | A |
+| BE-LEAK-19 | unit (int) | Dos objetivos de juegos distintos con la misma secuencia de elegidas: las respuestas solo difieren en `match` y `order` | - | Diferencias limitadas | DEC-50, CA-1 | A |
+
+**Nuevos — admin (`PATCH /api/games/:id`)**
+
+| ID | Nivel | Descripción | Precondiciones | Resultado esperado | Cubre | P |
+|---|---|---|---|---|---|---|
+| AD-CON-01 | unit (int) | `PATCH {consoles:['GBA']}` persiste sin cambiar `id` ni `name` | Token correcto | Persistido | DEC-51, DEC-39 | A |
+| AD-CON-02 | unit (int) | Entrada desordenada se guarda en orden canónico | - | Orden canónico | DEC-51 | A |
+| AD-CON-03 | unit (int) | `[]`, nombre desconocido, repetidos (o normalizados; documentar), no array | - | 400 sin cambios | DEC-51 | A |
+| AD-CON-04 | unit (int) | `PATCH {name}` conserva consolas; `PATCH {consoles}` conserva nombre; `{}` -> 400 o no-op documentado | - | Sin pérdida | DEC-51 | A |
+| AD-CON-05 | unit (int) | `name` y `consoles` a la vez: atómico | - | Ambos o ninguno | DEC-37, DEC-51 | A |
+| AD-CON-06 | unit (int) | Juego inexistente; `id` en el cuerpo | - | 404; `id` ignorado | DEC-39 | M |
+| AD-CON-07 | unit (int) | Sin token o con `Host` ajeno | - | 403 | DEC-36 | A |
+| AD-CON-08 | unit (int) | `GET /api/catalog` devuelve `consoles`; un juego sin consolas con canciones activas aparece marcado | - | Correcto | DEC-51 | A |
+| AD-CON-09 | unit (int) | `['Switch','Switch 2']` y `['Switch 2']` se aceptan | - | Persistido | DEC-51 | M |
+| AD-CAT-09 | unit (int) | `errors` de la canción incluye "exactamente un juego" con 0 o 2 juegos | Catálogo tolerante | Mensaje correcto | DEC-53 | A |
+
+**Nuevos — UI del admin**
+
+| ID | Nivel | Descripción | Precondiciones | Resultado esperado | Cubre | P |
+|---|---|---|---|---|---|---|
+| AU-CON-01 | unit | 7 casillas de consola por juego marcadas según `consoles` | API simulada | Estado correcto | DEC-51 | A |
+| AU-CON-02 | unit | Guardar envía `PATCH {consoles}` en orden canónico sin importar el orden de clic | - | Cuerpo canónico | DEC-51 | A |
+| AU-CON-03 | unit | Desmarcar todas bloquea el guardado o muestra error; nunca envía `[]` | - | Correcto | DEC-51 | A |
+| AU-CON-04 | unit | Juego sin consolas con canciones activas muestra "Sin consola" y se filtra con "con errores" | - | Marca visible | DEC-51 | M |
+| AU-CON-05 | unit | Error 400 al guardar: mensaje y casillas revertidas | Mock 400 | Revertido | DEC-51 | M |
+| AU-CON-06 | unit | Z-A con ambas marcadas se guarda `['Switch','Switch 2']`; casillas con etiqueta accesible | - | Correcto | DEC-51 | M |
+| AU-CON-07 | unit | La UI no ofrece borrar, fusionar ni reordenar juegos | - | Ausentes | DEC-48 | M |
+
+**Nuevos — frontend: búsqueda (`searchCatalog`)**
+
+| ID | Nivel | Descripción | Precondiciones | Resultado esperado | Cubre | P |
+|---|---|---|---|---|---|---|
+| FE-SRC-19 | unit | `searchCatalog(catalog, query, null)` devuelve `{games, songs}`; juegos en el orden de `catalog.games` y canciones en el del catálogo | `mkCatalog()` | Ambos grupos ordenados | DEC-17, DEC-48, DEC-49 | A |
+| FE-SRC-20 | unit | Sin burbuja y texto vacío o solo espacios | - | `{games:[], songs:[]}` | DEC-49 | A |
+| FE-SRC-21 | unit | Con burbuja y texto vacío: todas las canciones del juego | Juego con 200 canciones | 200 | DEC-49, DEC-48 | A |
+| FE-SRC-22 | unit | Con burbuja y texto: solo canciones de ese juego que cumplen el texto | "town" con burbuja Ruby | Solo Ruby | DEC-49 | A |
+| FE-SRC-23 | unit | Con burbuja, "Juegos" sigue ofreciendo juegos que coinciden (para sustituirla) | Burbuja Ruby, texto "diamond" | Incluye Diamond/Pearl | DEC-49 | M |
+| FE-SRC-24 | unit | `gameId` inexistente o nulo: sin excepción; inexistente -> `songs: []` | - | Seguro | DEC-49 | M |
+| FE-SRC-25 | unit | Sin acentos ni mayúsculas en "Juegos"; caracteres de regex literales | - | Coincide sin excepción | DEC-17 | M |
+| FE-SRC-26 | unit | Función pura que no lee el filtro del modo libre | `Object.freeze` | Sin mutación | DEC-49 | A |
+| FE-SRC-27 | unit | Las canciones intentadas siguen en `songs`, también con burbuja | `guesses=[x]` | Presente | DEC-18, DEC-49 | A |
+| FE-SRC-28 | unit | 1500 canciones con y sin burbuja | Dataset | < 50 ms | DEC-49 | B |
+
+**Nuevos — frontend: combobox con grupos y burbuja**
+
+| ID | Nivel | Descripción | Precondiciones | Resultado esperado | Cubre | P |
+|---|---|---|---|---|---|---|
+| FE-CMB-01 | unit | Input `role="combobox"`, `aria-expanded` coherente, `aria-controls` al `listbox` | - | Atributos correctos | DEC-49, RQ §6 | A |
+| FE-CMB-02 | unit | Dos `role="group"` con `aria-labelledby` a "Juegos" y "Canciones"; un grupo vacío no se pinta | - | Estructura correcta | DEC-49 | A |
+| FE-CMB-03 | unit | Opciones `role="option"`; la activa `aria-selected="true"` y `aria-activedescendant` en el input | - | Correcto | DEC-49 | A |
+| FE-CMB-04 | unit | Canciones intentadas `aria-disabled="true"`, no elegibles | `guesses=[x]` | Sin petición | DEC-18, DEC-49 | A |
+| FE-CMB-05 | unit | Flechas recorren ambos grupos como una lista con vuelta | - | Orden correcto | DEC-49 | A |
+| FE-CMB-06 | unit | Enter sobre un juego: vacía el texto, pone la burbuja, foco en el input, lista sus canciones | - | Correcto | DEC-49 | A |
+| FE-CMB-07 | unit | Enter sobre una canción envía `{token,songId}` | Spy | Cuerpo exacto | DEC-17, DEC-49 | A |
+| FE-CMB-08 | unit | Escape: con lista abierta la cierra; cerrada, vacía el texto; nunca quita la burbuja | - | Correcto | DEC-49 | A |
+| FE-CMB-09 | unit | Backspace con input vacío quita la burbuja; con texto edita; sin burbuja nada; no durante IME | - | Según caso | DEC-49 | A |
+| FE-CMB-10 | unit | Burbuja con nombre y `<button aria-label="Quitar filtro de juego: <nombre>">`; clic, Enter o Espacio la quitan y el foco vuelve al input | - | Accesible | DEC-49 | A |
+| FE-CMB-11 | unit | `aria-describedby` "Filtrando por <juego>" solo con burbuja | - | Presente/ausente | DEC-49 | A |
+| FE-CMB-12 | unit | `aria-live` anuncia "Filtro de juego: <nombre>", "Filtro de juego quitado" y el número de resultados | - | Anunciado | DEC-49 | A |
+| FE-CMB-13 | unit | Elegir otro juego sustituye la burbuja | - | Una burbuja | DEC-49 | A |
+| FE-CMB-14 | unit | La burbuja se borra al empezar otra partida y no se guarda en `localStorage` | - | Correcto | DEC-49 | A |
+| FE-CMB-15 | unit | La burbuja no toca `heardle:filter` ni `FilterPanel`; admite juegos fuera del pool libre | - | Filtro intacto | DEC-49 | A |
+| FE-CMB-16 | unit | Clic en una opción no quita el foco del input | - | Foco conservado | DEC-49 | M |
+| FE-CMB-17 | unit | 200 canciones: 200 opciones y la activa sigue a `scrollIntoView` | - | Sin truncar | DEC-48, DEC-49 | M |
+| FE-CMB-18 | unit | Nombres accesibles en español; tabulación: × (si hay) -> input | - | Correcto | RQ §6 | M |
+| FE-CMB-19 | unit | Partida terminada: combobox deshabilitado y burbuja no interactiva | - | Deshabilitado | CA-7 | M |
+| FE-CMB-20 | unit | Burbuja y texto sin resultados: mensaje accesible "sin resultados" | - | Mensaje y atributos | DEC-49 | M |
+
+**Nuevos — frontend: panel de ajustes**
+
+| ID | Nivel | Descripción | Precondiciones | Resultado esperado | Cubre | P |
+|---|---|---|---|---|---|---|
+| FE-SET-01 | unit | Engranaje con nombre "Ajustes" abre `role="dialog"` `aria-modal="true"` con título | - | Accesible | DEC-52 | A |
+| FE-SET-02 | unit | Foco atrapado dentro del diálogo | - | Ciclo de foco | DEC-52 | A |
+| FE-SET-03 | unit | Escape cierra y el foco vuelve al engranaje | - | Restaurado | DEC-52 | A |
+| FE-SET-04 | unit | Dos `role="switch"` "Pista de consola" y "Pista de fecha", desactivados por defecto | Storage vacío | `aria-checked="false"` | DEC-52 | A |
+| FE-SET-05 | unit | Cada interruptor cambia con clic, Enter y Espacio, de forma independiente | - | Correcto | DEC-52 | A |
+| FE-SET-06 | unit | Se guardan en `heardle:settings` `{consoleHint,dateHint}` y se restauran | - | Persistidos | DEC-52 | A |
+| FE-SET-07 | unit | Datos corruptos -> ambas desactivadas sin excepción | Storage con basura | Por defecto | DEC-52 | A |
+| FE-SET-08 | unit | Datos parciales: el campo ausente vale `false`; claves extra se ignoran | - | Tolerante | DEC-52 | M |
+| FE-SET-09 | unit | `localStorage` no disponible: funcionan en memoria | Mock lanza | Sin excepción | DEC-52 | M |
+| FE-SET-10 | unit | Valen en diario e ilimitado y no generan peticiones ni cambian cuerpos | Spy de red | 0 peticiones | DEC-52, DEC-50 | A |
+| FE-SET-11 | unit | La limpieza de `stats:*` no borra `heardle:settings` | - | Intacto | DEC-43, DEC-52 | A |
+| FE-SET-12 | unit | El panel se abre con partida en curso o terminada sin afectar al reproductor | - | Sin efectos | DEC-52 | M |
+| FE-SET-13 | unit | Cerrar con el botón o el fondo deja los ajustes aplicados | - | Aplicados | DEC-52 | M |
+| FE-SET-14 | unit | Textos en español; el estado no depende solo del color | - | Correcto | RQ §6 | B |
+
+**Nuevos — frontend: pistas en `AttemptList`**
+
+| ID | Nivel | Descripción | Precondiciones | Resultado esperado | Cubre | P |
+|---|---|---|---|---|---|---|
+| FE-HNT-01 | unit | Pistas desactivadas: sin burbujas ni flechas aunque `hints` traiga datos | 3 fallos | Nada visible | DEC-52, criterio 9 | A |
+| FE-HNT-02 | unit | Consola activada: burbuja con la consola, verde con ✓ si `match`, roja con ✗ si no | `hints` mixtas | Correcto | DEC-52 | A |
+| FE-HNT-03 | unit | `aria-label` "Consola: GBA, coincide" / "no coincide"; icono además del color | - | Correcto | DEC-52, RQ §6 | A |
+| FE-HNT-04 | unit | Fecha activada: flecha "La canción buscada es de un juego anterior/posterior"; sin flecha si `order` es `null` | - | Correcto | DEC-52 | A |
+| FE-HNT-05 | unit | Skips y acierto sin pistas | - | Correcto | DEC-50 | A |
+| FE-HNT-06 | unit | Interruptores independientes | - | Correcto | DEC-52 | A |
+| FE-HNT-07 | unit | Activar a mitad de partida pinta también los fallos anteriores sin petición; desactivar las oculta | Misma `GameView` | 0 peticiones | DEC-52, criterio 9 | A |
+| FE-HNT-08 | unit | `console: null` no pinta burbuja | - | Sin burbuja | DEC-50, DEC-51 | A |
+| FE-HNT-09 | unit | Diario terminado guardado con `hints` y pistas activas: se pintan sin API | Storage sembrado | 0 llamadas | DEC-52, CL | A |
+| FE-HNT-10 | unit | Vistas guardadas sin `hints` (versiones anteriores): sin excepción ni pistas | - | Degradación segura | DEC-52 | A |
+| FE-HNT-11 | unit | `hints` con longitud distinta de `results` no rompe la lista | - | Sin excepción | DEC-50 | M |
+| FE-HNT-12 | unit | Mismas pistas en diario, ilimitado y tras `GAME_OVER`/recarga | - | Igual | DEC-50 | M |
+| FE-HNT-13 | unit | Las pistas no alteran el texto accesible del resultado ni el feedback de juego | - | Intactos | CA-3 | M |
+| FE-HNT-14 | unit | Desactivadas, las pistas no quedan en el DOM como texto oculto ni en storage fuera de `view` | - | Nada extra | criterio 9 | A |
+
+**Nuevos — E2E**
+
+| ID | Nivel | Módulo | Descripción | Precondiciones | Resultado esperado | Cubre | P |
+|---|---|---|---|---|---|---|---|
+| E2E-85 | e2e | Buscador | "ruby": grupos "Juegos" y "Canciones"; elegir el juego pone la burbuja con ×, vacía el texto y lista solo ese juego; un título filtra dentro; la × y Backspace la quitan; otro juego la sustituye | Catálogo R con ≥3 juegos | Correcto | DEC-49 | A |
+| E2E-86 | e2e | Buscador | Solo teclado: flechas por ambos grupos, Enter (juego -> burbuja; canción -> intento), Escape, Backspace; foco en el input; región `aria-live` anuncia | - | Operable sin ratón | DEC-49, RQ §6 | A |
+| E2E-87 | e2e | Buscador | La burbuja no persiste ni toca el filtro libre; desaparece al empezar otra partida | Filtro libre {A}, burbuja B | Correcto | DEC-49 | A |
+| E2E-88 | e2e | Buscador | Con burbuja, las intentadas siguen visibles y deshabilitadas; burbuja de un juego fuera del pool | - | Correcto | DEC-18, DEC-49 | A |
+| E2E-89 | e2e | Pistas | Sin pistas por defecto; tras dos fallos activar "Pista de consola" las muestra en los anteriores y siguientes; desactivar oculta; recargar conserva el ajuste | Catálogo R con `consoles` | 0 peticiones al cambiar ajustes | DEC-52, criterio 9 | A |
+| E2E-90 | e2e | Pistas | "Pista de fecha": flechas correctas con juegos anteriores y posteriores; mismo juego sin flecha; skips sin nada | Objetivo conocida | Correcto | DEC-50, DEC-52 | A |
+| E2E-91 | e2e | Pistas | Las 4 reglas de Z-A en el navegador | Juegos GBA, Switch, Switch 2 y Z-A | Etiqueta y color correctos | DEC-50 | A |
+| E2E-92 | e2e | Fuga | Con pistas activadas y desactivadas, `/api/games*` trae `hints` con claves exactas y nada revela el id ni el nombre del juego objetivo hasta terminar | Catálogo R | Cero coincidencias | criterio 9, DEC-50 | A |
+| E2E-93 | e2e | Pistas | Diario terminado y reabierto con pistas activas: se ven sin peticiones | - | 0 peticiones | DEC-52, CL | A |
+| E2E-94 | e2e | Accesibilidad | Ajustes: foco atrapado, Escape devuelve el foco, interruptores con teclado; buscador con grupos sin violaciones graves (axe si está disponible, si no por roles) | Chromium | Sin violaciones graves | DEC-49, DEC-52 | M |
+| E2E-95 | e2e | Móvil/oscuro | 375 px claro/oscuro: burbuja con nombre largo sin desbordar; burbujas de consola y flecha con contraste ≥ 4,5:1 e iconos; engranaje ≥ 44 px | Viewport móvil | Correcto | DEC-52, RQ §6 | A |
+| E2E-96 | e2e | Admin | Editar consolas (Switch 2 y luego Switch) guarda `['Switch','Switch 2']` en el catálogo temporal; "Sin consola" visible; juego de canción de selección única | Fixture del admin | Correcto | DEC-51, DEC-53 | A |
+| E2E-97 | e2e | Catálogo | Un juego sin consolas hace fallar `validate`; tras asignarlas en el admin pasa; `upload` simulado no sube antes de corregir | Fixture | Flujo corregible | DEC-51 | M |
+
+Fixtures: los catálogos `R` y `M` y los del backend necesitan `consoles` en cada juego, al menos tres juegos con orden conocido, un Z-A (`['Switch','Switch 2']`), un juego de solo Switch 2 y un solo juego por canción (se elimina la canción "multi-juego A+B"). Afecta a E2E-17..22, 45 y 85..96.
+
+**Matriz §5:** "Feedback parcial" pasa a "un juego por canción, DEC-53" = BE-ENG-02/03, FE-GAM-06, E2E-17/18; nuevas filas "Buscador con burbuja (DEC-49)" = SH-SRC-*, FE-SRC-02/04/05/17..28, FE-CMB-01..20, E2E-20/21/85..88/94/95; "Pistas (DEC-50..52, criterio 9)" = SH-CON-01..03, BE-HNT-01..24, BE-TOK-19, BE-LEAK-17..19, FE-SET-01..14, FE-HNT-01..14, E2E-26/89..95; "Consolas y un juego por canción (DEC-51/53)" = SH-CAT-01/08/12/22..27, SC-CON-01..08, AD-CON-01..09, AD-CAT-01/09, AD-PAT-04/07/19, AU-CON-01..07, AU-UI-08/09, BE-CAT-06/12/13, E2E-96/97; "Orden de juegos (DEC-48)" += BE-CAT-12, BE-HNT-14, FE-SRC-19; "CA-1" += BE-LEAK-17..19, E2E-92.
+
+**Riesgos y ambigüedades:**
+1. Limitación aceptada (DEC-50): las pistas viajan siempre aunque estén desactivadas en el cliente; una verde revela una consola de la buscada y la flecha un lado del orden. Un fallo `game` ya revela el juego (comportamiento previo, CA-3).
+2. `validate` no detecta un juego mal colocado en `games` (flechas erróneas): revisión manual al añadir juegos (`CLAUDE.md` del proyecto).
+3. A resolver por el desarrollador y documentar en el test: si `/catalog` expone `consoles`; si `PATCH /api/songs/:id` admite `games: []`; si `PATCH /api/games/:id` normaliza consolas repetidas; qué hace `draft` con un título asignable a dos juegos; si "Juegos" sigue visible con burbuja (se asume que sí); si el diálogo se cierra con clic en el fondo.
+4. Los datos reales (consolas, un juego por canción) se comprueban con `validate` sobre una copia de `scripts/catalog/data`, nunca sobre el original.
+5. Foco del diálogo y lectura del combobox con VoiceOver: verificación manual en iPhone.
+
+### 0.5 Selección equiprobable por grupo (DEC-54)
+
+Prevalece sobre las filas anteriores con el mismo ID. Fuentes: ARQUITECTURA DEC-09 (v2), DEC-10, DEC-20, DEC-54; REQUISITOS §3 y §9.
+
+Referencia:
+- `h = HMAC-SHA256(DAILY_SEED, "daily|v2|"+fecha)`. Grupo = `h.readUIntBE(0,6) % grupos.length`, con `grupos` = grupos de selección con alguna canción `enabled`, ordenados por id del grupo (no por su posición en `catalog.games`). Canción = `h.readUIntBE(6,6) % canciones.length`, con `canciones` = las `enabled` de todos los juegos del grupo, por `song.id`.
+- Grupo de un juego = `selectionGroup` o, si falta, su propio id. Black/White + Black 2/White 2 y Sun/Moon + Ultra Sun/Ultra Moon forman grupo.
+- Libre: grupo al azar (`randomInt`) entre los grupos con algún juego filtrado con canciones activas; luego canción al azar entre las activas de los juegos filtrados de ese grupo, por `id`.
+- Probabilidad de una canción: `1 / (grupos × canciones_de_su_grupo)`. Filtro, pistas y feedback siguen siendo por juego.
+
+**Retirado:** BE-DAY-17 (365 días cubren todas las canciones; lo sustituyen BE-SEL-03..05).
+
+**Modificados**
+
+| ID | Nivel | Descripción | Precondiciones | Resultado esperado | Cubre | P |
+|---|---|---|---|---|---|---|
+| BE-DAY-03 | unit | La selección diaria usa las canciones `enabled` agrupadas por grupo de selección; las desactivadas nunca salen ni cuentan | 3 grupos y deshabilitadas | Ninguna deshabilitada; en 120 fechas salen los 3 grupos | CA-4, DEC-09, DEC-54 | A |
+| BE-DAY-05 | unit | Vector independiente: `"daily|v2|"+fecha`; bytes 0-5 BE `% nGrupos`; bytes 6-11 BE `% nCanciones del grupo` | Semilla y fecha fijas; grupos de 1, 5 y 40 | Coincide; con `v1` no | DEC-09, DEC-54 | A |
+| BE-DAY-06 [MOD] | unit | Grupos por id del grupo; canciones por `id`. Barajar `songs` no cambia el resultado y reordenar `games` tampoco. Motivo: insertar un juego en su sitio de `games` no debe cambiar la canción del día | `songs` barajado y `games` reordenado | Misma canción; reproducible contra el vector | DEC-09, DEC-20, DEC-48 | A |
+| BE-DAY-07 | unit | Un solo juego con una sola canción activa | - | Siempre esa; sin dividir por cero | DEC-09 | A |
+| BE-DAY-18 | unit | Libre con `randomInt` inyectado: `randomInt(nGrupos)` y después `randomInt(nCanciones del grupo)`; nunca `randomInt(0)` | `randomInt` espiado | Llamadas y rangos exactos | DEC-10, DEC-20, DEC-54 | A |
+| BE-CAT-01 | unit | Candidatos del modo libre = canciones `enabled` de juegos filtrados, agrupadas; un grupo cuenta solo con algún juego filtrado con activas | Filtro {B2W2}, grupo BW+B2W2 | El grupo aporta solo canciones de B2W2 | DEC-10, DEC-54 | A |
+
+**Nuevos — backend**
+
+| ID | Nivel | Descripción | Precondiciones | Resultado esperado | Cubre | P |
+|---|---|---|---|---|---|---|
+| BE-SEL-01 | unit | Determinismo: misma fecha y semilla -> misma canción, también tras barajar `songs` y reconstruir el índice | - | Siempre la misma | CA-4, DEC-09 | A |
+| BE-SEL-02 | unit | `v2` difiere de la selección `v1` en al menos el 50 % de 365 fechas; el código no usa `v1` | 3 grupos desiguales | Diferencias; sin `daily|v1|` fuera de tests | DEC-09, DEC-54 | A |
+| BE-SEL-03 | unit | Diario uniforme por grupo: grupos de 1, 10 y 100 canciones en 3000 fechas generadas | Semilla fija | Cada grupo 33,3 % ± 3 puntos | DEC-54, CA-4 | A |
+| BE-SEL-04 | unit | Dentro de un grupo de 10 canciones la canción es uniforme | ≥ 3000 fechas con ese grupo | Cada una 10 % ± 3; ninguna con 0 | DEC-54 | A |
+| BE-SEL-05 | unit | Probabilidad `1/(grupos×canciones)`: canción de grupo de 1 ≈ 1/3; de grupo de 100 ≈ 1/300 | Muestreo de BE-SEL-03 | Dentro de tolerancia | DEC-54 | M |
+| BE-SEL-06 | unit | Grupo sin canciones activas: nunca sale y no cuenta en `nGrupos` | - | Correcto | DEC-54 | A |
+| BE-SEL-07 | unit | Activar o desactivar una canción cambia el tamaño del grupo; desactivar todas reduce `nGrupos` | Antes/después | Reproducible contra el vector | DEC-09, DEC-54 | M |
+| BE-SEL-08 | unit | Grupo de dos juegos pesa como uno: {BW+B2W2 con 30+10, X con 5} | 3000 fechas | BW+B2W2 ≈ 50 %, X ≈ 50 %; dentro, cada canción ≈ 1/40 | DEC-54 | A |
+| BE-SEL-09 | unit | Grupo de dos juegos con uno sin activas aporta solo las del otro y sigue pesando uno; sin activas en ambos desaparece | Tres variantes | Correcto | DEC-54 | A |
+| BE-SEL-10 | unit | Sin `selectionGroup` cada juego es su grupo (equivale a `selectionGroup = su id`) | Catálogos equivalentes | Misma selección | DEC-54 | A |
+| BE-SEL-11 [MOD] | unit | Orden de grupos por id del grupo, no por posición en `games`: `games = [X, B2W2 (grupo BW), BW]` -> grupo BW en 0, X en 1, y invertir `games` no cambia la canción. Motivo: igual que BE-DAY-06 | - | Orden estable | DEC-09 | A |
+| BE-SEL-12 | unit | Un solo grupo con varias canciones, y un solo juego con una canción | - | Funciona | DEC-54 | M |
+| BE-SEL-13 | unit | Libre: solo cuentan grupos con juegos filtrados; los juegos no filtrados del grupo no aportan | Filtro {SM}, grupo SM+USUM | Solo SM; el grupo pesa 1 | DEC-10, DEC-54 | A |
+| BE-SEL-14 | unit | Libre con filtro de un juego: canción uniforme entre las suyas (documentar si se llama a `randomInt(1)` o se omite) | Filtro {A} | Correcto | DEC-10, DEC-54 | A |
+| BE-SEL-15 | unit | Libre con dos grupos desiguales: 3000 sorteos con generador con semilla inyectado | Filtro {A (1 canción), B (50)} | A ≈ 50 %, B ≈ 50 % (± 3) | DEC-54 | A |
+| BE-SEL-16 | unit | Recorrer todos los pares `(g,s)` de `randomInt` | Catálogo pequeño | Cada candidata exactamente una vez | DEC-20, DEC-54 | A |
+| BE-SEL-17 | unit (int) | Juegos filtrados sin activas se ignoran; si ninguno tiene activas -> 400 `EMPTY_FILTER` | - | Correcto | CA-5, DEC-10 | A |
+| BE-SEL-18 | unit (int) | Feedback por juego dentro de un grupo: elegida de B2W2 con buscada de BW -> `miss` | Grupo BW+B2W2 | `M` | DEC-17, DEC-54 | A |
+| BE-SEL-19 | unit (int) | `selectionGroup` no aparece en el token, `GameView` ni `/catalog` | - | Ausente | DEC-54, DEC-11 | A |
+| BE-SEL-20 | unit (int) | Dos `POST /games daily` el mismo día con grupos: misma solución | Reloj fijo | Misma canción | CA-4, DEC-54 | A |
+| BE-SEL-21 | unit (int) | Cambio de `v1` a `v2`: una partida diaria ya empezada conserva su canción; una nueva sigue `v2` | Token antiguo | Correcto | DEC-54 | M |
+| BE-SEL-22 | unit | `selectionGroup` hacia un juego inexistente (catálogo que se salta el validador): 503 `CATALOG_UNAVAILABLE`, sin grupo nuevo | Catálogo inválido | 503 | DEC-54 | M |
+
+**Nuevos — shared (validador de `selectionGroup`)**
+
+| ID | Nivel | Descripción | Precondiciones | Resultado esperado | Cubre | P |
+|---|---|---|---|---|---|---|
+| SH-CAT-28 | unit | `selectionGroup` ausente es válido | - | Sin error | DEC-54 | A |
+| SH-CAT-29 | unit | `selectionGroup` = id de un juego cabeza (B2W2 -> BW) | - | Sin error | DEC-54 | A |
+| SH-CAT-30 | unit | Apunta a un id inexistente | - | Error que nombra juego e id | DEC-54 | A |
+| SH-CAT-31 | unit | Cadena C -> B -> A | - | Error en C | DEC-54 | A |
+| SH-CAT-32 | unit | Ciclo A -> B -> A | - | Error | DEC-54 | A |
+| SH-CAT-33 | unit | Autorreferencia | - | Válido (equivale a ausente) | DEC-54 | M |
+| SH-CAT-34 | unit | Tipo inválido: vacío, número, `null`, array, objeto, id mal formado | - | Error en cada uno | DEC-54, DEC-29 | A |
+| SH-CAT-35 | unit | Un juego cabeza de otros no puede pasar a miembro de otro grupo | - | Error | DEC-54 | A |
+| SH-CAT-36 | unit | Grupo cuyo juego cabeza no tiene canciones activas sigue siendo válido | - | Sin error | DEC-54 | M |
+
+**Nuevos — script de catálogo**
+
+| ID | Nivel | Descripción | Precondiciones | Resultado esperado | Cubre | P |
+|---|---|---|---|---|---|---|
+| SC-DR-11 | unit | `draft` añade el juego nuevo al final, sin `selectionGroup` ni `consoles`, y no toca orden ni campos de los existentes | Catálogo con ambos campos | Intactos | DEC-48, DEC-51, DEC-54 | A |
+| SC-VA-10 | unit | `validate` falla con `selectionGroup` inválido y pasa con grupos correctos | Catálogo sintético | Código != 0 / 0 | DEC-54 | A |
+| SC-CS-13 | unit | `catalogStore.update` conserva `selectionGroup`, `consoles` y el orden de `games` | - | Idénticos | DEC-37, DEC-54 | M |
+
+**Nuevos — admin**
+
+| ID | Nivel | Descripción | Precondiciones | Resultado esperado | Cubre | P |
+|---|---|---|---|---|---|---|
+| AD-SEL-01 | unit (int) | `PATCH /api/games/:id {selectionGroup}` válido persiste | Token | 200 y disco actualizado | DEC-54, AR §6.1 | A |
+| AD-SEL-02 | unit (int) | Grupo inexistente | - | 400 sin cambios | DEC-54 | A |
+| AD-SEL-03 | unit (int) | Destino no cabeza o que crea ciclo | - | 400 sin cambios | DEC-54 | A |
+| AD-SEL-04 | unit (int) | Un juego cabeza de otros no puede pasar a miembro | - | 400 sin cambios | DEC-54 | A |
+| AD-SEL-05 | unit (int) | Quitar el grupo (`null` o el propio id) lo devuelve a su propio grupo (documentar cómo queda el JSON) | - | Estado válido | DEC-54 | A |
+| AD-SEL-06 | unit (int) | `{name, selectionGroup inválido}`: atómico | - | 400 sin cambiar el nombre | DEC-37, DEC-54 | A |
+| AD-SEL-07 | unit (int) | `GET /api/catalog` devuelve el grupo efectivo de cada juego | - | Correcto | AR §6.1 | M |
+| AD-SEL-08 | unit (int) | Sin token -> 403; `id` del cuerpo ignorado | - | Correcto | DEC-36, DEC-39 | A |
+| AD-SEL-09 | unit (int) | `selectionGroup` no afecta a `songCount` ni a la lista de juegos | - | Igual | AR §6.1 | B |
+| AU-SEL-01 | unit | Desplegable "Grupo de selección" con "Su propio grupo" y los juegos cabeza | - | Opciones correctas | DEC-54 | A |
+| AU-SEL-02 | unit | No ofrece el propio juego ni miembros de otros grupos; un juego cabeza no puede unirse a otro grupo | - | Opciones filtradas | DEC-54 | A |
+| AU-SEL-03 | unit | Elegir un grupo envía `PATCH {selectionGroup}`; "Su propio grupo" lo quita | `fetch` simulado | Cuerpo correcto | DEC-54 | A |
+| AU-SEL-04 | unit | Error 400: mensaje y valor revertido | Mock 400 | Revertido | DEC-54 | A |
+| AU-SEL-05 | unit | Tras cada cambio refleja el estado real del servidor | - | Coherente | AR §6.1 | M |
+
+**Nuevos — frontend**
+
+| ID | Nivel | Descripción | Precondiciones | Resultado esperado | Cubre | P |
+|---|---|---|---|---|---|---|
+| FE-GRP-01 | unit | `FilterPanel` muestra BW y B2W2 como casillas independientes | Catálogo público | Dos casillas | DEC-54, CA-5 | A |
+| FE-GRP-02 | unit | El buscador lista BW y B2W2 como juegos separados | - | Correcto | DEC-49, DEC-54 | A |
+| FE-GRP-03 | unit | El cliente no recibe ni usa `selectionGroup` | Tipos y peticiones | Ausente | DEC-54, DEC-11 | M |
+
+**Nuevos — E2E**
+
+| ID | Nivel | Módulo | Descripción | Precondiciones | Resultado esperado | Cubre | P |
+|---|---|---|---|---|---|---|---|
+| E2E-98 | e2e | Selección | Diario con grupos desiguales: la misma solución en dos contextos el mismo día y coincide con el vector `v2` | Semilla y fecha fijas | Correcto | CA-4, DEC-09 | A |
+| E2E-99 | e2e | Selección | Libre con BW y B2W2 filtrados: dos casillas; la solución es de uno de ellos | Fixture con grupo | Correcto | DEC-10, DEC-54 | M |
+| E2E-100 | e2e | Selección | Elegida de B2W2 con buscada de BW -> juego incorrecto | Filtro {BW} con 1 canción | `miss` | DEC-17, DEC-54 | A |
+| E2E-101 | e2e | Admin | Asignar y quitar `selectionGroup` desde la UI persiste en el catálogo temporal; un destino inválido muestra el error | Fixture del admin | Coherente | DEC-54 | M |
+
+**Matriz §5:** nueva fila "DEC-54 selección por grupo" = BE-DAY-03/05/06/07/18, BE-CAT-01, BE-SEL-01..22, SH-CAT-28..36, SC-DR-11, SC-VA-10, SC-CS-13, AD-SEL-01..09, AU-SEL-01..05, FE-GRP-01..03, E2E-98..101; "CA-4" += BE-SEL-01/03/20, E2E-98; quitar BE-DAY-17.
+
+**Notas:** los muestreos (BE-SEL-03/04/08/15) usan semilla fija y fechas generadas, nunca `Math.random`, para no ser intermitentes. A documentar en el test: si con un solo grupo se llama a `randomInt(1)` y cómo queda el JSON al quitar el grupo.
+
 ## 1. Alcance
 
 Dentro:
@@ -324,7 +683,7 @@ El diario es común y sin filtro: `idx = HMAC-SHA256(DAILY_SEED, "daily|v1|"+fec
 | BE-DAY-14 | unit | Fin de año `2026-12-31T23:00:00Z` | - | `2027-01-01` | CL | M |
 | BE-DAY-15 | unit | Zona fija en código | `TZ` = UTC, New_York, Tokyo | Misma fecha | DEC-09 | M |
 | BE-DAY-16 [AJ] | unit (int) | Campo `date` extra en `POST /games` se ignora (DEC-31) | - | No se puede elegir día | DEC-31 | A |
-| BE-DAY-17 | unit | 365 días, catálogo de 10 | - | Todas las canciones aparecen | RQ §3 | B |
+| BE-DAY-17 [RETIRADO, ver §0.5] | unit | 365 días, catálogo de 10 | - | Todas las canciones aparecen | RQ §3 | B |
 | BE-DAY-18 | unit | Ilimitado: `randomInt(pool.length)` sobre pool ordenado por `id` (DEC-20) | `randomInt` espiado | Índices en `[0,len)`; pool de 1 constante | DEC-10, DEC-20 | M |
 | BE-DAY-19 | unit (int) | Dos `POST /games daily` el mismo día | Catálogo >=3, reloj fijo | Mismo `date`; misma `solution` al terminar | CA-4 | A |
 | BE-DAY-20 | unit (int) | Día D y D+1 con reloj falso | - | `date` distinto; token de D sigue válido hasta `exp` | CL | M |
@@ -334,7 +693,7 @@ Pool de ilimitado y catálogo público (`catalog/`):
 | ID | Nivel | Descripción | Precondiciones | Resultado esperado | Cubre | P |
 |---|---|---|---|---|---|---|
 | BE-CAT-01 | unit | Pool = `enabled:true` con algún juego del filtro | Deshabilitadas y multi-juego | Correcto | DEC-10 | A |
-| BE-CAT-02 | unit | Multi-juego aparece una vez | - | Sin duplicados | DEC-10 | A |
+| BE-CAT-02 [RETIRADO, ver §0.4] | unit | Multi-juego aparece una vez | - | Sin duplicados | DEC-10 | A |
 | BE-CAT-03 | unit (int) | Ilimitado con `games:[]` | - | 400 `EMPTY_FILTER` | CA-5 | A |
 | BE-CAT-04 | unit (int) | Ilimitado con juego cuyas canciones están todas deshabilitadas | - | 400 `EMPTY_FILTER` | CA-5 | A |
 | BE-CAT-05 | unit (int) | Id de juego inexistente | - | 400 `UNKNOWN_GAME` | AR §5 | A |
@@ -352,8 +711,8 @@ Pool de ilimitado y catálogo público (`catalog/`):
 | BE-ENG-01 | unit | Acierto | En curso | `H`; `won`; `hit` | CA-7 | A |
 | BE-ENG-02 | unit | Fallo con juego distinto | Objetivo en A, elegida solo en B | `M` -> `miss` | CA-3 | A |
 | BE-ENG-03 | unit | Fallo con juego correcto | Comparten un juego | `G` -> `game` | CA-3 | A |
-| BE-ENG-04 | unit | Intersección parcial | {A,B} vs {B,C} | `G` | RQ §3 | A |
-| BE-ENG-05 | unit | Multi-juego y elegida disjunta | - | `M` | DEC-17 | M |
+| BE-ENG-04 [RETIRADO, ver §0.4] | unit | Intersección parcial | {A,B} vs {B,C} | `G` | RQ §3 | A |
+| BE-ENG-05 [RETIRADO, ver §0.4] | unit | Multi-juego y elegida disjunta | - | `M` | DEC-17 | M |
 | BE-ENG-06 | unit | Elegida fuera del pool del filtro (ilimitado) se acepta | Filtro {A}, canción de B | Evalúa `M` o `G` | DEC-17, DEC-10 | A |
 | BE-ENG-07 | unit | Filtro de un solo juego, elegir de A | - | `G` o `H`, nunca `M` | DEC-17 | M |
 | BE-ENG-08 | unit | Skip | - | `S`; `attempt`+1 | RQ §3 | A |
@@ -632,7 +991,7 @@ Edición de canciones (`PATCH /api/songs/:id`):
 | AD-PAT-03 [NUEVO] | unit (int) | `title` con espacios extremos se recorta; con unicode y comillas se conserva | - | Guardado correcto | AR §6.1 | M |
 | AD-PAT-04 [NUEVO] | unit (int) | `games` con varios juegos existentes | - | Guardado en el orden recibido | RQ §4 | A |
 | AD-PAT-05 [NUEVO] | unit (int) | `games` con juego inexistente | - | 400; sin cambios | AR §6.1 | A |
-| AD-PAT-06 [NUEVO] | unit (int) | `games` con ids repetidos | - | 400; sin cambios | AR §6.1 | A |
+| AD-PAT-06 [RETIRADO, ver §0.4] | unit (int) | `games` con ids repetidos | - | 400; sin cambios | AR §6.1 | A |
 | AD-PAT-07 [NUEVO] | unit (int) | `games: []` (vaciar juegos): comportamiento definido y documentado (se permite para poder dejarla pendiente y `errors` la marca, o se rechaza con 400) | - | Coherente con la decisión; nunca persiste un estado que el admin no pueda corregir | DEC-26 | M |
 | AD-PAT-08 [NUEVO] | unit (int) | `games` no array o con elementos no string | - | 400 | AR §6.1 | M |
 | AD-PAT-09 [NUEVO] | unit (int) | `enabled: true/false` en canción larga | - | Persistido | AR §6.1 | A |
@@ -795,7 +1154,7 @@ Interfaz:
 | FE-SRC-03 | unit | Sin mayúsculas ni acentos | - | Coincide | DEC-17 | A |
 | FE-SRC-04 | unit | Sobre TODO el catálogo | Filtro={A} | Aparece canción de B | DEC-17 | A |
 | FE-SRC-05 | unit | Cada opción muestra título y todos sus juegos | - | Visibles | DEC-17 | M |
-| FE-SRC-06 | unit | Multi-juego una vez | - | Sin duplicados | DEC-17 | A |
+| FE-SRC-06 [RETIRADO, ver §0.4] | unit | Multi-juego una vez | - | Sin duplicados | DEC-17 | A |
 | FE-SRC-07 | unit | Seleccionar envía solo `songId` | Spy | `{token,songId}` | DEC-17 | A |
 | FE-SRC-08 | unit | Sin resultados / vacío / espacios | - | Sin errores | DEC-17 | M |
 | FE-SRC-09 | unit | Caracteres de regex | - | Sin excepción | DEC-17 | M |
@@ -972,7 +1331,7 @@ Entorno del admin: proceso `npm run cli -- admin --port <libre> --data-dir <tmp>
 | E2E-16 | e2e | Filtro | Cambio de filtro a mitad de partida | - | La actual no cambia; la siguiente sí | CL | A |
 | E2E-17 | e2e | Feedback | Fallo con juego correcto | Filtro {A} | "juego acertado" | CA-3 | A |
 | E2E-18 | e2e | Feedback | Fallo con juego incorrecto | - | "juego incorrecto" | CA-3 | A |
-| E2E-19 | e2e | Feedback | Multi-juego | - | Acierto de juego | RQ §3 | M |
+| E2E-19 [RETIRADO, ver §0.4] | e2e | Feedback | Multi-juego | - | Acierto de juego | RQ §3 | M |
 | E2E-20 | e2e | Buscador | Buscar por título y por juego | - | Opciones con sus juegos | DEC-17 | A |
 | E2E-21 | e2e | Buscador | Con filtro {A}, el buscador muestra B; en diario todo | - | Lista completa | DEC-17 | A |
 | E2E-22 | e2e | Buscador | Sin acentos ni mayúsculas | - | Encuentra | DEC-17 | M |

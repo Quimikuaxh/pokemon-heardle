@@ -12,11 +12,11 @@ function setup(guesses: string[] = [], onSelect = vi.fn(), disabled = false) {
 }
 
 describe('components/SongSearch', () => {
-  it('FE-SRC-05 cada opcion muestra el titulo y los juegos de la cancion', () => {
+  it('FE-SRC-05 [MOD] cada opcion de cancion muestra el titulo y su UNICO juego', () => {
     const { type, option } = setup()
     type('cafe')
-    expect(option('Café Théme').textContent).toContain('Ruby')
     expect(option('Café Théme').textContent).toContain('Diamond')
+    expect(option('Café Théme').textContent).not.toContain('Ruby')
   })
 
   it('FE-SRC-07 seleccionar una opcion llama a onSelect solo con el songId', () => {

@@ -1,6 +1,6 @@
 # Pokemon Heardle - Arquitectura
 
-Estado: version inicial implementada (main). Iteracion `feature/admin-catalogo` (DEC-36 a DEC-43, seccion 6.1; DEC-27 retirada) definida. Cambio "un solo clip por cancion" (DEC-44) y fundido en el navegador (DEC-45) definidos; sin preguntas abiertas. Requisitos en `REQUISITOS.md` (las decisiones de su seccion 9 no se reabren aqui).
+Estado: version inicial implementada (main). Iteracion `feature/admin-catalogo` (DEC-36 a DEC-43, seccion 6.1; DEC-27 retirada) definida. Cambio "un solo clip por cancion" (DEC-44) y fundido en el navegador (DEC-45) definidos. Iteracion `feature/pistas-y-filtro-juego` (DEC-49 a DEC-53) definida; sin preguntas abiertas. Requisitos en `REQUISITOS.md` (las decisiones de su seccion 9 no se reabren aqui).
 Las preguntas de la version inicial (credencial del bucket; buscador y "juego acertado") se confirmaron el 2026-10-03.
 
 ## 1. Vision general
@@ -92,13 +92,13 @@ DEC-08: **Acceso al bucket con claves S3 de Supabase Storage** (protocolo S3-com
 Alternativas descartadas: (a) `service_role` key: da acceso total al proyecto, incluida la BD del Team Builder; su fuga desde Render comprometeria el otro proyecto. (b) Proyecto Supabase nuevo: el plan free lo pausa tras 1 semana de inactividad.
 Justificacion: las claves S3 solo dan acceso a Storage. Se generan en el panel de Supabase: proyecto -> Storage -> S3 Access Keys (alli se ven tambien el endpoint y la region). El secreto solo se muestra al crearlo. El acceso queda detras de la interfaz `ClipStore`.
 
-DEC-09: **Diario sin filtro: una unica cancion por dia, la misma para todas las personas, elegida de todo el catalogo.** `idx = HMAC-SHA256(DAILY_SEED, "daily|v1|" + fecha).readUIntBE(0, 6) % songs.length` (primeros 6 bytes, big-endian; 48 bits caben exactos en un `number`, sesgo de modulo despreciable)`, con `songs` = canciones `enabled` del catalogo ordenadas por `song.id`. El filtro no interviene en el calculo, ni en el token, ni en la API de creacion de la partida diaria.
+DEC-09: **Diario sin filtro: una unica cancion por dia, la misma para todas las personas, elegida de todo el catalogo con el mismo peso para cada grupo de seleccion (DEC-54).** `h = HMAC-SHA256(DAILY_SEED, "daily|v2|" + fecha)`. Grupo: `h.readUIntBE(0, 6) % grupos.length`, donde `grupos` son los grupos de seleccion con alguna cancion `enabled`, ordenados por id del grupo (no por su posicion en `catalog.games`: asi insertar un juego nuevo en su sitio de `games` no cambia la cancion del dia; el orden de `games` solo gobierna la salida y la pista de fecha). Cancion: `h.readUIntBE(6, 6) % canciones.length`, donde `canciones` son las `enabled` de todos los juegos del grupo, ordenadas por `song.id`. Big-endian; 48 bits caben exactos en un `number` y el sesgo del modulo es despreciable. (Hasta la iteracion `feature/pistas-y-filtro-juego` se usaba `v1`: `readUIntBE(0, 6) % songs.length` sobre todas las canciones `enabled` ordenadas por id.) El filtro no interviene en el calculo, ni en el token, ni en la API de creacion de la partida diaria.
 Alternativa descartada: filtro en ambos modos con una cancion del dia por combinacion de filtro (decision previa, revertida por el usuario el 2026-10-03): el usuario quiere un diario comun y comparable entre jugadores; con filtros, dos personas no jugaban la misma cancion ni sus resultados eran comparables.
 - `fecha` = `YYYY-MM-DD` en Europe/Madrid via `Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Madrid' })` (ICU completo viene en Node). Comprobado: 2026-07-01T22:00Z -> 2026-07-02 (CEST) y 2026-12-01T23:00Z -> 2026-12-02 (CET). La zona es constante en codigo, no variable de entorno (decision cerrada).
 - La fecha la fija el servidor al crear la partida y queda en el token; el cliente no envia fecha (no puede jugar dias futuros).
 - Consecuencias aceptadas: la cancion puede repetirse en dias cercanos (es lo que especifica REQUISITOS 3); cambiar el catalogo en mitad del dia puede cambiar la cancion del dia para partidas nuevas (las ya empezadas no, el token guarda la cancion). Publicar cambios de catalogo cerca de las 00:00 de Madrid.
 
-DEC-10: **Ilimitado (unico modo con filtro)**: `pool` = canciones `enabled` con algun juego del filtro; seleccion `crypto.randomInt(pool.length)` en servidor. El filtro solo se usa al crear la partida y no se guarda en el token.
+DEC-10: **Ilimitado (unico modo con filtro)**: seleccion en dos pasos con el mismo peso por grupo de seleccion (DEC-54). Primero se elige un grupo al azar con `crypto.randomInt`: cuenta un grupo si alguno de sus juegos esta en el filtro y tiene canciones `enabled`. Despues se elige una cancion al azar entre las `enabled` de los juegos del grupo que esten en el filtro. El filtro solo se usa al crear la partida y no se guarda en el token.
 
 DEC-11: **Catalogo publico separado del interno**. `GET /api/catalog` devuelve solo `id`, `title` y `games` de las canciones activas y la lista de juegos; nunca `clipKey`, `startSec` ni datos de YouTube.
 
@@ -130,7 +130,7 @@ Alternativa descartada: aceptar la repeticion consumiendo intento (castiga un er
 DEC-19: **Almacenamiento definitivo en Supabase Storage** (bucket privado en el proyecto del Team Builder, DEC-08).
 Alternativas descartadas: Backblaze B2 (egress gratuito limitado a ~3x lo almacenado, ~1 GB/mes con este volumen, y 2.500 descargas/dia en free); Google Drive (mas configuracion y mas latencia).
 
-DEC-20: **Pool ilimitado = canciones `enabled` del filtro ordenadas por `id`; `pickRandom(pool) = pool[crypto.randomInt(pool.length)]`.**
+DEC-20: **Orden canonico en ilimitado**: grupos ordenados por id del grupo (DEC-09, DEC-54); canciones del grupo, limitadas a los juegos filtrados, ordenadas por `id`. `pickRandom(list) = list[crypto.randomInt(list.length)]`, aplicado primero al grupo y luego a la cancion (DEC-54).
 Justificacion: el mismo orden canonico que el diario hace los tests deterministas (con `randomInt` inyectado) y el resultado no depende del orden de carga del catalogo.
 
 DEC-21: **Tipos del token**: `iat` y `exp` en segundos epoch (enteros); `r` y `q` son arrays de strings. Un `q` mal formado (no array, elemento que no es `clipKey` de 16 hex, longitud > `r.length`) o con un `clipKey` que ya no esta en el catalogo -> `TOKEN_INVALID`.
@@ -144,7 +144,7 @@ Justificacion: el tamano no sirve (todos los clips miden `CLIP_TOTAL_BYTES`, DEC
 
 DEC-24: **Rutas del script**: `outDir` de `build`, `validate`, `upload` y `clipOutputPath` = `scripts/catalog/data/out/clips` (`<outDir>/<clipKey>.mp3`, DEC-44). En local, `STORAGE_DIR` del backend apunta a `scripts/catalog/data/out`.
 
-DEC-25: **Definicion de "juego" en el catalogo** (decision de producto del usuario): un juego es el grupo de versiones que comparten banda sonora ("Ruby / Sapphire / Emerald" es UN juego); un remake con banda sonora distinta es un juego aparte ("Omega Ruby / Alpha Sapphire"). Cada cancion lista todos los juegos en los que aparece.
+DEC-25: **Definicion de "juego" en el catalogo** (decision de producto del usuario): un juego es el grupo de versiones que comparten banda sonora ("Ruby / Sapphire / Emerald" es UN juego); un remake con banda sonora distinta es un juego aparte ("Omega Ruby / Alpha Sapphire"). ~~Cada cancion lista todos los juegos en los que aparece.~~ Sustituido por DEC-53: cada cancion pertenece a un solo juego.
 Alternativas descartadas: cada version por separado (inflaria el filtro y el feedback de juego fallaria entre versiones con la misma OST); agrupar por generacion (mezcla bandas sonoras distintas).
 
 DEC-26: **Cancion sin juego reconocible en el titulo del video**: `draft` deja `games: []` y `validate` falla, forzando la revision manual en `catalog.json`. No existe juego comodin "unknown".
@@ -275,6 +275,74 @@ DEC-47: **El clip empieza donde arranca la musica: silencio inicial medido con `
 - `validate`, `upload` y el formato del clip no cambian. El admin sigue sin editar `startSec` (DEC-38); una cancion activa que pase a ser corta por el nuevo `startSec` se desactiva igual que en DEC-40.
 - Descartado: recortar el silencio en el navegador o en el backend (el clip serviria audio distinto del fichero y cambiaria CLIP_BYTE_OFFSETS por cancion); un umbral de -40 dB (come ataques suaves y entradas con fundido); aplicar un `startSec` global fijo (0,47 s mediano pero hasta 2,46 s); guardar solo `startSec` sin la medida (no se podria distinguir automatico de manual ni repetir la medicion).
 
+DEC-49: **Buscador con filtro de juego en forma de burbuja** (iteracion `feature/pistas-y-filtro-juego`, decision del usuario). Solo frontend: `/catalog` ya trae los juegos.
+- Resultados en dos grupos, en este orden: "Juegos" (los que cumplen `matchesAllWords(query, [game.name])`, en el orden de DEC-48) y "Canciones" (DEC-17). Elegir un juego vacia el texto, pone en la caja, antes del input, una burbuja con su nombre y un boton ×, y deja el foco en el input. Desde ese momento "Canciones" solo incluye las de ese juego; el texto sigue filtrando dentro, y con el texto vacio se listan todas las canciones del juego (lista con scroll, DEC-48). Elegir otro juego con una burbuja puesta la sustituye.
+- Ambito: el filtro dura la partida y se borra al empezar otra. No se guarda en `localStorage`. No tiene relacion con el filtro del modo libre (`FilterPanel`, `heardle:filter`, pool del servidor): ni lo lee ni lo modifica, y ofrece cualquier juego del catalogo publico aunque este fuera del pool (DEC-17). Las canciones ya intentadas siguen deshabilitadas (DEC-18).
+- Logica pura en `frontend/src/game/search.ts`: `searchCatalog(catalog, query, gameId | null) -> { games, songs }`. Sin chip y con texto vacio no muestra nada, como hoy.
+- Accesibilidad (patron combobox de ARIA 1.2):
+  - Input `role="combobox"` con `aria-expanded`, `aria-controls` y `aria-activedescendant`. El `listbox` lleva dos `role="group"` con `aria-labelledby` en su cabecera visible ("Juegos", "Canciones"); un grupo vacio no se pinta.
+  - Las flechas recorren las opciones de ambos grupos como una sola lista. Enter elige: un juego pone la burbuja; una cancion envia el intento. Escape cierra la lista y, si ya esta cerrada, vacia el texto.
+  - Backspace con el input vacio quita la burbuja.
+  - La burbuja es un `<span>` con el nombre y un `<button aria-label="Quitar filtro de juego: <nombre>">`. Al quitarla, el foco vuelve al input.
+  - El input lleva `aria-describedby` hacia un texto oculto "Filtrando por <juego>" mientras hay burbuja.
+  - Una region `aria-live="polite"` anuncia "Filtro de juego: <nombre>" y "Filtro de juego quitado", ademas del numero de resultados.
+Alternativas descartadas: un selector de juego aparte, fuera de la caja (decision del usuario: burbuja dentro del buscador); reutilizar el filtro del modo libre (es otro concepto: pool del servidor frente a ayuda de busqueda).
+
+DEC-50: **Pistas de consola y de fecha calculadas en el servidor, enviadas siempre con cada fallo en `GameView.hints`; activarlas solo cambia lo que se pinta.**
+- Contrato: `GameView.hints: Array<AttemptHint | null>`, alineado con `results` (misma longitud). Vale `null` en `skip` y en `hit`.
+  `AttemptHint = { console: { label: ConsoleName, match: boolean } | null, order: 'earlier' | 'later' | null }`.
+  `order` describe el juego de la cancion BUSCADA respecto al de la elegida: `earlier` = la buscada es de un juego anterior. Es `null` si es el mismo juego (ya existe el resultado `game`).
+- Calculo en `buildGameView`, sin tocar el token: `q` guarda en orden los `clipKey` intentados, que se emparejan con las entradas no-skip de `r`. Las pistas se recalculan del catalogo en cada respuesta, asi que el token no crece ni cambia de formato (DEC-03).
+- Consola: `match = consoles(elegida) ∩ consoles(buscada) ≠ ∅`. `label` = la primera consola comun en orden canonico si hay coincidencia; si no, la primera consola de la elegida. Esto cubre las reglas del usuario para Legends: Z-A (`['Switch', 'Switch 2']`):
+  - Elegida Z-A y buscada de Switch -> "Switch" verde.
+  - Elegida Z-A y buscada de Switch 2 -> "Switch 2" verde.
+  - Elegida Z-A y buscada de otra consola -> "Switch" rojo.
+  - Buscada Z-A y elegida de Switch o Switch 2 -> esa consola en verde.
+  Si alguno de los dos juegos no tiene `consoles`, `console: null` y no se pinta nada.
+- Fecha: indice del unico juego de cada cancion (DEC-53) en `catalog.games` (orden de salida, DEC-48).
+- Que se filtra, por diseno: una pista verde revela una consola de la buscada; la flecha revela un lado del orden de juegos. Es exactamente lo decidido, y nunca va el id ni el nombre del juego buscado. Va SIEMPRE, este o no activada en el cliente (decision del usuario), asi que alguien con DevTools ve las pistas aunque las tenga desactivadas. Es una limitacion aceptada: son pistas, no la solucion.
+- `shared/rules.ts`: `CONSOLES = ['GB', 'GBC', 'GBA', 'DS', '3DS', 'Switch', 'Switch 2']` (orden canonico) y el tipo `ConsoleName`. La funcion pura `computeHint(chosen, target, gameOrder, gamesById)` vive en el backend y se prueba aparte.
+Alternativas descartadas: calcular las pistas en el cliente (exigiria conocer el juego buscado antes de terminar, contra el requisito 2); enviarlas solo si la persona las activa (decision del usuario: la informacion viene siempre y activar solo muestra; ademas, enviarlas a demanda obligaria a mandar los ajustes al servidor); guardarlas en el token (lo agranda sin necesidad, porque se pueden recalcular).
+
+DEC-51: **Consola de cada juego en `catalog.json`: `Game.consoles?: ConsoleName[]`** (lista, porque Legends: Z-A es Switch y Switch 2).
+- Asignacion:
+  - GB: Red/Blue/Yellow.
+  - GBC: Gold/Silver/Crystal.
+  - GBA: RSE, FRLG.
+  - DS: DPPt, HGSS, BW, B2W2.
+  - 3DS: X/Y, ORAS, Sun/Moon, USUM.
+  - Switch: Let's Go, Sword/Shield, BDSP, Legends: Arceus, Scarlet/Violet.
+  - Switch y Switch 2: Legends: Z-A.
+- Validacion: en `shared/catalog.ts` es opcional, pero si existe se valida (reglas del validador, seccion 6). El `validate` del script exige `consoles` en todo juego con canciones activas, asi que `upload` no sube un catalogo incompleto. El backend tolera su ausencia (`console: null`). Por eso subir el catalogo y desplegar el backend se pueden hacer en cualquier orden, sin la dependencia de DEC-44.
+- Admin local: `PATCH /api/games/:id` acepta `consoles`. La UI muestra casillas con las 7 consolas en cada juego y guarda en orden canonico.
+- Relleno: sin tabla por defecto en el script (decision del usuario). Las consolas se escriben en `catalog.json` al anadir cada juego nuevo: lo hace el asistente cuando el usuario pasa la playlist de un juego nuevo, y el admin permite corregirlas. Un juego sin consolas con canciones activas hace fallar `validate`/`upload`; el backend lo tolera sin pista. Descartado: tabla `knownConsoles.ts` aplicada por `draft`.
+- Orden: X/Y entra entre Black 2/White 2 y Omega Ruby/Alpha Sapphire. Como el orden de `games` ahora alimenta la pista de fecha, un juego mal colocado da flechas erroneas. `draft` anade los juegos nuevos al final, asi que hay que moverlos a mano en el JSON (DEC-48); se anade un aviso en `DESARROLLO.md`/README del script.
+
+DEC-52: **Panel de ajustes (icono de engranaje) con dos interruptores independientes: "Pista de consola" y "Pista de fecha"**, guardados en `localStorage` `heardle:settings` y validos en diario y libre.
+- Interfaz: dialogo `role="dialog"` con `aria-modal`, titulo, foco atrapado dentro, Escape cierra y el foco vuelve al engranaje. Cada interruptor es un `<button role="switch" aria-checked>` con etiqueta visible.
+- Valor por defecto: ambas pistas DESACTIVADAS (decision del usuario; descartado: activadas por defecto). Si los datos guardados estan corruptos, se usa el valor por defecto.
+- Al activar una pista se pinta en todos los fallos de la partida, tambien los anteriores, porque ya estan en `GameView.hints` (DEC-50). Tambien aplica al diario terminado guardado (`DailyRecord.view`).
+- `AttemptList`: en cada fila de fallo, burbuja de consola (verde = coincide, roja = no) con un icono ✓/✗ ademas del color (no depender solo del color) y `aria-label` "Consola: GBA, coincide"/"no coincide". Flecha de fecha con `aria-label` "La cancion buscada es de un juego anterior/posterior".
+
+DEC-53: **Cada cancion pertenece a un solo juego** (decision del usuario; los grupos como Red/Blue/Yellow cuentan como uno, DEC-25). El validador exige `games.length === 1`; el formato de `games` sigue siendo un array, asi que la API y el JSON no cambian. El catalogo real ya lo cumple (comprobado: 1705 canciones, ninguna con mas de un juego). La regla de "juego acertado" (DEC-17) da el mismo resultado: interseccion de un elemento = igualdad.
+Alternativa descartada: varios juegos por cancion. La pista de fecha no tendria un juego unico con el que comparar.
+
+DEC-54: **Cada grupo de seleccion tiene la misma probabilidad de salir, en diario y en libre, independientemente de cuantas canciones tenga** (decision del usuario, iteracion `feature/pistas-y-filtro-juego`). La seleccion es en dos pasos: primero un grupo equiprobable y despues una cancion uniforme entre las canciones activas del grupo (DEC-09 diario, determinista; DEC-10/DEC-20 libre, aleatorio). Los grupos se ordenan por su id, no por la posicion de sus juegos en `games`: se descarto el orden de primera aparicion porque mover o insertar un juego en `games` (necesario al anadir juegos por fecha de salida) cambiaria la cancion del dia de todo el catalogo.
+- Grupo de seleccion: campo opcional `Game.selectionGroup` en `catalog.json`. Si falta, vale el id del propio juego, asi que cada juego es su propio grupo. Por decision del usuario, Black/White + Black 2/White 2 forman un grupo y Sun/Moon + Ultra Sun/Ultra Moon otro. Las asignaciones del catalogo real las hace el usuario.
+  - Solo afecta a la probabilidad. Para el filtro, las pistas (DEC-50), el feedback de juego y la busqueda siguen siendo juegos separados.
+  - Validacion (`shared/catalog.ts`): si existe, debe ser el id de un juego del catalogo cuyo propio grupo es el mismo, es decir, el juego "cabeza" del grupo, sin cadenas. Asi una errata no crea en silencio un grupo nuevo. Ejemplo: `pokemon-black2-white2.selectionGroup = "pokemon-black-white"`.
+  - Admin local: `PATCH /api/games/:id` acepta `selectionGroup`; la UI ofrece un desplegable con "su propio grupo" o un juego cabeza. El servidor rechaza un valor que rompa la regla anterior (`400 VALIDATION_ERROR`).
+  - El backend no lo expone en `/catalog` (no lo necesita el cliente).
+- Motivo: la eleccion uniforme por cancion favorecia a los juegos con mas canciones. Por ejemplo, HeartGold/SoulSilver tiene ~140 canciones activas frente a 15 de Ultra Sun/Ultra Moon, asi que salia unas 9 veces mas. Cada cancion pasa a tener probabilidad `1 / (grupos * canciones_de_su_grupo)`. Agrupar BW con B2W2 y SM con USUM evita que dos entregas de la misma generacion y estilo sonoro pesen el doble que el resto.
+- Alternativas descartadas: uniforme por cancion (la seleccion anterior); un juego por grupo sin excepciones (BW/B2W2 y SM/USUM pesarian el doble; decision del usuario).
+- Despliegue: la etiqueta pasa de `daily|v1|` a `daily|v2|`, y la cancion del dia cambia desde el momento del despliegue. Quien ya tuviera la partida diaria empezada sigue con su cancion, porque el token la guarda; quien la empiece despues recibe otra. Hay que desplegar el backend cerca de las 00:00 de Madrid.
+- Tests:
+  - Diario con `DAILY_SEED` y fecha fijos: valor exacto, con los bytes 0-5 para el grupo y 6-11 para la cancion (`BE-DAY-05`). Los grupos van ordenados por id.
+  - En 365 dias, cada grupo sale con frecuencia parecida aunque tenga 1 o 100 canciones. Un grupo de dos juegos reune sus canciones en un solo sorteo.
+  - Un grupo sin canciones activas nunca sale. Un catalogo de un juego con una cancion sigue funcionando. Sin `selectionGroup`, cada juego es su propio grupo.
+  - Libre con `randomInt` inyectado: solo cuentan los grupos con algun juego filtrado y con canciones activas. Con solo B2W2 filtrado, el grupo BW/B2W2 cuenta y solo aporta canciones de B2W2.
+  - Validador y admin: `selectionGroup` que no existe, que apunta a un juego que no es cabeza, o en cadena -> error.
+
 ## 4. Modelo de partida
 
 Payload del token (JSON compacto, padding a 384 bytes, `v` para versionar):
@@ -387,7 +455,7 @@ Respuestas de `/clips`:
 }
 ```
 
-Reglas del validador (`shared/catalog.ts`, usado por script y backend): ids unicos con el formato de DEC-29; `clipKey` unico, 16 hex; todo juego referenciado existe; `games` no vacio (DEC-26); `startSec >= 0`; `source.youtubeId` con formato `[A-Za-z0-9_-]{11}` (DEC-41); `source.durationSec` opcional, numero finito > 0 (DEC-40); cancion `enabled` y corta (DEC-40) -> error. El backend solo usa canciones con `enabled: true`.
+Reglas del validador (`shared/catalog.ts`, usado por script y backend): ids unicos con el formato de DEC-29; `clipKey` unico, 16 hex; todo juego referenciado existe; `games` con exactamente un juego (DEC-26, DEC-53); `games[].selectionGroup` opcional, id de un juego cabeza de grupo (DEC-54); `games[].consoles` opcional, y si existe, lista no vacia y sin repetidos de `CONSOLES`, en orden canonico (DEC-51); `startSec >= 0`; `source.youtubeId` con formato `[A-Za-z0-9_-]{11}` (DEC-41); `source.durationSec` opcional, numero finito > 0 (DEC-40); cancion `enabled` y corta (DEC-40) -> error. El backend solo usa canciones con `enabled: true`.
 
 Script `scripts/catalog` (TS con `tsx`), subcomandos idempotentes:
 
@@ -429,7 +497,7 @@ Contrato local (prefijo `/api`, JSON; mutaciones con cabecera `X-Admin-Token`):
 | `GET /api/catalog` | - | `{ games: [{ id, name, songCount }], songs: [AdminSong] }` |
 | `PATCH /api/songs/:id` | `{ title?, games?, enabled?, reviewed? }` (`startSec` no es editable) | `AdminSong` |
 | `POST /api/games` | `{ name }` | `{ id, name }` (id = slug unico del nombre, como en `draft`) |
-| `PATCH /api/games/:id` | `{ name }` | `{ id, name }` (solo cambia el nombre, DEC-39) |
+| `PATCH /api/games/:id` | `{ name?, consoles?, selectionGroup? }` | `{ id, name, consoles, selectionGroup }` (nunca cambia el id, DEC-39; consolas, DEC-51; grupo, DEC-54) |
 | `GET /api/songs/:id/audio` | cabecera `Range` opcional | fuente completa de `data/work`, `200`/`206`/`416` |
 
 ```
@@ -455,7 +523,7 @@ Filtros y busqueda en la UI (en cliente, sobre `/api/catalog`): juego, activadas
 
 - Al abrir: `GET /health` (DEC-14) -> `GET /catalog`. Estados de UI: despertando / listo / error con boton de reintento.
 - Filtro: SOLO en modo ilimitado. Ids de juego en `localStorage`; filtro vacio deshabilita "Empezar" en ilimitado. Un cambio de filtro con partida ilimitada en curso solo aplica a la siguiente. El modo diario no muestra filtro.
-- `localStorage` (prefijo `heardle:`): `filter`; `daily:<date>` -> `DailyRecord = { token, finished, view? }`, donde `view` es la `GameView` final (con `solution` y `results`), para mostrar un diario terminado sin llamar a la API; `unlimited` -> partida en curso. (RETIRADAS: `stats:daily` y `stats:unlimited`, DEC-43.) Durante la partida solo hay token cifrado y las jugadas propias.
+- `localStorage` (prefijo `heardle:`): `filter`; `settings` (`{ consoleHint, dateHint }`, DEC-52); `daily:<date>` -> `DailyRecord = { token, finished, view? }`, donde `view` es la `GameView` final (con `solution` y `results`), para mostrar un diario terminado sin llamar a la API; `unlimited` -> partida en curso. (RETIRADAS: `stats:daily` y `stats:unlimited`, DEC-43.) Durante la partida solo hay token cifrado y las jugadas propias.
 - Apertura del modo diario, sin crear partidas innecesarias en servidor:
   1. El cliente calcula la fecha de hoy en Europe/Madrid con `Intl` (misma funcion que el servidor, en `shared/`).
   2. Si existe `daily:<fecha>` terminada -> muestra el resultado, sin boton de jugar, y no llama a la API.
@@ -466,6 +534,7 @@ Filtros y busqueda en la UI (en cliente, sobre `/api/catalog`): juego, activadas
 - (RETIRADO: compartir resultado, DEC-27; estadisticas, DEC-43.) `ResultPanel` muestra la solucion y el boton de la cancion completa (DEC-41).
 - Buscador segun DEC-17, filtrado en cliente sobre `/catalog`.
 - Tailwind 4, modo oscuro por `prefers-color-scheme`, responsive. Interfaz en espanol sin i18n (un solo idioma).
+- Buscador con burbuja de juego (DEC-49), panel de ajustes y pistas en `AttemptList` (DEC-50, DEC-52).
 - Reproduccion con fundido de 50 ms via Web Audio y fallback a `<audio>` (DEC-45).
 - Barra de reproduccion (DEC-42): `ClipProgressBar({ clipSeconds, unlockedSec, positionSec, playing })`. `ClipPlayer` amplia su interfaz con `subscribe(listener) -> unsubscribe`, que emite `{ playing, positionSec }` con `requestAnimationFrame` mientras suena y al parar/terminar.
 - Cancion completa al terminar (DEC-41): componente `FullSongEmbed({ youtubeId })` dentro de `ResultPanel`, renderizado solo cuando `status !== 'playing'` y existe `solution`. Muestra el boton "Escuchar la cancion completa"; el iframe se crea al pulsarlo y en ese momento se para el clip.
@@ -538,6 +607,18 @@ Unitarios backend (vitest):
 - `token`: ida y vuelta; un byte alterado -> invalido; caducado -> invalido; **longitud identica para ids de cancion de distinta longitud y para 0..6 resultados**; el token no contiene en claro id, titulo ni `clipKey`; token no valido como ticket y viceversa.
 - `engine`: H/G/M/S; cancion en varios juegos (interseccion); 6.o fallo -> perdida; accion tras fin -> `GAME_OVER`; cancion repetida -> `ALREADY_GUESSED` sin consumir intento ni cambiar el token.
 - `tickets`: un solo uso; caducidad; el indice corresponde al intento actual.
+- Pistas (DEC-50), unitarios del backend con `computeHint`:
+  - Consola: coincide y no coincide; las cuatro reglas de Z-A; juego sin `consoles` -> `null`.
+  - Fecha: `earlier`, `later`, mismo juego -> `null`.
+  - En `buildGameView`: `hints` alineado con `results`; `null` en skip y en hit; emparejamiento correcto con skips intercalados.
+  - Prueba de fuga: con hints, las respuestas siguen sin contener id ni nombre del juego buscado.
+- Catalogo (DEC-51, DEC-53): validador con `consoles` invalida, desordenada o repetida y con cancion de 0 o 2 juegos; `validate` del script exige consolas; admin `PATCH` de consolas.
+- Frontend:
+  - `searchCatalog`: dos grupos, burbuja, sustitucion, texto vacio con burbuja.
+  - Teclado del buscador: flechas entre grupos, Enter, Escape, Backspace quita la burbuja; foco y `aria-*`.
+  - Panel de ajustes: dialogo, foco, Escape, persistencia y datos corruptos.
+  - `AttemptList` pinta u oculta cada pista segun los ajustes, tambien en fallos anteriores, con iconos y `aria-label`.
+  - E2E: burbuja y busqueda; activar una pista a mitad de partida y verla en los fallos anteriores; ajustes tras recargar. Los fixtures `R`/`M` necesitan `consoles` y al menos dos juegos ordenados.
 - Frontend `ClipPlayer` con `AudioContext` simulado (DEC-45): decodifica en `prepare` y no en `play`; `play` llama a `resume()` si esta suspendido y a `source.start` de forma sincrona; programacion exacta de la ganancia (1 hasta `d - 0.05`, rampa a 0 en `d`); fuente nueva en cada `play` y la anterior parada; posicion desde `ctx.currentTime` limitada a `d`; `onended` y `statechange` a `interrupted`/`suspended` emiten `playing: false`; `stop` y `dispose` (cierra el contexto); fallback a `<audio>` sin `AudioContext` o si `decodeAudioData` rechaza; `audioSession.type = 'playback'` cuando existe.
 - Clip unico (DEC-44): `shared/rules` recalcula `CLIP_FRAME_COUNTS`/`CLIP_BYTE_OFFSETS` con la formula y el patron de tramas; el backend sirve exactamente `CLIP_BYTE_OFFSETS[i]` bytes por intento y que el cuerpo es prefijo del fichero; un fichero de tamano distinto o sin cabecera de trama en un offset -> `502 STORAGE_ERROR` sin consumir ticket; la cache guarda una entrada por cancion (clave `clipKey`) y la reutiliza en todos los intentos; `isValidClipLocation` sin numero de clip.
 - `shared/catalog`: validador con casos invalidos (ids duplicados, juego inexistente, `clipKey` mal formado, `youtubeId` fuera de formato, `durationSec` invalido, cancion activa y corta).
@@ -586,6 +667,7 @@ E2E (Playwright en `e2e/`, backend con driver `fs` y fixtures de tonos senoidale
 - **`trust proxy`** mal configurado haria que todas las peticiones compartan IP en el rate-limit o permitiria falsear la IP; probar en Render con `X-Forwarded-For`.
 - **Cambio de catalogo a mitad de dia** cambia la cancion diaria de partidas nuevas (DEC-09); ahora afecta a cualquier alta o baja en el catalogo, no solo a un juego concreto.
 - **Clip unico (DEC-44)**: si un cambio de version de ffmpeg/LAME alterase el patron de tramas o el retardo, `validate` fallaria (tamano u offsets) antes de subir nada; habria que recalcular las constantes. El orden de despliegue de la migracion es obligatorio (backend nuevo antes de subir los ficheros nuevos -> todos los clips fallan).
+- **Orden de juegos (DEC-48/DEC-51)**: ahora alimenta la pista de fecha; un juego nuevo anadido al final por `draft` da flechas erroneas hasta que se mueve a mano. `validate` no puede detectarlo.
 - **Embed de YouTube**: videos retirados, privados o con el embed desactivado muestran el error de YouTube; no se detecta de antemano (fuera de alcance comprobarlo en `validate`, requiere red).
 - **Escritura concurrente del catalogo entre procesos** (admin + `draft`/`build`): ventana de milisegundos sin bloqueo (DEC-37).
 - **Tickets usados en memoria**: tras un reinicio un ticket aun no caducado (<= 60 s) podria reutilizarse una vez mas; impacto nulo (mismo clip del mismo intento).
@@ -596,4 +678,4 @@ Admin desplegado o con login, borrado y fusion de juegos en el admin, oir los 6 
 
 ## Preguntas abiertas
 
-Ninguna. P1 (fundido con clip unico) cerrada el 2026-10-04: fundido en el navegador con Web Audio (DEC-45).
+Ninguna. Las de la iteracion `feature/pistas-y-filtro-juego` se cerraron el 2026-10-07: consolas escritas en `catalog.json` al anadir cada juego, sin tabla por defecto (DEC-51); pistas desactivadas por defecto (DEC-52).

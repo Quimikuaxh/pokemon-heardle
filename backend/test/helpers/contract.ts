@@ -28,17 +28,23 @@
  *     .redeem(ticket): { clipKey, attempt, nonce }   (sincrono; CLIP_TICKET_INVALID | CLIP_TICKET_USED)
  *     .usedCount(): number                            (tickets recordados; se purgan al expirar)
  *
- * game/daily.ts
- *   selectDaily(songs: Song[], seed: string, date: string): Song
- *     songs enabled ordenadas por id; idx = readUIntBE(HMAC-SHA256(seed, 'daily|v1|'+date), 0, 6) % n
+ * game/daily.ts   (DEC-09 v2, DEC-54)
+ *   selectDaily(songs: Song[], games: Game[], seed: string, date: string): Song
+ *     h = HMAC-SHA256(seed, 'daily|v2|'+date); grupo = h.readUIntBE(0,6) % nGrupos (grupos con canciones enabled, por primera
+ *     aparicion en `games`; grupo de un juego = selectionGroup ?? id); cancion = h.readUIntBE(6,6) % nCanciones del grupo (por id)
  *
- * catalog/index.ts
+ * catalog/index.ts   (DEC-54: ademas de lo anterior)
+ *   indexCatalog(catalog).games: Game[] en el orden de catalog.json; .groupOf(gameId): string (selectionGroup ?? id)
+ *   buildGroups(index, gameIds): Array<{ id: string; songs: Song[] }>  (grupos con algun juego filtrado y canciones activas; EMPTY_FILTER/UNKNOWN_GAME)
+ *   selectUnlimited(index, gameIds, randomInt?): Song   = randomInt(nGrupos) y despues randomInt(nCanciones del grupo)
+ * game/hints.ts      computeHint(chosen: Song, target: Song, gameOrder: readonly string[], gamesById: ReadonlyMap<string, Game>): AttemptHint
+ *                    buildGameView(...).hints: Array<AttemptHint | null> alineado con results
+ * catalog/index.ts (previo)
  *   indexCatalog(catalog: Catalog): CatalogIndex
  *     { enabledSongs: Song[] (ordenadas por id), songById(id), songByClipKey(key), gameById(id),
  *       publicCatalog() }
- *   buildPool(index, gameIds: string[]): Song[]   (AppError EMPTY_FILTER | UNKNOWN_GAME; ordenado por id,
- *                                                   sin duplicados)
- *   pickRandom<T>(pool: T[], randomInt: (max:number)=>number = crypto.randomInt): T
+ *   buildGroups(index, gameIds: string[]): Array<{ id, songs }>   (AppError EMPTY_FILTER | UNKNOWN_GAME)
+ *   selectUnlimited(index, gameIds, randomInt = crypto.randomInt): Song
  *
  * game/engine.ts   (funciones puras)
  *   createPayload({ mode:'daily'|'unlimited', target: Song, date?: string, nowMs: number }): TokenPayload

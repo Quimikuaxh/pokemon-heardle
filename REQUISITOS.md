@@ -1,6 +1,6 @@
 # Pokemon Heardle - Requisitos
 
-Estado: version inicial implementada (main). Iteracion `feature/admin-catalogo` (admin local, canciones cortas, barra de reproduccion, cancion completa al terminar) definida en esta revision.
+Estado: version inicial implementada (main). Iteracion `feature/admin-catalogo` (admin local, canciones cortas, barra de reproduccion, cancion completa al terminar) definida. Iteracion `feature/pistas-y-filtro-juego` (buscador con filtro de juego, pistas de consola y fecha) definida.
 
 ## 1. Objetivo
 Juego web estilo Heardle: adivinar la cancion de un juego de Pokemon a partir de fragmentos de audio que se alargan con cada intento.
@@ -16,12 +16,17 @@ Juego web estilo Heardle: adivinar la cancion de un juego de Pokemon a partir de
 ## 3. Mecanica
 - Estandar Heardle: 6 intentos, fragmentos de 1/2/4/7/11/16 s (una duracion por intento), boton Skip (consume intento y alarga fragmento), buscador con autocompletado de canciones. Sin compartir resultado ni estadisticas (retirados, seccion 9).
 - Modos: diario e ilimitado.
-  - Diario: SIN filtro. Una unica cancion por dia (Europe/Madrid), la misma para todas las personas, elegida de todo el catalogo: cancion del dia = HMAC(semilla secreta, fecha); sin base de datos.
-  - Ilimitado: cancion aleatoria en servidor segun filtro.
+  - Diario: SIN filtro. Una unica cancion por dia (Europe/Madrid), la misma para todas las personas, elegida de todo el catalogo: primero un grupo de seleccion y luego una cancion del grupo, ambos con HMAC(semilla secreta, fecha); sin base de datos.
+  - Ilimitado: cancion aleatoria en servidor segun filtro: primero un grupo al azar entre los que tienen algun juego filtrado con canciones activas, luego una cancion de las de sus juegos filtrados.
+- Todos los grupos de seleccion tienen la misma probabilidad de salir, en ambos modos, independientemente de cuantas canciones tengan. Cada juego es su propio grupo, salvo Black/White + Black 2/White 2 (un grupo) y Sun/Moon + Ultra Sun/Ultra Moon (otro). Los grupos solo afectan a la probabilidad: para filtro, pistas y feedback siguen siendo juegos separados. El grupo se indica en `catalog.json` y se edita en el admin.
 - Filtro por juego: SOLO en modo ilimitado; elige que juegos entran en el pool. Se guarda en el navegador.
 - Intento repetido no permitido: el buscador marca las canciones ya intentadas y no deja elegirlas; el servidor rechaza la repeticion sin consumir intento.
 - Feedback parcial: tras cada intento fallido, el servidor indica si el juego de la cancion elegida era correcto aunque la cancion no lo sea.
-- Una cancion puede pertenecer a varios juegos. Acertar el juego = el juego elegido esta entre los de la cancion objetivo.
+- Cada cancion pertenece a un solo juego (los grupos como Red/Blue/Yellow cuentan como uno). Acertar el juego = la cancion elegida es del mismo juego que la objetivo.
+- Buscador con filtro de juego: al escribir aparecen primero los JUEGOS que coinciden y despues las canciones. Elegir un juego pone dentro de la caja una burbuja con su nombre y una ×; desde entonces solo se listan canciones de ese juego (el texto sigue filtrando). La × (o Backspace con el texto vacio) la quita; elegir otro juego la sustituye. No tiene relacion con el filtro del modo libre. Accesible con teclado y lector de pantalla.
+- Pistas, activables por separado en un panel de ajustes (engranaje), recordadas en el navegador, en diario y libre. Aparecen en cada fallo (no en saltos); al activar una se ve tambien en los fallos anteriores. El servidor las calcula y las envia siempre con cada fallo; activarlas solo cambia lo que se ve.
+  - Consola: burbuja con la consola del juego de la cancion elegida, verde si coincide con la de la buscada, roja si no. Consolas: GB, GBC, GBA, DS, 3DS, Switch, Switch 2. Legends: Z-A es Switch y Switch 2 a la vez (si se elige Z-A y la buscada es de Switch o Switch 2 se muestra esa consola en verde; si es de otra, "Switch" en rojo; si la buscada es Z-A, una elegida de Switch o Switch 2 acierta).
+  - Fecha: indicador de si el juego de la buscada es anterior o posterior al de la elegida, segun el orden de salida de los juegos del catalogo. Mismo juego: sin indicador.
 - Registro de la partida diaria en localStorage para no repetir el diario y mostrar su resultado. (RETIRADO: estadisticas de racha y distribucion.)
 - Barra de reproduccion: al reproducir, una barra muestra el avance en tiempo real sobre la escala total de 16 s, dividida en los segmentos de los fragmentos (marcas en 1/2/4/7/11/16 s); la parte desbloqueada del intento actual se distingue de la bloqueada.
 - Cancion completa al terminar (acierto o fallo): se ofrece el video original de YouTube embebido (`youtube-nocookie`) tras pulsar "Escuchar la cancion completa". El id del video solo llega al cliente dentro de la solucion revelada, nunca antes; el iframe no se carga antes de terminar.
@@ -56,6 +61,8 @@ Juego web estilo Heardle: adivinar la cancion de un juego de Pokemon a partir de
 6. (RETIRADO: compartir resultado en emojis.)
 7. Tras fallar o acertar, se revela la solucion y no se puede seguir jugando esa partida.
 8. Funciona en movil y en modo oscuro; arranque en frio del backend no rompe la UI.
+9. Con una pista activada, cada fallo la muestra (tambien los anteriores); desactivada, no se ve. Antes de terminar, las pistas no revelan el id ni el nombre del juego buscado.
+10. Con un juego elegido en el buscador, solo aparecen canciones de ese juego; quitar la burbuja vuelve al catalogo completo.
 
 ## 8. Casos limite
 - Token invalido/caducado: nueva partida. Recarga de pagina durante partida: se recupera por token (el estado de intentos vive en servidor o token firmado).
@@ -76,7 +83,7 @@ Juego web estilo Heardle: adivinar la cancion de un juego de Pokemon a partir de
 - **Diario comun sin filtro; filtro solo en ilimitado** (cambio del 2026-10-03). El usuario quiere un diario comun y comparable. Descartado: filtro en ambos modos con una cancion del dia por combinacion de filtro.
 - **Intento repetido no permitido** (buscador lo bloquea, servidor lo rechaza sin consumir intento). Descartado: aceptarlo consumiendo intento.
 - **Almacenamiento definitivo en Supabase Storage.** Descartados: Backblaze B2 (egress gratis ~3x almacenamiento, ~1 GB/mes, y 2.500 descargas/dia) y Google Drive (mas configuracion y latencia).
-- **Un "juego" del catalogo = grupo de versiones que comparten banda sonora** ("Ruby/Sapphire/Emerald" es UN juego); un remake con banda sonora distinta es otro juego ("Omega Ruby/Alpha Sapphire"). Cada cancion lista todos los juegos en los que aparece. Descartado: cada version por separado (inflaria el filtro y el feedback de juego fallaria entre versiones con la misma OST) y agrupar por generacion.
+- **Un "juego" del catalogo = grupo de versiones que comparten banda sonora** ("Ruby/Sapphire/Emerald" es UN juego); un remake con banda sonora distinta es otro juego ("Omega Ruby/Alpha Sapphire"). Cada cancion pertenece a UN solo juego (cambio de la iteracion pistas: antes podia listar varios). Descartado: cada version por separado (inflaria el filtro y el feedback de juego fallaria entre versiones con la misma OST) y agrupar por generacion.
 - **Cancion sin juego reconocible**: el catalogo la deja sin juegos y la validacion falla hasta revisarla a mano. No existe juego "unknown" (llegaria a produccion con feedback de juego erroneo).
 - **Admin del catalogo local, no desplegado y sin login.** Descartado: admin en la web desplegada con login (mas superficie de ataque y complejidad). Descartado: oir en el admin los 6 fragmentos (exige `build` previo); se oye el tema completo descargado.
 - **Sin compartir resultado ni estadisticas** (retirados en la iteracion admin-catalogo): el usuario no las quiere. Se mantiene solo el registro de la partida diaria en localStorage para no repetir el diario. Descartado: mantener el texto de emojis y la racha/distribucion.
@@ -87,6 +94,11 @@ Juego web estilo Heardle: adivinar la cancion de un juego de Pokemon a partir de
 - **Cancion completa al terminar via embed de YouTube.** Descartado: servir el tema completo o un fragmento largo propio (~1,5 GB para 500 canciones, supera el 1 GB gratis de Supabase).
 - **Un solo clip de 16 s por cancion**: el servidor sirve en cada intento el inicio del fichero hasta la duracion del intento, sin recodificar. Motivo: reducir almacenamiento (de ~645 KB a ~250 KB por cancion; 169 MB -> ~67 MB con 268 canciones). Descartado: 6 ficheros por cancion. Detalle tecnico en ARQUITECTURA.md (DEC-44).
 - **Fundido de salida (~50 ms) de cada fragmento hecho en el navegador (Web Audio)**, implementado ya. Descartados: aceptar el corte seco; fundidos dentro del fichero (bajadas de volumen audibles a mitad de intentos posteriores). Detalle en ARQUITECTURA.md (DEC-45).
+- **Pistas calculadas en el servidor y enviadas siempre con cada fallo**; activarlas solo cambia lo que se ve. Descartado: calcularlas en el cliente (exigiria conocer la cancion buscada) y enviarlas solo si estan activadas.
+- **Misma probabilidad para cada grupo de seleccion (diario y libre)**: seleccion en dos pasos, grupo y luego cancion uniforme dentro del grupo. BW+B2W2 y SM+USUM son un grupo cada uno; el resto, un juego por grupo. Motivo: la eleccion uniforme por cancion favorecia a los juegos con mas canciones (HG/SS ~140 frente a 15 de USUM), y separar BW/B2W2 y SM/USUM duplicaria el peso de esas generaciones. Descartado: uniforme por cancion; un grupo por juego sin excepciones. La cancion del dia cambia al desplegarlo; conviene hacerlo cerca de las 00:00 de Madrid.
+- **Pistas desactivadas por defecto.** Descartado: activadas por defecto.
+- **Consolas de cada juego escritas en `catalog.json` al anadir el juego** (las anade el asistente al procesar la playlist de un juego nuevo; el admin permite corregirlas). Un juego sin consola hace fallar `validate`/`upload`; el backend lo tolera sin pista. Descartado: tabla de consolas por defecto en el script.
+- **Filtro de juego del buscador en una burbuja dentro de la caja, independiente del filtro del modo libre.** Descartado: reutilizar el filtro del modo libre.
 - **Clips precortados, no ffmpeg al vuelo.** La instancia free de Render tiene poca CPU/RAM; cortar por peticion la tumbaria. El script de catalogo genera los clips por intento. Descartado: recorte en servidor.
 - **Render free compartido con el Team Builder.** El plan free da 750 h/mes por workspace; ambos backends duermen tras 15 min de inactividad. RIESGO: si ambos estan despiertos a la vez, el consumo suma y puede agotar las horas. REQUISITO: NO anadir keep-alive ni pings periodicos; solo se despierta con trafico real (la UI muestra carga ante el arranque en frio).
 - **Backend portable.** Sin dependencias especificas de Render (solo Node estandar, variables de entorno, Dockerfile opcional) para poder migrarlo. Descartado: Koyeb, porque exige tarjeta y el usuario no quiere tarjeta obligatoria.

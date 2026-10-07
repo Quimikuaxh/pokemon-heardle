@@ -135,21 +135,29 @@ describe('AdminApp: edicion de titulo, juegos y revision', () => {
     expect((await screen.findByRole('alert')).textContent).toMatch(/demasiado largo/i)
   })
 
-  it('AU-UI-08 editar juegos: seleccion multiple y PATCH { games }; el selector solo ofrece los juegos existentes', async () => {
+  it('AU-UI-08 [MOD] editar el juego de una cancion: seleccion UNICA (radios) y PATCH { games: [id] }; solo ofrece los juegos existentes', async () => {
     const fake = await mount()
-    const group = within(row('rse-oldale-town')).getByRole('group', { name: /juegos/i })
-    expect(within(group).getAllByRole('checkbox').length).toBe(3)
-    fireEvent.click(within(group).getByRole('checkbox', { name: /Diamond/ }))
-    fireEvent.click(btn(row('rse-oldale-town'), /guardar juegos/i))
-    await waitFor(() => expect(patches(fake).at(-1)?.body).toEqual({ games: ['rse', 'dp'] }))
+    const group = within(row('rse-oldale-town')).getByRole('group', { name: /juegos?/i })
+    expect(within(group).getAllByRole('radio').length).toBe(3)
+    expect((within(group).getByRole('radio', { name: /Ruby/ }) as HTMLInputElement).checked).toBe(true)
+    fireEvent.click(within(group).getByRole('radio', { name: /Diamond/ }))
+    expect((within(group).getByRole('radio', { name: /Ruby/ }) as HTMLInputElement).checked).toBe(false)
+    fireEvent.click(btn(row('rse-oldale-town'), /guardar juegos?/i))
+    await waitFor(() => expect(patches(fake).at(-1)?.body).toEqual({ games: ['dp'] }))
   })
 
-  it('AU-UI-08 una cancion sin juegos permite asignarlos', async () => {
+  it('AU-UI-08 [MOD] una cancion sin juego permite asignarlo (un solo juego)', async () => {
     const fake = await mount()
-    const group = within(row('dp-twinleaf-town')).getByRole('group', { name: /juegos/i })
-    fireEvent.click(within(group).getByRole('checkbox', { name: /Diamond/ }))
-    fireEvent.click(btn(row('dp-twinleaf-town'), /guardar juegos/i))
+    const group = within(row('dp-twinleaf-town')).getByRole('group', { name: /juegos?/i })
+    expect(within(group).getAllByRole('radio').some((r) => (r as HTMLInputElement).checked)).toBe(false)
+    fireEvent.click(within(group).getByRole('radio', { name: /Diamond/ }))
+    fireEvent.click(btn(row('dp-twinleaf-town'), /guardar juegos?/i))
     await waitFor(() => expect(patches(fake).at(-1)?.body).toEqual({ games: ['dp'] }))
+  })
+
+  it('AU-UI-08 [MOD] nunca se envia mas de un juego por cancion (no hay casillas multiples)', async () => {
+    await mount()
+    for (const r of document.querySelectorAll('[data-song-id]')) expect(within(r as HTMLElement).queryAllByRole('checkbox').length).toBe(0)
   })
 
   it('AU-UI-11 marcar revisada / pendiente envia PATCH { reviewed }', async () => {
@@ -163,12 +171,13 @@ describe('AdminApp: edicion de titulo, juegos y revision', () => {
 })
 
 describe('AdminApp: juegos', () => {
-  it('AU-UI-09 crear juego: POST /api/games { name } y aparece como opcion en las canciones', async () => {
+  it('AU-UI-09 [MOD] crear juego: POST /api/games { name } y aparece como opcion en las canciones, sin consolas y con la marca "Sin consola"', async () => {
     const fake = await mount()
     fireEvent.change(screen.getByRole('textbox', { name: /nombre del juego nuevo/i }), { target: { value: 'Pokémon X / Y' } })
     fireEvent.click(screen.getByRole('button', { name: /crear juego/i }))
     await waitFor(() => expect(fake.mutations().at(-1)).toMatchObject({ method: 'POST', path: '/api/games', body: { name: 'Pokémon X / Y' } }))
-    await waitFor(() => expect(within(within(row('rse-oldale-town')).getByRole('group', { name: /juegos/i })).getByRole('checkbox', { name: /X \/ Y/ })).toBeTruthy())
+    await waitFor(() => expect(within(within(row('rse-oldale-town')).getByRole('group', { name: /juegos?/i })).getByRole('radio', { name: /X \/ Y/ })).toBeTruthy())
+    expect((await screen.findAllByText(/sin consola/i)).length).toBeGreaterThan(0)
   })
 
   it('AU-UI-09 nombre vacio: sin peticion', async () => {
@@ -204,7 +213,7 @@ describe('AdminApp: juegos', () => {
   it('AU-UI-22 contadores por juego (songCount) y total de canciones', async () => {
     await mount()
     const panel = screen.getByRole('textbox', { name: 'Nombre del juego rse' }).closest('li, tr, div')!.parentElement!
-    expect(panel.textContent).toMatch(/4/) // rse: littleroot, oldale, badge, dash
+    expect(panel.textContent).toMatch(/3/) // rse: littleroot, oldale, badge
     expect(screen.getByText(/5 canciones/)).toBeTruthy()
   })
 })
@@ -394,10 +403,10 @@ describe('SongRow: etiquetas y borradores', () => {
     fake.setOverride((r) => (r.method === 'PATCH' ? { status: 500, body: { error: { code: 'SERVER_ERROR', message: 'Fallo' } } } : undefined))
     await mount(fake)
     const row = document.querySelector('[data-song-id="rse-oldale-town"]') as HTMLElement
-    const diamond = within(within(row).getByRole('group', { name: /juegos/i })).getByRole('checkbox', { name: /Diamond/ }) as HTMLInputElement
+    const diamond = within(within(row).getByRole('group', { name: /juegos?/i })).getByRole('radio', { name: /Diamond/ }) as HTMLInputElement
     fireEvent.click(diamond)
-    fireEvent.click(within(row).getByRole('button', { name: /guardar juegos/i }))
+    fireEvent.click(within(row).getByRole('button', { name: /guardar juegos?/i }))
     await screen.findByRole('alert')
-    expect((within(document.querySelector('[data-song-id="rse-oldale-town"]') as HTMLElement).getByRole('checkbox', { name: /Diamond/ }) as HTMLInputElement).checked).toBe(true)
+    expect((within(document.querySelector('[data-song-id="rse-oldale-town"]') as HTMLElement).getByRole('radio', { name: /Diamond/ }) as HTMLInputElement).checked).toBe(true)
   })
 })

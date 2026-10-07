@@ -13,8 +13,8 @@ function base(): any {
     version: 1,
     generatedAt: '2026-10-03T12:00:00Z',
     games: [
-      { id: 'rse', name: 'Pokemon Ruby / Sapphire / Emerald' },
-      { id: 'dp', name: 'Pokemon Diamond / Pearl' },
+      { id: 'rse', name: 'Pokemon Ruby / Sapphire / Emerald', consoles: ['GBA'] },
+      { id: 'dp', name: 'Pokemon Diamond / Pearl', consoles: ['DS'] },
     ],
     songs: [
       {
@@ -110,17 +110,34 @@ describe('shared/catalog validateCatalog', () => {
 
   it('SH-CAT-07 rechaza cancion que referencia un juego inexistente', () => {
     const c = base()
-    c.songs[0].games = ['rse', 'no-existe']
+    c.songs[0].games = ['no-existe']
     const r = validateCatalog(c)
     expect(r.ok).toBe(false)
     expect(errorsOf(r).some((e) => e.includes('no-existe'))).toBe(true)
   })
 
-  it('SH-CAT-08 rechaza games vacio en una cancion', () => {
+  it('SH-CAT-08 games vacio en una cancion -> error que nombra la cancion y dice "exactamente un juego"', () => {
     const c = base()
     c.songs[0].games = []
-    expect(validateCatalog(c).ok).toBe(false)
+    const r = validateCatalog(c)
+    expect(r.ok).toBe(false)
+    const e = errorsOf(r).filter((x) => x.includes('rse-littleroot-town'))
+    expect(e.join('\n')).toMatch(/exactamente un juego/i)
   })
+
+  for (const [label, games] of [
+    ['dos juegos distintos', ['rse', 'dp']],
+    ['dos iguales', ['rse', 'rse']],
+    ['tres juegos', ['rse', 'dp', 'rse']],
+  ] as Array<[string, string[]]>) {
+    it(`SH-CAT-08 games con ${label} -> error que nombra la cancion y dice "exactamente un juego"`, () => {
+      const c = base()
+      c.songs[0].games = games
+      const r = validateCatalog(c)
+      expect(r.ok).toBe(false)
+      expect(errorsOf(r).filter((x) => x.includes('rse-littleroot-town')).join('\n')).toMatch(/exactamente un juego/i)
+    })
+  }
 
   it('SH-CAT-09 rechaza startSec -1', () => {
     const c = base()
@@ -186,14 +203,11 @@ describe('shared/catalog validateCatalog', () => {
     })
   }
 
-  it('SH-CAT-12 ids repetidos en games de una cancion: error o normalizacion', () => {
-    const c = base()
-    c.songs[0].games = ['rse', 'rse']
-    const r: any = validateCatalog(c)
-    if (r.ok) {
-      expect(new Set(r.catalog.songs[0].games).size).toBe(r.catalog.songs[0].games.length)
-    } else {
-      expect(r.errors.length).toBeGreaterThan(0)
+  it('SH-CAT-12 games ["a","a"] y games ["a","b"] son error (DEC-53); ya no hay normalizacion', () => {
+    for (const games of [['rse', 'rse'], ['rse', 'dp']]) {
+      const c = base()
+      c.songs[0].games = games
+      expect(validateCatalog(c).ok, JSON.stringify(games)).toBe(false)
     }
   })
 
@@ -394,5 +408,140 @@ describe('shared/catalog validateCatalog', () => {
     expect(validateCatalog(c).ok).toBe(true)
     c.songs[0].startSec = 0.45
     expect(validateCatalog(c).ok).toBe(false)
+  })
+
+  // ---- DEC-51: Game.consoles ----
+  const withGame = (patch: Record<string, unknown>) => {
+    const c = base()
+    c.games[0] = { ...c.games[0], ...patch }
+    return c
+  }
+
+  it('SH-CAT-22 Game.consoles ausente es valido en shared', () => {
+    const c = base()
+    delete c.games[0].consoles
+    delete c.games[1].consoles
+    expect(validateCatalog(c).ok).toBe(true)
+  })
+
+  for (const consoles of [['GBA'], ['Switch', 'Switch 2'], ['Switch 2'], ['GB', 'GBC'], ['GB', 'GBC', 'GBA', 'DS', '3DS', 'Switch', 'Switch 2']]) {
+    it(`SH-CAT-23 consoles valida ${JSON.stringify(consoles)} (orden canonico)`, () => {
+      expect(errorsOf(validateCatalog(withGame({ consoles })))).toEqual([])
+    })
+  }
+
+  it('SH-CAT-24 consoles: [] -> error que nombra el juego', () => {
+    const r = validateCatalog(withGame({ consoles: [] }))
+    expect(r.ok).toBe(false)
+    expect(errorsOf(r).join('\n')).toContain('rse')
+  })
+
+  for (const [label, consoles] of [
+    ['PS5', ['PS5']],
+    ['minusculas', ['switch']],
+    ['sin espacio', ['Switch2']],
+    ['cadena vacia', ['']],
+    ['mezcla valida e invalida', ['GBA', 'Wii']],
+    ['string', 'GBA'],
+    ['numero', 3],
+    ['objeto', { 0: 'GBA' }],
+    ['null', null],
+    ['elemento numerico', [1]],
+  ] as Array<[string, unknown]>) {
+    it(`SH-CAT-25 consoles invalidas (${label}) -> error que nombra el juego`, () => {
+      const r = validateCatalog(withGame({ consoles }))
+      expect(r.ok).toBe(false)
+      expect(errorsOf(r).join('\n')).toContain('rse')
+    })
+  }
+
+  it('SH-CAT-26 consoles desordenada (["Switch 2","Switch"]) -> error "orden canonico"', () => {
+    const r = validateCatalog(withGame({ consoles: ['Switch 2', 'Switch'] }))
+    expect(r.ok).toBe(false)
+    expect(errorsOf(r).join('\n')).toMatch(/orden can[oó]nico/i)
+  })
+
+  it('SH-CAT-26 desordenada entre consolas no adyacentes (["DS","GB"]) tambien', () => {
+    expect(validateCatalog(withGame({ consoles: ['DS', 'GB'] })).ok).toBe(false)
+  })
+
+  it('SH-CAT-27 consoles con repetidos -> error', () => {
+    expect(validateCatalog(withGame({ consoles: ['GBA', 'GBA'] })).ok).toBe(false)
+  })
+
+  // ---- DEC-54: Game.selectionGroup ----
+  const grouped = (patches: Record<string, Record<string, unknown>>) => {
+    const c = base()
+    c.games.push({ id: 'dp2', name: 'Pokemon Diamond 2', consoles: ['DS'] }, { id: 'c', name: 'Cadena', consoles: ['DS'] })
+    for (const [id, patch] of Object.entries(patches)) {
+      const g = c.games.find((x: any) => x.id === id)
+      Object.assign(g, patch)
+    }
+    return c
+  }
+
+  it('SH-CAT-28 selectionGroup ausente es valido', () => {
+    expect(validateCatalog(base()).ok).toBe(true)
+  })
+
+  it('SH-CAT-29 selectionGroup = id de un juego cabeza (dp2 -> dp) es valido', () => {
+    expect(errorsOf(validateCatalog(grouped({ dp2: { selectionGroup: 'dp' } })))).toEqual([])
+  })
+
+  it('SH-CAT-29 varios miembros del mismo grupo (dp2 y c -> dp)', () => {
+    expect(errorsOf(validateCatalog(grouped({ dp2: { selectionGroup: 'dp' }, c: { selectionGroup: 'dp' } })))).toEqual([])
+  })
+
+  it('SH-CAT-30 selectionGroup que apunta a un id inexistente -> error que nombra juego e id', () => {
+    const r = validateCatalog(grouped({ dp2: { selectionGroup: 'no-existe' } }))
+    expect(r.ok).toBe(false)
+    const text = errorsOf(r).join('\n')
+    expect(text).toContain('dp2')
+    expect(text).toContain('no-existe')
+  })
+
+  it('SH-CAT-31 cadena c -> dp2 -> dp es error en c', () => {
+    const r = validateCatalog(grouped({ dp2: { selectionGroup: 'dp' }, c: { selectionGroup: 'dp2' } }))
+    expect(r.ok).toBe(false)
+    expect(errorsOf(r).join('\n')).toContain('c')
+  })
+
+  it('SH-CAT-32 ciclo dp -> dp2 -> dp es error', () => {
+    expect(validateCatalog(grouped({ dp: { selectionGroup: 'dp2' }, dp2: { selectionGroup: 'dp' } })).ok).toBe(false)
+  })
+
+  it('SH-CAT-33 autorreferencia (dp -> dp) es valida (equivale a ausente)', () => {
+    expect(errorsOf(validateCatalog(grouped({ dp: { selectionGroup: 'dp' } })))).toEqual([])
+  })
+
+  for (const [label, value] of [
+    ['vacio', ''],
+    ['numero', 5],
+    ['null', null],
+    ['array', ['dp']],
+    ['objeto', { id: 'dp' }],
+    ['id mal formado', 'dp 2'],
+    ['con barra', 'dp/2'],
+  ] as Array<[string, unknown]>) {
+    it(`SH-CAT-34 selectionGroup de tipo/formato invalido (${label}) -> error`, () => {
+      expect(validateCatalog(grouped({ dp2: { selectionGroup: value } })).ok).toBe(false)
+    })
+  }
+
+  it('SH-CAT-35 un juego cabeza de otros no puede pasar a miembro de otro grupo (dp cabeza de dp2; dp -> c)', () => {
+    const r = validateCatalog(grouped({ dp2: { selectionGroup: 'dp' }, dp: { selectionGroup: 'c' } }))
+    expect(r.ok).toBe(false)
+  })
+
+  it('SH-CAT-36 un grupo cuyo juego cabeza no tiene canciones activas sigue siendo valido', () => {
+    const c = grouped({ dp2: { selectionGroup: 'dp' } })
+    c.songs[1].enabled = false // dp (cabeza) sin activas
+    expect(errorsOf(validateCatalog(c))).toEqual([])
+  })
+
+  it('SH-CAT-37 el validador acumula errores de consolas y de grupos junto con los de canciones', () => {
+    const c = grouped({ dp2: { selectionGroup: 'zz', consoles: [] } })
+    c.songs[0].games = ['rse', 'dp']
+    expect(errorsOf(validateCatalog(c)).length).toBeGreaterThanOrEqual(3)
   })
 })

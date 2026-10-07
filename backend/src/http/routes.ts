@@ -1,6 +1,6 @@
 import express, { Router } from 'express'
 import type { Request, RequestHandler, Response } from 'express'
-import { buildPool, pickRandom } from '../catalog'
+import { selectUnlimited } from '../catalog'
 import type { CatalogIndex } from '../catalog'
 import type { Config } from '../config'
 import { selectDaily } from '../game/daily'
@@ -98,10 +98,10 @@ export function createApiRouter(deps: RouteDeps): Router {
       let payload: TokenPayload
       if (request.mode === 'daily') {
         const date = madridDate(now())
-        const target = selectDaily(index.enabledSongs, config.dailySeed, date)
+        const target = selectDaily(index.enabledSongs, index.games, config.dailySeed, date)
         payload = createPayload({ mode: 'daily', target, date, nowMs: now() })
       } else {
-        const target = pickRandom(buildPool(index, request.games), randomInt)
+        const target = selectUnlimited(index, request.games, randomInt)
         payload = createPayload({ mode: 'unlimited', target, nowMs: now() })
       }
       res.json(issueView(payload, index))

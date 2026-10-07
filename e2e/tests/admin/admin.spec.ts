@@ -3,7 +3,7 @@ import { createServer, request as httpRequest } from 'node:http'
 import { mkdtempSync, readFileSync, rmSync, writeFileSync, mkdirSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { test, expect } from '../../support/admin.ts'
+import { test, expect, runValidate } from '../../support/admin.ts'
 import type { Page } from '@playwright/test'
 
 const row = (page: Page, id: string) => page.locator(`li[data-song-id="${id}"]`)
@@ -30,14 +30,14 @@ test.describe('Admin del catalogo', () => {
     await expect(long).toContainText('Long Melody')
     await expect(long).toContainText('Activada · Revisada · Duración 40,0 s')
     await expect(long).toContainText('Vídeo original: Original video of Long Melody')
-    await expect(long.getByRole('checkbox', { name: 'Admin Alpha' })).toBeChecked()
-    await expect(long.getByRole('checkbox', { name: 'Admin Bravo' })).not.toBeChecked()
+    await expect(long.getByRole('radio', { name: 'Admin Alpha' })).toBeChecked()
+    await expect(long.getByRole('radio', { name: 'Admin Bravo' })).not.toBeChecked()
     await expect(row(page, 'song-short-one')).toContainText('Desactivada · Pendiente')
     await expect(row(page, 'song-bravo-b')).toContainText('Desactivada · Revisada')
     await expect(row(page, 'song-multi')).toContainText('Activada · Pendiente')
     // Contadores por juego
     const games = page.getByRole('region', { name: 'Juegos' })
-    for (const [id, songs] of [['alpha', 3], ['bravo', 4], ['charlie', 2]] as const) {
+    for (const [id, songs] of [['alpha', 3], ['bravo', 3], ['charlie', 2], ['delta', 0]] as const) {
       await expect(games.getByLabel(`Nombre del juego ${id}`).locator('xpath=ancestor::li')).toContainText(`${songs} en este juego`)
     }
     expect(hash(), 'el "data/ real" no cambia').toBe(before)
@@ -61,27 +61,31 @@ test.describe('Admin del catalogo', () => {
     expect(admin.exists('catalog.json.bak'), 'copia de seguridad').toBe(true)
   })
 
-  test('E2E-64_should_assign_games_create_a_new_game_and_rename_it_keeping_its_id', async ({ admin, page }) => {
+  test('E2E-64_should_assign_the_single_game_create_a_new_game_and_rename_it_keeping_its_id', async ({ admin, page }) => {
     await page.goto(admin.url)
     const r = row(page, 'song-charlie')
-    await r.getByRole('checkbox', { name: 'Admin Bravo' }).check()
-    await r.getByRole('button', { name: 'Guardar juegos' }).click()
-    await expect.poll(() => admin.readCatalog().songs.find((s: any) => s.id === 'song-charlie').games).toEqual(['bravo', 'charlie'])
+    // Seleccion unica (DEC-53): un grupo de radios, no casillas.
+    await expect(r.getByRole('group', { name: 'Juego' }).getByRole('radio')).toHaveCount(4)
+    await expect(r.getByRole('checkbox')).toHaveCount(0)
+    await r.getByRole('radio', { name: 'Admin Bravo' }).check()
+    await expect(r.getByRole('radio', { name: 'Admin Charlie' })).not.toBeChecked()
+    await r.getByRole('button', { name: 'Guardar juego' }).click()
+    await expect.poll(() => admin.readCatalog().songs.find((s: any) => s.id === 'song-charlie').games).toEqual(['bravo'])
 
     await page.getByLabel('Nombre del juego nuevo').fill('Nueva Zona')
     await page.getByRole('button', { name: 'Crear juego' }).click()
     await expect.poll(() => admin.readCatalog().games.map((g: any) => g.id)).toContain('nueva-zona')
-    await expect(r.getByRole('checkbox', { name: 'Nueva Zona' })).toBeVisible()
+    await expect(r.getByRole('radio', { name: 'Nueva Zona' })).toBeVisible()
     await expect(gameFilter(page)).toContainText('Nueva Zona')
 
     await page.getByLabel('Nombre del juego nueva-zona').fill('Zona Renombrada')
     await page.getByRole('button', { name: 'Renombrar nueva-zona' }).click()
     await expect.poll(() => admin.readCatalog().games.find((g: any) => g.id === 'nueva-zona')?.name).toBe('Zona Renombrada')
-    expect(admin.readCatalog().games.map((g: any) => g.id), 'id estable tras renombrar').toEqual(['alpha', 'bravo', 'charlie', 'nueva-zona'])
-    await expect(r.getByRole('checkbox', { name: 'Zona Renombrada' })).toBeVisible()
-    await r.getByRole('checkbox', { name: 'Zona Renombrada' }).check()
-    await r.getByRole('button', { name: 'Guardar juegos' }).click()
-    await expect.poll(() => admin.readCatalog().songs.find((s: any) => s.id === 'song-charlie').games).toEqual(['bravo', 'charlie', 'nueva-zona'])
+    expect(admin.readCatalog().games.map((g: any) => g.id), 'id estable tras renombrar').toEqual(['alpha', 'bravo', 'charlie', 'delta', 'nueva-zona'])
+    await expect(r.getByRole('radio', { name: 'Zona Renombrada' })).toBeVisible()
+    await r.getByRole('radio', { name: 'Zona Renombrada' }).check()
+    await r.getByRole('button', { name: 'Guardar juego' }).click()
+    await expect.poll(() => admin.readCatalog().songs.find((s: any) => s.id === 'song-charlie').games).toEqual(['nueva-zona'])
   })
 
   test('E2E-65_should_toggle_enabled_and_reviewed_and_keep_filters_coherent', async ({ admin, page }) => {
@@ -131,13 +135,13 @@ test.describe('Admin del catalogo', () => {
     await page.goto(admin.url)
     expect(await shown(page)).toBe(8)
     await gameFilter(page).selectOption({ label: 'Admin Bravo' })
-    await expect.poll(() => shown(page)).toBe(4)
+    await expect.poll(() => shown(page)).toBe(3)
     await page.getByLabel('Estado').selectOption('disabled')
     await expect.poll(() => titles(page)).toEqual(['Cañón de Bravo'])
     await page.getByLabel('Revisión').selectOption('pending')
     await expect.poll(() => shown(page)).toBe(0)
     await page.getByLabel('Estado').selectOption('enabled')
-    await expect.poll(() => titles(page)).toEqual(['Multi Game Tune', 'Another Pending'])
+    await expect.poll(() => titles(page)).toEqual(['Another Pending'])
 
     await gameFilter(page).selectOption('')
     await page.getByLabel('Estado').selectOption('all')
@@ -289,14 +293,97 @@ test.describe('Admin con catalogo invalido', () => {
     await page.goto(admin.url)
     await expect(page.locator('li[data-song-id]')).toHaveCount(8)
     const r = row(page, 'song-charlie')
-    await expect(r).toContainText('games debe ser un array no vacio')
+    await expect(r).toContainText('games debe tener exactamente un juego')
     await page.getByLabel('Solo con errores').check()
     await expect.poll(() => titles(page)).toEqual(['Charlie Song'])
 
-    await r.getByRole('checkbox', { name: 'Admin Charlie' }).check()
-    await r.getByRole('button', { name: 'Guardar juegos' }).click()
+    await r.getByRole('radio', { name: 'Admin Charlie' }).check()
+    await r.getByRole('button', { name: 'Guardar juego' }).click()
     await expect.poll(() => admin.readCatalog().songs.find((s: any) => s.id === 'song-charlie').games).toEqual(['charlie'])
     await expect.poll(() => shown(page)).toBe(0) // ya no hay errores
     // `validate` con ffmpeg real queda cubierto por SC-VA-06 y SC-DUR-07 (unit, scripts/catalog).
+  })
+})
+
+const gameRow = (page: Page, id: string) => page.getByRole('region', { name: 'Juegos' }).locator('li').filter({ has: page.getByLabel(`Nombre del juego ${id}`) })
+
+test.describe('Admin: consolas y grupos de seleccion', () => {
+  test('E2E-96_should_edit_consoles_in_canonical_order_and_keep_single_game_songs', async ({ admin, page }) => {
+    await page.goto(admin.url)
+    const charlie = gameRow(page, 'charlie')
+    await expect(charlie).toContainText('Sin consola')
+    await expect(gameRow(page, 'alpha')).not.toContainText('Sin consola')
+    const group = charlie.getByRole('group', { name: 'Consolas del juego charlie' })
+    await expect(group.getByRole('checkbox')).toHaveCount(7)
+    await expect(charlie.getByRole('button', { name: 'Guardar consolas charlie' }), 'sin ninguna casilla no se puede guardar').toBeDisabled()
+
+    await group.getByRole('checkbox', { name: 'Switch 2', exact: true }).check()
+    await charlie.getByRole('button', { name: 'Guardar consolas charlie' }).click()
+    await expect.poll(() => admin.readCatalog().games.find((g: any) => g.id === 'charlie').consoles).toEqual(['Switch 2'])
+    await group.getByRole('checkbox', { name: 'Switch', exact: true }).check()
+    await charlie.getByRole('button', { name: 'Guardar consolas charlie' }).click()
+    await expect.poll(() => admin.readCatalog().games.find((g: any) => g.id === 'charlie').consoles).toEqual(['Switch', 'Switch 2'])
+    await expect(charlie).not.toContainText('Sin consola')
+    await page.reload()
+    await expect(gameRow(page, 'charlie').getByRole('checkbox', { name: 'Switch', exact: true })).toBeChecked()
+    await expect(gameRow(page, 'charlie').getByRole('checkbox', { name: 'Switch 2', exact: true })).toBeChecked()
+
+    // Cada cancion tiene un solo juego (selector de seleccion unica).
+    for (const id of ['song-long-one', 'song-multi', 'song-charlie']) {
+      await expect(row(page, id).getByRole('radio', { checked: true })).toHaveCount(1)
+    }
+    expect(admin.readCatalog().songs.every((s: any) => s.games.length === 1)).toBe(true)
+  })
+
+  test('E2E-101_should_assign_and_remove_a_selection_group_and_reject_invalid_targets', async ({ admin, page }) => {
+    await page.goto(admin.url)
+    const delta = gameRow(page, 'delta')
+    const select = delta.getByLabel('Grupo de selección delta')
+    await expect(select).toHaveValue('')
+    await select.selectOption({ label: 'Admin Alpha' })
+    await expect.poll(() => admin.readCatalog().games.find((g: any) => g.id === 'delta').selectionGroup).toBe('alpha')
+    // Alpha es ahora cabeza de un grupo: no puede unirse a otro (sin cadenas).
+    await expect(gameRow(page, 'alpha').getByLabel('Grupo de selección alpha').locator('option')).toHaveCount(1)
+    const headers = { 'X-Admin-Token': admin.token, 'Content-Type': 'application/json' }
+    const chain = await page.request.patch(`${admin.url}/api/games/alpha`, { headers, data: { selectionGroup: 'bravo' } })
+    expect(chain.status()).toBe(400)
+    expect((await chain.json()).error.code).toBe('VALIDATION_ERROR')
+    const missing = await page.request.patch(`${admin.url}/api/games/bravo`, { headers, data: { selectionGroup: 'no-existe' } })
+    expect(missing.status()).toBe(400)
+    expect(admin.readCatalog().games.find((g: any) => g.id === 'alpha').selectionGroup).toBeUndefined()
+    expect(admin.readCatalog().games.find((g: any) => g.id === 'bravo').selectionGroup).toBeUndefined()
+
+    await page.reload()
+    await expect(gameRow(page, 'delta').getByLabel('Grupo de selección delta')).toHaveValue('alpha')
+    await gameRow(page, 'delta').getByLabel('Grupo de selección delta').selectOption({ label: 'Su propio grupo' })
+    await expect.poll(() => admin.readCatalog().games.find((g: any) => g.id === 'delta').selectionGroup).toBeUndefined()
+  })
+})
+
+test.describe('Catalogo con un juego sin consolas', () => {
+  test.use({
+    adminOptions: {
+      transform: (catalog: any) => {
+        catalog.songs.find((s: any) => s.id === 'song-charlie').enabled = true
+      },
+    },
+  })
+
+  test('E2E-97_should_fail_validate_for_a_game_without_consoles_until_the_admin_assigns_them', async ({ admin, page }) => {
+    const missing = /juego charlie: faltan las consolas/
+    const before = await runValidate(admin.dataDir)
+    expect(before.code).not.toBe(0)
+    expect(before.output, 'validate nombra el juego sin consolas').toMatch(missing)
+
+    await page.goto(admin.url)
+    const charlie = gameRow(page, 'charlie')
+    await expect(charlie.locator('strong', { hasText: 'Sin consola' }), 'marca destacada: tiene canciones activas').toBeVisible()
+    await charlie.getByRole('group', { name: 'Consolas del juego charlie' }).getByRole('checkbox', { name: 'DS', exact: true }).check()
+    await charlie.getByRole('button', { name: 'Guardar consolas charlie' }).click()
+    await expect.poll(() => admin.readCatalog().games.find((g: any) => g.id === 'charlie').consoles).toEqual(['DS'])
+
+    const after = await runValidate(admin.dataDir)
+    expect(after.output, 'tras asignar las consolas ya no falta ninguna').not.toMatch(missing)
+    // validate sigue fallando aqui por los clips (sin ffmpeg ni build); `upload` exige un validate correcto y no se simula.
   })
 })

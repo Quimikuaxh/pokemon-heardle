@@ -6,7 +6,7 @@ import { tmp } from './helpers/data'
 
 const KEY = '1111111111111111'
 const catalog: any = {
-  version: 1, generatedAt: 'x', games: [{ id: 'g', name: 'G' }],
+  version: 1, generatedAt: 'x', games: [{ id: 'g', name: 'G', consoles: ['GBA'] }],
   songs: [{ id: 'a', title: 'a', games: ['g'], clipKey: KEY, startSec: 0, enabled: true, reviewed: true, source: { youtubeId: 'vid00000001', videoTitle: 'v' } }],
 }
 function dir() {

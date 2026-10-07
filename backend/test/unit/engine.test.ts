@@ -94,22 +94,12 @@ describe('game/engine applyGuess', () => {
     expect([result, payload.r]).toEqual(['M', ['M']])
   })
 
-  it('BE-ENG-03 fallo con juego correcto -> G (game)', () => {
+  it('BE-ENG-03 fallo con juego correcto -> G (game): elegida distinta pero del MISMO juego', () => {
     const { result } = applyGuess(game(A1), A2, index)
     expect(result).toBe('G')
   })
 
-  it('BE-ENG-04 interseccion parcial (objetivo {A,B}, elegida {B}) -> G', () => {
-    expect(applyGuess(game(AB), B1, index).result).toBe('G')
-  })
-
-  it('BE-ENG-04 interseccion parcial inversa (objetivo {A}, elegida {A,B}) -> G', () => {
-    expect(applyGuess(game(A1), AB, index).result).toBe('G')
-  })
-
-  it('BE-ENG-05 objetivo multi-juego y elegida con juegos disjuntos -> M', () => {
-    expect(applyGuess(game(AB), C1, index).result).toBe('M')
-  })
+  // BE-ENG-04 y BE-ENG-05 (canciones con varios juegos) estan RETIRADOS: DEC-53; los cubre BE-ENG-02/03.
 
   it('BE-ENG-06 se acepta una cancion de otro juego aunque este fuera del pool del filtro (el filtro no esta en el token)', () => {
     const p = game(A1) // pool habria sido {A}; elegimos de B
@@ -237,7 +227,7 @@ describe('game/engine skip y fin de partida', () => {
 describe('game/engine buildGameView', () => {
   it('claves exactas durante la partida: sin solution ni clipUrl si no se pasa', () => {
     const v: any = buildGameView(game(C1), index, { token: 'tok' })
-    expect(Object.keys(v).sort()).toEqual(['attempt', 'clipSeconds', 'guesses', 'maxAttempts', 'mode', 'results', 'status', 'token'])
+    expect(Object.keys(v).sort()).toEqual(['attempt', 'clipSeconds', 'guesses', 'hints', 'maxAttempts', 'mode', 'results', 'status', 'token'])
   })
 
   it('el diario incluye date; el ilimitado no', () => {
@@ -280,10 +270,7 @@ describe('game/engine buildGameView', () => {
     expect(v.solution).toEqual({
       id: AB,
       title: 'Marigold Citadel',
-      games: [
-        { id: 'A', name: 'Pokemon Game Alpha' },
-        { id: 'B', name: 'Pokemon Game Bravo' },
-      ],
+      games: [{ id: 'A', name: 'Pokemon Game Alpha' }], // DEC-53: un solo juego
       youtubeId: 'yt555555555',
     })
   })

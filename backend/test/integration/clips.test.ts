@@ -3,7 +3,7 @@
 // no dentro de FsClipStore/S3ClipStore, y un fallo de formato cuenta como fallo del almacen (502, ticket sin consumir, DEC-22).
 import { describe, it, expect, afterEach, vi } from 'vitest'
 import { startTestApp, closeAllTestApps, codeOf, type TestApp } from '../helpers/app'
-import { makeClip, OFFSETS, TOTAL_BYTES } from '../helpers/fixtures'
+import { catalogR, makeClip, OFFSETS, referenceGroups, TOTAL_BYTES } from '../helpers/fixtures'
 import { CachedClipStore } from '../../src/storage/CachedClipStore'
 import { LruCache } from '../../src/storage/LruCache'
 
@@ -155,7 +155,9 @@ describe('BE-CLP clip unico servido por prefijos', () => {
 
   it('BE-CLP-05 LRU con cache pequena (1 MB = 4 ficheros): la 5.a cancion expulsa la 1.a y volver a ella lee de nuevo', async () => {
     const s = storeReturning((k) => makeClip(k))
-    const queue = [0, 1, 2, 3, 4, 0]
+    // Seleccion en dos pasos (DEC-54): un par (grupo, cancion) por partida; 5 canciones distintas y otra vez la 1.a
+    const pairs = referenceGroups(catalogR(), ['A', 'B', 'C', 'D']).flatMap((g, gi) => g.songs.map((_, si) => [gi, si]))
+    const queue = [...pairs.slice(0, 5), pairs[0]].flat()
     const app = await startTestApp({
       randomInt: () => queue.shift() ?? 0,
       wrapStore: (inner: any) => new CachedClipStore(s.wrap(inner) as any, new LruCache(1024 * 1024)),

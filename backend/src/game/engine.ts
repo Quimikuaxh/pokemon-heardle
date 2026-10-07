@@ -1,10 +1,11 @@
 import { randomBytes } from 'node:crypto'
-import type { GameView, ResultName } from '../../../shared/api'
+import type { AttemptHint, GameView, ResultName } from '../../../shared/api'
 import type { Song } from '../../../shared/catalog'
 import { addDays, madridDate } from '../../../shared/date'
 import { CLIP_SECONDS, MAX_ATTEMPTS } from '../../../shared/rules'
 import type { CatalogIndex } from '../catalog'
 import { errors } from '../http/errors'
+import { computeHint } from './hints'
 import type { ResultSymbol, TokenPayload } from './token'
 
 const UNLIMITED_TTL_SEC = 24 * 60 * 60
@@ -82,6 +83,21 @@ function sharesGame(a: Song, b: Song): boolean {
   return a.games.some((gameId) => b.games.includes(gameId))
 }
 
+/**
+ * Pistas alineadas con `results` (DEC-50): null en skip y en acierto. Se recalculan del catalogo en cada respuesta;
+ * `q` guarda en orden las canciones intentadas y se empareja con los resultados que no son skip.
+ */
+function buildHints(payload: TokenPayload, index: CatalogIndex): Array<AttemptHint | null> {
+  const target = index.songByClipKey(payload.k)
+  let guessIndex = 0
+  return payload.r.map((symbol) => {
+    if (symbol === 'S') return null
+    const chosen = index.songByClipKey(payload.q[guessIndex++])
+    if (symbol === 'H' || !chosen || !target) return null
+    return computeHint(chosen, target, index.games.map((game) => game.id), index.gamesById)
+  })
+}
+
 export function buildGameView(
   payload: TokenPayload,
   index: CatalogIndex,
@@ -98,6 +114,7 @@ export function buildGameView(
     clipSeconds: [...CLIP_SECONDS],
     results: payload.r.map((symbol) => RESULT_NAMES[symbol]),
     guesses,
+    hints: buildHints(payload, index),
   }
   if (payload.m === 'd') view.date = payload.d
   if (status === 'playing' && extras.clipUrl) view.clipUrl = extras.clipUrl

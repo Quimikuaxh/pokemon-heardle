@@ -5,7 +5,7 @@ import { createServer } from 'node:http'
 import type { IncomingMessage, Server, ServerResponse } from 'node:http'
 import { extname, join, resolve, sep } from 'node:path'
 import { createCatalogStore } from '../catalogStore'
-import { contextFor, createGame, findAudio, getCatalogView, HttpError, patchSong, renameGame, toHttpError } from './handlers'
+import { contextFor, createGame, findAudio, getCatalogView, HttpError, patchGame, patchSong, toHttpError } from './handlers'
 import type { AdminContext } from './handlers'
 import { parseRange } from './range'
 
@@ -222,7 +222,7 @@ export async function startAdminServer(options: AdminServerOptions): Promise<Adm
     if (!body.ok) return
     if (resource === 'songs') return sendJson(res, 200, await patchSong(ctx, id, body.value))
     if (method === 'POST') return sendJson(res, 201, await createGame(ctx, body.value))
-    return sendJson(res, 200, await renameGame(ctx, id, body.value))
+    return sendJson(res, 200, await patchGame(ctx, id, body.value))
   }
 
   const server: Server = createServer((req, res) => {

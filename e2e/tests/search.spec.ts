@@ -7,11 +7,14 @@ test('E2E-20_should_search_by_title_and_by_game_name_and_select', async ({ app }
   await d.ready()
 
   await d.type('cascade')
-  await expect(d.options).toHaveCount(1)
+  await expect(d.songOptions).toHaveCount(1)
+  await expect(d.gameOptions, 'el grupo vacio no se pinta').toHaveCount(0)
+  await expect(d.root.getByRole('group', { name: 'Juegos' })).toHaveCount(0)
   await expect(d.option('Velvet Cascade')).toContainText('Game Bravo')
 
   await d.type('Bravo')
-  await expect(d.options).toHaveCount(3)
+  await expect(d.gameOptions).toHaveCount(1)
+  await expect(d.songOptions).toHaveCount(3)
   for (const id of ['b-one-song-03', 'b-two-song-04', 'b-accent-song-08']) await expect(d.option(byId(id).title)).toBeVisible()
 
   const res = await d.guess('Obsidian Lantern')
@@ -24,12 +27,14 @@ test('E2E-21_should_list_whole_catalog_regardless_of_filter_and_mode', async ({ 
   const u = app.unlimited
   await u.type('Bravo')
   await expect(u.option('Obsidian Lantern'), 'cancion de B aunque el filtro sea {C}').toBeVisible()
-  await expect(u.options).toHaveCount(3)
+  await expect(u.gameOption('Game Bravo'), 'juego fuera del filtro').toBeVisible()
+  await expect(u.songOptions).toHaveCount(3)
 
   await app.showDaily()
   await app.daily.ready()
   await app.daily.type('Pokemon')
-  await expect(app.daily.options).toHaveCount(ENABLED_R.length)
+  await expect(app.daily.songOptions).toHaveCount(ENABLED_R.length)
+  await expect(app.daily.gameOptions).toHaveCount(8)
   await app.daily.type('Phantom')
   await expect(app.daily.options, 'la deshabilitada no aparece').toHaveCount(0)
 })

@@ -4,15 +4,28 @@
   "games": [
     {
       "id": "alpha",
-      "name": "Admin Alpha"
+      "name": "Admin Alpha",
+      "consoles": [
+        "GB"
+      ]
     },
     {
       "id": "bravo",
-      "name": "Admin Bravo"
+      "name": "Admin Bravo",
+      "consoles": [
+        "GBA"
+      ]
     },
     {
       "id": "charlie",
       "name": "Admin Charlie"
+    },
+    {
+      "id": "delta",
+      "name": "Admin Delta",
+      "consoles": [
+        "3DS"
+      ]
     }
   ],
   "songs": [
@@ -84,8 +97,7 @@
       "id": "song-multi",
       "title": "Multi Game Tune",
       "games": [
-        "alpha",
-        "bravo"
+        "alpha"
       ],
       "clipKey": "b5b5b5b5b5b5b5b5",
       "startSec": 0,

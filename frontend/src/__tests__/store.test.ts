@@ -104,4 +104,60 @@ describe('storage/store', () => {
     s.setFilter(['a'])
     expect(s.writeFailed).toBe(false)
   })
+
+  // ---- FE-SET-06..09, 11: ajustes de pistas (DEC-52) ----
+  const DEFAULTS = { consoleHint: false, dateHint: false }
+
+  it('FE-SET-04 por defecto ambas pistas desactivadas', () => {
+    expect(createStore(localStorage).getSettings()).toEqual(DEFAULTS)
+  })
+
+  it('FE-SET-06 se guardan en heardle:settings como { consoleHint, dateHint } y se restauran', () => {
+    createStore(localStorage).setSettings({ consoleHint: true, dateHint: false })
+    expect(JSON.parse(localStorage.getItem('heardle:settings')!)).toEqual({ consoleHint: true, dateHint: false })
+    expect(createStore(localStorage).getSettings()).toEqual({ consoleHint: true, dateHint: false })
+  })
+
+  for (const junk of ['{{{ no json', 'null', '42', '"cadena"', '[true,true]', '{"consoleHint":"yes","dateHint":1}', '']) {
+    it(`FE-SET-07 datos corruptos ${JSON.stringify(junk)} -> ambas desactivadas sin excepcion`, () => {
+      localStorage.setItem('heardle:settings', junk)
+      expect(() => createStore(localStorage).getSettings()).not.toThrow()
+      expect(createStore(localStorage).getSettings()).toEqual(DEFAULTS)
+    })
+  }
+
+  it('FE-SET-08 datos parciales: el campo ausente vale false', () => {
+    localStorage.setItem('heardle:settings', JSON.stringify({ consoleHint: true }))
+    expect(createStore(localStorage).getSettings()).toEqual({ consoleHint: true, dateHint: false })
+    localStorage.setItem('heardle:settings', JSON.stringify({ dateHint: true }))
+    expect(createStore(localStorage).getSettings()).toEqual({ consoleHint: false, dateHint: true })
+  })
+
+  it('FE-SET-08 claves extra se ignoran (no se devuelven)', () => {
+    localStorage.setItem('heardle:settings', JSON.stringify({ consoleHint: true, dateHint: true, tema: 'oscuro' }))
+    expect(createStore(localStorage).getSettings()).toEqual({ consoleHint: true, dateHint: true })
+  })
+
+  it('FE-SET-09 localStorage no disponible: funcionan en memoria sin excepcion', () => {
+    const s = createStore(throwingStorage('SecurityError'))
+    expect(() => s.setSettings({ consoleHint: true, dateHint: true })).not.toThrow()
+    expect(s.getSettings()).toEqual({ consoleHint: true, dateHint: true })
+    expect(s.writeFailed).toBe(true)
+  })
+
+  it('FE-SET-11 la limpieza de stats:* heredadas no borra heardle:settings', () => {
+    localStorage.setItem('heardle:settings', JSON.stringify({ consoleHint: true, dateHint: true }))
+    localStorage.setItem('heardle:stats:daily', '{"played":3}')
+    const s = createStore(localStorage)
+    expect(localStorage.getItem('heardle:stats:daily')).toBeNull()
+    expect(s.getSettings()).toEqual({ consoleHint: true, dateHint: true })
+  })
+
+  it('FE-SET-06 los ajustes no tocan filter, daily ni unlimited', () => {
+    const s = createStore(localStorage)
+    s.setFilter(['rse'])
+    s.setSettings({ consoleHint: true, dateHint: false })
+    expect(s.getFilter()).toEqual(['rse'])
+    expect(Object.keys(localStorage).sort()).toEqual(['heardle:filter', 'heardle:settings'])
+  })
 })

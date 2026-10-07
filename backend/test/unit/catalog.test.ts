@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { indexCatalog, buildPool, pickRandom } from '../../src/catalog'
+import { indexCatalog, buildGroups } from '../../src/catalog'
 import { catalogR, ids } from '../helpers/fixtures'
 import { thrown } from '../helpers/errors'
 
@@ -33,48 +33,49 @@ describe('catalog/ indice y pool de ilimitado', () => {
   })
 
   it('BE-CAT-01 pool = canciones enabled con algun juego del filtro', () => {
-    expect(ids(buildPool(idx(), ['A']))).toEqual(['a-one-song-01', 'a-two-song-02', 'ab-multi-game-song-017'])
+    expect(ids(buildGroups(idx(), ['A']).flatMap((group) => group.songs))).toEqual(['a-one-song-01', 'a-two-song-02', 'ab-multi-game-song-017'])
   })
 
   it('BE-CAT-01 pool con varios juegos es la union', () => {
-    expect(ids(buildPool(idx(), ['C', 'D']))).toEqual(['c-only-song-05', 'd-only-song-06'])
+    expect(ids(buildGroups(idx(), ['C', 'D']).flatMap((group) => group.songs))).toEqual(['c-only-song-05', 'd-only-song-06'])
   })
 
   it('BE-CAT-01 el pool excluye las deshabilitadas', () => {
-    expect(ids(buildPool(idx(), ['A']))).not.toContain('a-disabled-song-07')
+    expect(ids(buildGroups(idx(), ['A']).flatMap((group) => group.songs))).not.toContain('a-disabled-song-07')
   })
 
-  it('BE-CAT-02 cancion multi-juego aparece una sola vez con filtro {A,B}', () => {
-    const pool = ids(buildPool(idx(), ['A', 'B']))
-    expect(pool.filter((x) => x === 'ab-multi-game-song-017').length).toBe(1)
+  // BE-CAT-02 (cancion multi-juego aparece una sola vez) esta RETIRADO: DEC-53, una cancion = un juego.
+  it('BE-CAT-01 [MOD] pool = canciones enabled cuyo UNICO juego esta en el filtro; con {A,B} salen 5 canciones sin duplicados', () => {
+    const pool = ids(buildGroups(idx(), ['A', 'B']).flatMap((group) => group.songs))
     expect(pool.length).toBe(5)
+    expect(new Set(pool).size).toBe(5)
   })
 
-  it('BE-CAT-02 filtro con ids de juego repetidos no duplica canciones', () => {
-    expect(buildPool(idx(), ['C', 'C']).length).toBe(1)
+  it('BE-CAT-01 filtro con ids de juego repetidos no duplica canciones', () => {
+    expect(buildGroups(idx(), ['C', 'C']).flatMap((group) => group.songs).length).toBe(1)
   })
 
   it('BE-CAT-03 filtro vacio -> EMPTY_FILTER', () => {
-    expect(thrown(() => buildPool(idx(), []))?.code).toBe('EMPTY_FILTER')
+    expect(thrown(() => buildGroups(idx(), []))?.code).toBe('EMPTY_FILTER')
   })
 
   it('BE-CAT-04 juego cuyas canciones estan todas deshabilitadas -> EMPTY_FILTER', () => {
     const c: any = catalogR()
     c.songs = c.songs.map((s: any) => (s.games.includes('D') ? { ...s, enabled: false } : s))
-    expect(thrown(() => buildPool(indexCatalog(c), ['D']))?.code).toBe('EMPTY_FILTER')
+    expect(thrown(() => buildGroups(indexCatalog(c), ['D']))?.code).toBe('EMPTY_FILTER')
   })
 
   it('BE-CAT-05 id de juego inexistente -> UNKNOWN_GAME', () => {
-    expect(thrown(() => buildPool(idx(), ['ZZ']))?.code).toBe('UNKNOWN_GAME')
+    expect(thrown(() => buildGroups(idx(), ['ZZ']))?.code).toBe('UNKNOWN_GAME')
   })
 
   it('BE-CAT-05 mezcla valido + invalido -> UNKNOWN_GAME', () => {
-    expect(thrown(() => buildPool(idx(), ['A', 'ZZ']))?.code).toBe('UNKNOWN_GAME')
+    expect(thrown(() => buildGroups(idx(), ['A', 'ZZ']))?.code).toBe('UNKNOWN_GAME')
   })
 
   it('BE-CAT-05 ids que son claves del prototipo -> UNKNOWN_GAME, sin excepcion rara', () => {
-    expect(thrown(() => buildPool(idx(), ['__proto__']))?.code).toBe('UNKNOWN_GAME')
-    expect(thrown(() => buildPool(idx(), ['constructor']))?.code).toBe('UNKNOWN_GAME')
+    expect(thrown(() => buildGroups(idx(), ['__proto__']))?.code).toBe('UNKNOWN_GAME')
+    expect(thrown(() => buildGroups(idx(), ['constructor']))?.code).toBe('UNKNOWN_GAME')
   })
 
   it('BE-CAT-06 publicCatalog: solo id,title,games por cancion; sin deshabilitadas', () => {
@@ -95,21 +96,26 @@ describe('catalog/ indice y pool de ilimitado', () => {
     expect(pub.games[0]).toEqual({ id: 'A', name: 'Pokemon Game Alpha' })
   })
 
-  it('BE-DAY-18 pickRandom usa randomInt(pool.length) y devuelve el elemento de ese indice', () => {
-    const calls: number[] = []
-    const pool = ['x', 'y', 'z']
-    const got = pickRandom(pool, (max) => (calls.push(max), 2))
-    expect([got, calls]).toEqual(['z', [3]])
+  it('BE-CAT-06 [MOD] publicCatalog: cada cancion lleva UN solo juego y los juegos solo {id,name} (no se expone selectionGroup)', () => {
+    const c: any = catalogR()
+    c.games[1] = { ...c.games[1], selectionGroup: 'A' }
+    const pub: any = indexCatalog(c).publicCatalog()
+    for (const s of pub.songs) expect(s.games.length).toBe(1)
+    for (const g of pub.games) expect(Object.keys(g).sort()).toEqual(['id', 'name'])
+    expect(JSON.stringify(pub)).not.toContain('selectionGroup')
   })
 
-  it('BE-DAY-18 pool de 1 devuelve siempre el mismo (randomInt(1) = 0)', () => {
-    for (let i = 0; i < 20; i++) expect(pickRandom(['solo'])).toBe('solo')
+  it('BE-CAT-12 publicCatalog conserva el orden de games de catalog.json (no el alfabetico)', () => {
+    const c: any = catalogR()
+    c.games = [c.games[2], c.games[0], c.games[3], c.games[1]] // C, A, D, B
+    expect(indexCatalog(c).publicCatalog().games.map((g: any) => g.id)).toEqual(['C', 'A', 'D', 'B'])
   })
 
-  it('BE-DAY-18 con randomInt real cubre todo el pool en 500 tiradas', () => {
-    const pool = [0, 1, 2, 3, 4]
-    const seen = new Set<number>()
-    for (let i = 0; i < 500; i++) seen.add(pickRandom(pool))
-    expect(seen.size).toBe(5)
+  it('BE-CAT-12 el indice expone games en el orden del catalogo y el grupo efectivo de cada juego', () => {
+    const c: any = catalogR()
+    c.games[1] = { ...c.games[1], selectionGroup: 'A' }
+    const index: any = indexCatalog(c)
+    expect(index.games.map((g: any) => g.id)).toEqual(['A', 'B', 'C', 'D'])
+    expect([index.groupOf('A'), index.groupOf('B'), index.groupOf('C')]).toEqual(['A', 'A', 'C'])
   })
 })

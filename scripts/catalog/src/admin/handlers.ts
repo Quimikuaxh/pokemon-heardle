@@ -1,6 +1,8 @@
 import { join } from 'node:path'
-import type { Catalog, Song } from '../../../../shared/catalog'
+import type { Catalog, Game, Song } from '../../../../shared/catalog'
 import { tooShort, validateCatalog } from '../../../../shared/catalog'
+import { CONSOLES } from '../../../../shared/rules'
+import type { ConsoleName } from '../../../../shared/rules'
 import { CatalogFileError } from '../catalogStore'
 import type { CatalogStore } from '../catalogStore'
 import { findSourceFile } from '../duration'
@@ -26,6 +28,7 @@ export const contextFor = (dataDir: string, store: CatalogStore): AdminContext =
 const MAX_TITLE_LENGTH = 200
 const MAX_GAME_NAME_LENGTH = 100
 const MAX_GAME_ID_BASE = 40
+const GAME_ID_FORMAT = /^[A-Za-z0-9-]+$/
 const SONG_PATCH_KEYS = new Set(['title', 'games', 'enabled', 'reviewed'])
 
 const validation = (message: string) => new HttpError(400, 'VALIDATION_ERROR', message)
@@ -73,11 +76,18 @@ function errorsOf(catalog: Catalog): string[] {
 export async function getCatalogView(ctx: AdminContext) {
   const { catalog, errors } = await ctx.store.readTolerant()
   const songs: Song[] = Array.isArray(catalog.songs) ? catalog.songs : []
-  const games: Array<{ id: string; name: string }> = Array.isArray(catalog.games) ? catalog.games : []
+  const games: Game[] = Array.isArray(catalog.games) ? catalog.games : []
+  const gameIds = new Set(games.map((game) => game.id))
   return {
     games: games.map((game) => ({
       id: game.id,
       name: game.name,
+      consoles: Array.isArray(game.consoles) ? game.consoles : [],
+      // Grupo efectivo (DEC-54): una referencia a un juego que no existe cuenta como grupo propio.
+      selectionGroup: typeof game.selectionGroup === 'string' && gameIds.has(game.selectionGroup) ? game.selectionGroup : game.id,
+      missingConsoles:
+        !(Array.isArray(game.consoles) && game.consoles.length > 0) &&
+        songs.some((song) => song.enabled && Array.isArray(song.games) && song.games.includes(game.id)),
       songCount: songs.filter((song) => Array.isArray(song.games) && song.games.includes(game.id)).length,
     })),
     songs: songs.map((song) => adminSong(song, errors, ctx.workDir)),
@@ -106,10 +116,9 @@ function parseSongPatch(body: unknown): SongPatch {
   }
   if ('games' in body) {
     const games = body.games
-    if (!Array.isArray(games) || games.length === 0 || !games.every((id) => typeof id === 'string')) {
-      throw validation('La cancion necesita al menos un juego (lista de ids).')
+    if (!Array.isArray(games) || games.length !== 1 || typeof games[0] !== 'string') {
+      throw validation('La cancion pertenece a exactamente un juego (lista con un solo id).')
     }
-    if (new Set(games).size !== games.length) throw validation('La lista de juegos tiene ids repetidos.')
     patch.games = games as string[]
   }
   for (const flag of ['enabled', 'reviewed'] as const) {
@@ -150,7 +159,11 @@ function parseGameName(body: unknown): string {
   if (!isRecord(body)) throw validation('El cuerpo debe ser un objeto JSON.')
   const extra = Object.keys(body).filter((key) => key !== 'name')
   if (extra.length > 0) throw validation(`Campos no editables: ${extra.join(', ')}.`)
-  const name = typeof body.name === 'string' ? body.name.trim() : ''
+  return checkedGameName(body.name)
+}
+
+function checkedGameName(value: unknown): string {
+  const name = typeof value === 'string' ? value.trim() : ''
   if (name === '' || name.length > MAX_GAME_NAME_LENGTH) throw validation(`El nombre debe tener entre 1 y ${MAX_GAME_NAME_LENGTH} caracteres.`)
   return name
 }
@@ -169,17 +182,77 @@ export async function createGame(ctx: AdminContext, body: unknown) {
   return created
 }
 
-export async function renameGame(ctx: AdminContext, gameId: string, body: unknown) {
-  const name = parseGameName(body)
+interface GamePatch {
+  name?: string
+  consoles?: ConsoleName[]
+  /** null: quitar el grupo (el juego vuelve a su propio grupo). */
+  selectionGroup?: string | null
+}
+
+const GAME_PATCH_KEYS = new Set(['name', 'consoles', 'selectionGroup'])
+
+function parseGamePatch(body: unknown): GamePatch {
+  if (!isRecord(body)) throw validation('El cuerpo debe ser un objeto JSON.')
+  const unknown = Object.keys(body).filter((key) => !GAME_PATCH_KEYS.has(key))
+  if (unknown.length > 0) throw validation(`Campos no editables: ${unknown.join(', ')}.`)
+  const patch: GamePatch = {}
+  if ('name' in body) patch.name = checkedGameName(body.name)
+  if ('consoles' in body) {
+    const consoles = body.consoles
+    const isKnown = (value: unknown): value is ConsoleName => (CONSOLES as readonly unknown[]).includes(value)
+    if (!Array.isArray(consoles) || consoles.length === 0 || !consoles.every(isKnown)) {
+      throw validation(`consoles debe ser una lista no vacia de: ${CONSOLES.join(', ')}.`)
+    }
+    if (new Set(consoles).size !== consoles.length) throw validation('consoles tiene valores repetidos.')
+    patch.consoles = CONSOLES.filter((name) => consoles.includes(name))
+  }
+  if ('selectionGroup' in body) {
+    const group = body.selectionGroup
+    if (group !== null && (typeof group !== 'string' || !GAME_ID_FORMAT.test(group))) {
+      throw validation('selectionGroup debe ser el id de un juego o null.')
+    }
+    patch.selectionGroup = group
+  }
+  if (Object.keys(patch).length === 0) throw validation('No hay ningun campo que cambiar.')
+  return patch
+}
+
+/** Aplica el grupo comprobando DEC-54: el destino debe ser cabeza (su grupo es el suyo) y quien lo cambia no puede serlo de otros. */
+function applySelectionGroup(catalog: Catalog, game: Game, group: string | null) {
+  if (group === null || group === game.id) {
+    delete game.selectionGroup
+    return
+  }
+  const target = catalog.games.find((candidate) => candidate.id === group)
+  if (!target) throw validation(`El grupo ${group} no es un juego del catalogo.`)
+  if (target.selectionGroup !== undefined && target.selectionGroup !== target.id) {
+    throw validation(`El juego ${group} ya pertenece al grupo ${target.selectionGroup}: no se admiten cadenas.`)
+  }
+  const members = catalog.games.filter((other) => other !== game && other.selectionGroup === game.id)
+  if (members.length > 0) {
+    throw validation(`El juego ${game.id} es cabeza del grupo de ${members.map((member) => member.id).join(', ')}: quitales el grupo antes.`)
+  }
+  game.selectionGroup = group
+}
+
+export async function patchGame(ctx: AdminContext, gameId: string, body: unknown) {
+  const patch = parseGamePatch(body)
+  let result!: { id: string; name: string; consoles: ConsoleName[] | undefined; selectionGroup: string }
   await ctx.store.update((catalog: Catalog) => {
     const game = catalog.games.find((candidate) => candidate.id === gameId)
     if (!game) throw notFound('El juego')
-    if (catalog.games.some((other) => other !== game && comparableName(other.name) === comparableName(name))) {
-      throw validation('Ya existe otro juego con ese nombre.')
+    if (patch.name !== undefined) {
+      const name = patch.name
+      if (catalog.games.some((other) => other !== game && comparableName(other.name) === comparableName(name))) {
+        throw validation('Ya existe otro juego con ese nombre.')
+      }
+      game.name = name
     }
-    game.name = name
+    if (patch.consoles) game.consoles = patch.consoles
+    if (patch.selectionGroup !== undefined) applySelectionGroup(catalog, game, patch.selectionGroup)
+    result = { id: game.id, name: game.name, consoles: game.consoles, selectionGroup: game.selectionGroup ?? game.id }
   })
-  return { id: gameId, name }
+  return result
 }
 
 /** Fuente completa de una cancion: se busca por id en el catalogo, nunca con rutas del cliente. */

@@ -5,10 +5,12 @@ import { useBackendWarmup } from './api/warmup'
 import { madridDate } from '../../shared/date'
 import { GameBoard } from './components/GameBoard'
 import { Logo } from './components/Logo'
+import { SettingsPanel } from './components/SettingsPanel'
 import { formatDayLabel } from './game/format'
 import { API_BASE_URL } from './config'
 import { createGameController } from './game/controller'
 import { createStore } from './storage/store'
+import type { HintSettings } from './storage/store'
 
 type Tab = 'daily' | 'unlimited'
 
@@ -16,16 +18,28 @@ type Tab = 'daily' | 'unlimited'
 const toggleButton = (active: boolean, position: 'first' | 'last') =>
   `min-h-11 border-0 px-3.5 text-[13px] font-semibold lg:px-[18px] lg:text-sm ${position === 'first' ? 'rounded-l-[6px]' : 'rounded-r-[6px]'} ${active ? 'bg-ink text-paper' : 'bg-transparent text-ink'}`
 
-function Header({ tab, onTab }: { tab?: Tab; onTab?: (tab: Tab) => void }) {
+interface HeaderProps {
+  tab?: Tab
+  onTab?: (tab: Tab) => void
+  settings?: HintSettings
+  onSettingsChange?: (settings: HintSettings) => void
+}
+
+// En movil el logo ocupa la fila de arriba con el engranaje a su derecha, y el subtitulo comparte la de abajo con el
+// selector de modo; en escritorio todo va en una sola fila (logo, subtitulo, engranaje, selector).
+function Header({ tab, onTab, settings, onSettingsChange }: HeaderProps) {
   const subtitle = tab === 'unlimited' ? 'MODO LIBRE' : `RETO DEL DÍA · ${formatDayLabel(madridDate(Date.now()))}`
   return (
-    <header className="mx-auto mb-3.5 flex min-h-11 w-full max-w-[460px] items-center justify-between gap-3 lg:mb-10 lg:max-w-[1040px]">
-      <div className="flex min-w-0 flex-col lg:flex-row lg:items-baseline lg:gap-4">
-        <Logo />
-        {tab && <span className="font-mono text-[11px] tracking-[1px] text-muted lg:text-xs">{subtitle}</span>}
-      </div>
+    <header className="mx-auto mb-3.5 grid min-h-11 w-full max-w-[460px] grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 lg:mb-10 lg:flex lg:max-w-[1360px] lg:gap-4">
+      <Logo />
+      {settings && onSettingsChange && (
+        <div className="justify-self-end lg:order-3">
+          <SettingsPanel settings={settings} onChange={onSettingsChange} />
+        </div>
+      )}
+      {tab && <span className="min-w-0 font-mono text-[11px] tracking-[1px] text-muted lg:order-2 lg:flex-1 lg:text-xs">{subtitle}</span>}
       {tab && onTab && (
-        <div role="group" aria-label="Modo de juego" className="flex flex-none rounded-lg border-2 border-edge">
+        <div role="group" aria-label="Modo de juego" className="flex flex-none rounded-lg border-2 border-edge lg:order-4">
           <button type="button" className={toggleButton(tab === 'daily', 'first')} aria-pressed={tab === 'daily'} onClick={() => onTab('daily')}>
             Diario
           </button>
@@ -49,17 +63,23 @@ const messageButton = 'min-h-11 rounded-full border-[3px] border-edge bg-lamp-re
 function LoadedApp({ catalog, api }: { catalog: PublicCatalog; api: ReturnType<typeof createApiClient> }) {
   const [tab, setTab] = useState<Tab>('daily')
   const store = useMemo(() => createStore(window.localStorage), [])
+  const [settings, setSettings] = useState(() => store.getSettings())
   const dailyController = useMemo(() => createGameController({ api, store, catalog }), [api, store, catalog])
   const unlimitedController = useMemo(() => createGameController({ api, store, catalog }), [api, store, catalog])
 
+  const changeSettings = (next: HintSettings) => {
+    store.setSettings(next)
+    setSettings(next)
+  }
+
   return (
     <>
-      <Header tab={tab} onTab={setTab} />
+      <Header tab={tab} onTab={setTab} settings={settings} onSettingsChange={changeSettings} />
       <div hidden={tab !== 'daily'}>
-        <GameBoard mode="daily" controller={dailyController} api={api} catalog={catalog} store={store} />
+        <GameBoard mode="daily" controller={dailyController} api={api} catalog={catalog} store={store} settings={settings} />
       </div>
       <div hidden={tab !== 'unlimited'}>
-        <GameBoard mode="unlimited" controller={unlimitedController} api={api} catalog={catalog} store={store} />
+        <GameBoard mode="unlimited" controller={unlimitedController} api={api} catalog={catalog} store={store} settings={settings} />
       </div>
     </>
   )
@@ -85,8 +105,8 @@ export default function App() {
       {!ready && <Header />}
       <main>
         {status === 'waking' && (
-          <p role="status" className="text-center">
-            Despertando el servidor... puede tardar hasta un minuto la primera vez.
+          <p role="status" className="m-0 text-center text-muted">
+            Despertando el servidor... puede tardar hasta un minuto.
           </p>
         )}
         {status === 'error' && (
@@ -97,7 +117,11 @@ export default function App() {
             </button>
           </div>
         )}
-        {status === 'ready' && !catalog && !catalogFailed && <p role="status" className="text-center">Cargando catálogo...</p>}
+        {status === 'ready' && !catalog && !catalogFailed && (
+          <p role="status" className="m-0 text-center text-muted">
+            Cargando catálogo...
+          </p>
+        )}
         {status === 'ready' && catalogFailed && (
           <div className="grid justify-items-center gap-3 text-center" role="alert">
             <p>No se pudo cargar el catálogo.</p>

@@ -11,11 +11,19 @@ const setup = (props: Record<string, unknown> = {}, catalog: any = mkCatalog()) 
 }
 
 describe('SongSearch: Enter, readOnly y truncado', () => {
-  it('Enter sin opcion marcada elige la primera seleccionable', () => {
+  it('Enter sin opcion marcada elige la primera seleccionable (canciones, sin juego que coincida)', () => {
     const { input, onSelect, type } = setup({ guesses: ['rse-littleroot-town'] })
-    type('ruby')
+    type('town')
     fireEvent.keyDown(input, { key: 'Enter' })
     expect(onSelect).toHaveBeenCalledWith('rse-oldale-town')
+  })
+
+  it('FE-CMB-06 [MOD] con un juego que coincide ("ruby") la primera seleccionable es el JUEGO: Enter pone la burbuja, no envia ningun intento', () => {
+    const { input, onSelect, type } = setup()
+    type('ruby')
+    fireEvent.keyDown(input, { key: 'Enter' })
+    expect(onSelect).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: /quitar filtro de juego/i })).toBeTruthy()
   })
 
   it('readOnly mantiene el input habilitado (conserva el foco) pero no deja elegir', () => {

@@ -19,11 +19,34 @@ export class Board {
   get search() {
     return this.root.getByRole('combobox')
   }
+  /** Todas las opciones del desplegable (juegos y canciones). */
   get options() {
     return this.root.getByRole('option')
   }
+  /** Grupo "Juegos" del desplegable (DEC-49). */
+  get gameOptions() {
+    return this.root.getByRole('group', { name: 'Juegos' }).getByRole('option')
+  }
+  /** Grupo "Canciones" del desplegable. */
+  get songOptions() {
+    return this.root.getByRole('group', { name: 'Canciones' }).getByRole('option')
+  }
   option(title: string) {
-    return this.root.getByRole('option').filter({ hasText: title })
+    return this.songOptions.filter({ hasText: title })
+  }
+  gameOption(name: string) {
+    return this.gameOptions.filter({ hasText: name })
+  }
+  /** Boton × de la burbuja de juego del buscador. */
+  /** Burbujas de consola ("Consola: GBA, coincide") y flechas de fecha del historial. */
+  get consoleHints() {
+    return this.rows.locator('[aria-label^="Consola:"]')
+  }
+  get dateHints() {
+    return this.rows.locator('[aria-label^="La canción buscada es de un juego"]')
+  }
+  get bubbleRemove() {
+    return this.root.getByRole('button', { name: /^Quitar filtro de juego/ })
   }
   get skipButton() {
     return this.root.getByRole('button', { name: /^Saltar/ })
@@ -122,6 +145,30 @@ export class HeardlePage {
   async goto() {
     await this.page.goto('/')
     await expect(this.page.getByRole('heading', { name: 'Pokémon Heardle' })).toBeVisible()
+  }
+
+  get settingsButton() {
+    return this.page.getByRole('button', { name: 'Ajustes' })
+  }
+  get settingsDialog() {
+    return this.page.getByRole('dialog')
+  }
+  switchFor(which: 'console' | 'date') {
+    return this.settingsDialog.getByRole('switch', { name: which === 'console' ? /Pista de consola/ : /Pista de fecha/ })
+  }
+
+  /** Abre Ajustes, deja las pistas como se pide (solo pulsa lo que cambia) y cierra con "Cerrar". */
+  async setHints(hints: { console?: boolean; date?: boolean }) {
+    await this.settingsButton.click()
+    await expect(this.settingsDialog).toBeVisible()
+    for (const [which, wanted] of [['console', hints.console], ['date', hints.date]] as const) {
+      if (wanted === undefined) continue
+      const toggle = this.switchFor(which)
+      if ((await toggle.getAttribute('aria-checked')) !== String(wanted)) await toggle.click()
+      await expect(toggle).toHaveAttribute('aria-checked', String(wanted))
+    }
+    await this.settingsDialog.getByRole('button', { name: 'Cerrar' }).click()
+    await expect(this.settingsDialog).toHaveCount(0)
   }
 
   async showUnlimited() {

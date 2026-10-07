@@ -1,5 +1,5 @@
 import { test, expect } from '../support/test.ts'
-import { MULTI, dailyTargetR } from '../support/oracle.ts'
+import { SOLO_C, dailyTargetR } from '../support/oracle.ts'
 import { INSTRUMENT_WEBAUDIO } from '../support/webaudio.ts'
 import type { WebAudioLog } from '../support/webaudio.ts'
 
@@ -28,7 +28,7 @@ test('E2E-38_should_win_daily_and_lose_unlimited_on_iphone @mobile', async ({ ap
   await app.startUnlimited(['Pokemon Game Charlie'])
   await app.unlimited.skipAll()
   await expect(app.unlimited.resultHeading).toHaveText('¡LA CANCIÓN SE ESCAPÓ!')
-  await expect(app.unlimited.solution).toHaveText(MULTI.title)
+  await expect(app.unlimited.solution).toHaveText(SOLO_C.title)
 })
 
 test('E2E-38_should_lose_daily_and_win_unlimited_on_iphone @mobile', async ({ app, page }) => {
@@ -40,6 +40,6 @@ test('E2E-38_should_lose_daily_and_win_unlimited_on_iphone @mobile', async ({ ap
 
   await app.startUnlimited(['Pokemon Game Charlie'])
   await app.unlimited.playButton.tap()
-  await app.unlimited.guess(MULTI.title)
+  await app.unlimited.guess(SOLO_C.title)
   await expect(app.unlimited.resultHeading).toHaveText('¡ACERTASTE EN EL INTENTO 1!')
 })

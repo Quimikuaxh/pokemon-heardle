@@ -1,6 +1,8 @@
 import { randomInt as cryptoRandomInt } from 'node:crypto'
-import type { Catalog, Song } from '../../../shared/catalog'
+import type { Catalog, Game, Song } from '../../../shared/catalog'
 import type { PublicCatalog } from '../../../shared/api'
+import { buildSelectionGroups, effectiveGroupId } from '../game/selectionGroups'
+import type { SelectionGroup } from '../game/selectionGroups'
 import { errors } from '../http/errors'
 
 export interface CatalogIndex {
@@ -9,7 +11,12 @@ export interface CatalogIndex {
   /** Solo resuelve canciones habilitadas: una retirada o deshabilitada es "desconocida". */
   songById(id: string): Song | undefined
   songByClipKey(clipKey: string): Song | undefined
-  gameById(id: string): { id: string; name: string } | undefined
+  gameById(id: string): Game | undefined
+  /** Juegos en el orden de catalog.json (el de salida, DEC-48). */
+  games: Game[]
+  gamesById: ReadonlyMap<string, Game>
+  /** Grupo de seleccion efectivo del juego (DEC-54). */
+  groupOf(gameId: string): string
   publicCatalog(): PublicCatalog
 }
 
@@ -20,6 +27,7 @@ export function indexCatalog(catalog: Catalog): CatalogIndex {
   const songsById = new Map(enabledSongs.map((song) => [song.id, song]))
   const songsByClipKey = new Map(enabledSongs.map((song) => [song.clipKey, song]))
   const gamesById = new Map(catalog.games.map((game) => [game.id, game]))
+  const gameIds = new Set(catalog.games.map((game) => game.id))
 
   const publicCatalog: PublicCatalog = {
     version: catalog.version,
@@ -34,20 +42,28 @@ export function indexCatalog(catalog: Catalog): CatalogIndex {
     songById: (id) => songsById.get(id),
     songByClipKey: (clipKey) => songsByClipKey.get(clipKey),
     gameById: (id) => gamesById.get(id),
+    games: catalog.games,
+    gamesById,
+    groupOf: (gameId) => {
+      const game = gamesById.get(gameId)
+      return game ? effectiveGroupId(game, gameIds) : gameId
+    },
     publicCatalog: () => publicCatalog,
   }
 }
 
-/** Pool del modo ilimitado: canciones habilitadas con algun juego del filtro, sin duplicados, ordenadas por id. */
-export function buildPool(index: CatalogIndex, gameIds: string[]): Song[] {
+/** Grupos de seleccion del modo libre: los que tienen algun juego filtrado con canciones activas (DEC-54). */
+export function buildGroups(index: CatalogIndex, gameIds: string[]): SelectionGroup[] {
   if (gameIds.length === 0) throw errors.emptyFilter()
   if (gameIds.some((gameId) => !index.gameById(gameId))) throw errors.unknownGame()
-  const wanted = new Set(gameIds)
-  const pool = index.enabledSongs.filter((song) => song.games.some((gameId) => wanted.has(gameId)))
-  if (pool.length === 0) throw errors.emptyFilter()
-  return pool
+  const groups = buildSelectionGroups(index.enabledSongs, index.games, new Set(gameIds))
+  if (groups.length === 0) throw errors.emptyFilter()
+  return groups
 }
 
-export function pickRandom<T>(pool: T[], randomInt: (max: number) => number = cryptoRandomInt): T {
-  return pool[randomInt(pool.length)]
+/** Modo libre en dos pasos: grupo equiprobable (randomInt(nGrupos)) y despues cancion uniforme del grupo (randomInt(nCanciones)). */
+export function selectUnlimited(index: CatalogIndex, gameIds: string[], randomInt: (max: number) => number = cryptoRandomInt): Song {
+  const groups = buildGroups(index, gameIds)
+  const group = groups[randomInt(groups.length)]
+  return group.songs[randomInt(group.songs.length)]
 }

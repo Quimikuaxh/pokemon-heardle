@@ -3,20 +3,62 @@
   "generatedAt": "2026-10-03T12:00:00Z",
   "games": [
     {
-      "id": "A",
-      "name": "Pokemon Game Alpha"
+      "id": "game-alpha",
+      "name": "Pokemon Game Alpha",
+      "consoles": [
+        "GB"
+      ]
     },
     {
-      "id": "B",
-      "name": "Pokemon Game Bravo"
+      "id": "game-bravo",
+      "name": "Pokemon Game Bravo",
+      "consoles": [
+        "GBA"
+      ]
     },
     {
-      "id": "C",
-      "name": "Pokemon Game Charlie"
+      "id": "game-charlie",
+      "name": "Pokemon Game Charlie",
+      "consoles": [
+        "DS"
+      ]
     },
     {
-      "id": "D",
-      "name": "Pokemon Game Delta"
+      "id": "game-delta",
+      "name": "Pokemon Game Delta",
+      "consoles": [
+        "3DS"
+      ]
+    },
+    {
+      "id": "game-echo",
+      "name": "Pokemon Game Echo",
+      "consoles": [
+        "3DS"
+      ],
+      "selectionGroup": "game-delta"
+    },
+    {
+      "id": "game-foxtrot",
+      "name": "Pokemon Game Foxtrot",
+      "consoles": [
+        "Switch"
+      ]
+    },
+    {
+      "id": "game-golf",
+      "name": "Pokemon Game Golf",
+      "consoles": [
+        "Switch 2"
+      ]
+    },
+    {
+      "id": "game-zeta",
+      "name": "Pokemon Legends Zeta: the remastered ultimate collector edition",
+      "consoles": [
+        "Switch",
+        "Switch 2"
+      ]
     }
   ],
   "songs": [
@@ -24,7 +66,7 @@
       "id": "a-one-song-01",
       "title": "Zephyr Harbor",
       "games": [
-        "A"
+        "game-alpha"
       ],
       "clipKey": "1111111111111111",
       "startSec": 7,
@@ -40,7 +82,7 @@
       "id": "a-two-song-02",
       "title": "Quasar Meadow",
       "games": [
-        "A"
+        "game-alpha"
       ],
       "clipKey": "2222222222222222",
       "startSec": 7,
@@ -56,7 +98,7 @@
       "id": "b-one-song-03",
       "title": "Obsidian Lantern",
       "games": [
-        "B"
+        "game-bravo"
       ],
       "clipKey": "3333333333333333",
       "startSec": 7,
@@ -72,7 +114,7 @@
       "id": "b-two-song-04",
       "title": "Velvet Cascade",
       "games": [
-        "B"
+        "game-bravo"
       ],
       "clipKey": "4444444444444444",
       "startSec": 7,
@@ -85,11 +127,10 @@
       }
     },
     {
-      "id": "ab-multi-game-song-017",
+      "id": "c-only-song-05",
       "title": "Marigold Citadel",
       "games": [
-        "A",
-        "C"
+        "game-charlie"
       ],
       "clipKey": "5555555555555555",
       "startSec": 7,
@@ -105,7 +146,7 @@
       "id": "d-only-song-06",
       "title": "Hollow Pinecone",
       "games": [
-        "D"
+        "game-delta"
       ],
       "clipKey": "7777777777777777",
       "startSec": 7,
@@ -121,7 +162,7 @@
       "id": "b-accent-song-08",
       "title": "Pokémon Café Medley",
       "games": [
-        "B"
+        "game-bravo"
       ],
       "clipKey": "9999999999999999",
       "startSec": 7,
@@ -137,7 +178,7 @@
       "id": "a-disabled-song-07",
       "title": "Phantom Biscuit",
       "games": [
-        "A"
+        "game-alpha"
       ],
       "clipKey": "8888888888888888",
       "startSec": 7,
@@ -146,6 +187,70 @@
       "source": {
         "youtubeId": "yt888888888",
         "videoTitle": "Video original de Phantom Biscuit (OST)",
+        "durationSec": 60
+      }
+    },
+    {
+      "id": "e-only-song-09",
+      "title": "Ember Orchard",
+      "games": [
+        "game-echo"
+      ],
+      "clipKey": "abababababababab",
+      "startSec": 7,
+      "enabled": true,
+      "reviewed": true,
+      "source": {
+        "youtubeId": "ytababababa",
+        "videoTitle": "Video original de Ember Orchard (OST)",
+        "durationSec": 60
+      }
+    },
+    {
+      "id": "f-only-song-10",
+      "title": "Fjord Lantern",
+      "games": [
+        "game-foxtrot"
+      ],
+      "clipKey": "bcbcbcbcbcbcbcbc",
+      "startSec": 7,
+      "enabled": true,
+      "reviewed": true,
+      "source": {
+        "youtubeId": "ytbcbcbcbcb",
+        "videoTitle": "Video original de Fjord Lantern (OST)",
+        "durationSec": 60
+      }
+    },
+    {
+      "id": "g-only-song-11",
+      "title": "Glacier Bell",
+      "games": [
+        "game-golf"
+      ],
+      "clipKey": "cdcdcdcdcdcdcdcd",
+      "startSec": 7,
+      "enabled": true,
+      "reviewed": true,
+      "source": {
+        "youtubeId": "ytcdcdcdcdc",
+        "videoTitle": "Video original de Glacier Bell (OST)",
+        "durationSec": 60
+      }
+    },
+    {
+      "id": "z-only-song-12",
+      "title": "Zenith Garden",
+      "games": [
+        "game-zeta"
+      ],
+      "clipKey": "dededededededede",
+      "startSec": 7,
+      "enabled": true,
+      "reviewed": true,
+      "source": {
+        "youtubeId": "ytdedededed",
+        "videoTitle": "Video original de Zenith Garden (OST)",
         "durationSec": 60
       }
     }

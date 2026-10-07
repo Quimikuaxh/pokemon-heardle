@@ -127,4 +127,39 @@ describe('draft: colas de juego comunes sobre toda la playlist', () => {
     expect(added.games.length).toBe(1)
     expect(merged.games.map((g) => g.name)).toContain('Foo Bar')
   })
+
+  const withMeta = () => {
+    const base = draftCatalog(null, [V1, V2], { randomClipKey: seqKeys(), now: NOW })
+    base.games = base.games.map((g, i) => ({ ...g, consoles: i === 0 ? ['GBA'] : ['DS'], ...(i === 1 ? { selectionGroup: base.games[0].id } : {}) })) as any
+    return base
+  }
+
+  it('SC-CON-06 / SC-DR-11 el juego nuevo se anade AL FINAL de games, sin consoles ni selectionGroup', () => {
+    const before = withMeta()
+    const after = draftCatalog(before, [{ youtubeId: 'vid0000000z', title: 'Pokemon Sword/Shield - Route 1' }], { randomClipKey: seqKeys(), now: NOW })
+    expect(after.games.length).toBe(before.games.length + 1)
+    const added: any = after.games.at(-1)
+    expect(added.name).toBe('Pokemon Sword/Shield')
+    expect('consoles' in added).toBe(false)
+    expect('selectionGroup' in added).toBe(false)
+  })
+
+  it('SC-CON-06 / SC-DR-11 no toca el orden ni los campos (consoles, selectionGroup) de los juegos existentes', () => {
+    const before = withMeta()
+    const snapshot = structuredClone(before.games)
+    const after = draftCatalog(before, [{ youtubeId: 'vid0000000z', title: 'Pokemon Sword/Shield - Route 1' }], { randomClipKey: seqKeys(), now: NOW })
+    expect(after.games.slice(0, snapshot.length)).toEqual(snapshot)
+  })
+
+  it('SC-CON-06 un juego ya existente no se duplica ni se mueve', () => {
+    const before = withMeta()
+    const after = draftCatalog(before, [{ youtubeId: 'vid0000000y', title: 'Pokemon Diamond/Pearl - Route 201' }], { randomClipKey: seqKeys(), now: NOW })
+    expect(after.games).toEqual(before.games)
+  })
+
+  it('SC-CON-07 un titulo ambiguo nunca persiste una cancion con 2 juegos (se deja games como mucho de 1; documentado)', () => {
+    const titles = ['Pokemon X/Y & Omega Ruby/Alpha Sapphire - Lumiose City', 'Ruby/Sapphire - Diamond/Pearl - Route 1', 'Pokemon Red/Blue - Pokemon Gold/Silver - Mashup']
+    const c = draftCatalog(null, titles.map((title, i) => ({ youtubeId: `vid0000000${i}`, title })), { randomClipKey: seqKeys(), now: NOW })
+    for (const s of c.songs) expect(s.games.length).toBeLessThanOrEqual(1)
+  })
 })

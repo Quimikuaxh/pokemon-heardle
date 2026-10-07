@@ -10,9 +10,9 @@ describe('admin-ui filtros y busqueda (modulo puro)', () => {
     expect(filterSongs(catalog(), {}).length).toBe(5)
   })
 
-  it('AU-FIL-01 filtro por juego (una cancion con varios juegos aparece en cada uno)', () => {
+  it('AU-FIL-01 [MOD] filtro por juego (cada cancion tiene un unico juego, DEC-53)', () => {
     expect(ids(filterSongs(catalog(), { gameId: 'dp' }))).toEqual(['dp-dash'])
-    expect(ids(filterSongs(catalog(), { gameId: 'rse' })).sort()).toEqual(['dp-dash', 'rse-badge', 'rse-littleroot-town', 'rse-oldale-town'])
+    expect(ids(filterSongs(catalog(), { gameId: 'rse' })).sort()).toEqual(['rse-badge', 'rse-littleroot-town', 'rse-oldale-town'])
   })
 
   it('AU-FIL-11 texto con palabras de juego y titulo a la vez ("ruby town")', () => {
