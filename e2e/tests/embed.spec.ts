@@ -47,7 +47,7 @@ test.describe('Cancion completa - catalogo M', () => {
     expect(net.requests.filter((r) => r.path.startsWith('/api/games') || r.path.startsWith('/api/clips'))).toEqual([])
 
     await d.root.getByRole('button', { name: BUTTON }).click()
-    await expect(page.locator('iframe')).toHaveAttribute('src', `https://www.youtube-nocookie.com/embed/${M_SONG.source.youtubeId}`)
+    await expect(page.locator('iframe')).toHaveAttribute('src', `https://www.youtube-nocookie.com/embed/${M_SONG.source.youtubeId}?enablejsapi=1`)
   })
 
   test('E2E-58_should_keep_the_solution_visible_when_the_video_is_unavailable', async ({ app, page }) => {
@@ -170,7 +170,7 @@ test.describe('Cancion completa - catalogo R', () => {
     await d.root.getByRole('button', { name: BUTTON }).click()
     const frame = page.locator('iframe')
     await expect(frame).toHaveCount(1)
-    await expect(frame).toHaveAttribute('src', `https://www.youtube-nocookie.com/embed/${target.source.youtubeId}`)
+    await expect(frame).toHaveAttribute('src', `https://www.youtube-nocookie.com/embed/${target.source.youtubeId}?enablejsapi=1`)
     await expect(frame).toHaveAttribute('referrerpolicy', 'strict-origin-when-cross-origin')
     await expect(frame).toHaveAttribute('allow', 'encrypted-media; picture-in-picture; fullscreen')
     await expect.poll(() => hits.length).toBe(1)
@@ -215,7 +215,7 @@ test.describe('Cancion completa - catalogo R', () => {
     await u.guess(SOLO_C.title)
     await u.root.getByRole('button', { name: BUTTON }).click()
     await expect(page.locator('iframe')).toHaveCount(1)
-    await expect(page.locator('iframe')).toHaveAttribute('src', new RegExp(`${SOLO_C.source.youtubeId}$`))
+    await expect(page.locator('iframe')).toHaveAttribute('src', new RegExp(`/embed/${SOLO_C.source.youtubeId}\\?enablejsapi=1$`))
 
     // Nueva partida con otro filtro: el siguiente objetivo es ONLY_D.
     net.clear()

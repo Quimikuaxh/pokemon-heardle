@@ -1,6 +1,7 @@
 import { ClipProgressBar } from './ClipProgressBar'
 import { Lamps, SHELL_CLASS } from './Lamps'
 import { PauseIcon, PlayIcon, SkipIcon, SpinnerIcon } from './icons'
+import { VolumeControl } from './VolumeControl'
 import { Waveform } from './Waveform'
 import { formatClock } from '../game/format'
 
@@ -20,6 +21,9 @@ interface PlayerProps {
   onTogglePlay(): void
   onSkip(): void
   onRetryAudio(): void
+  /** Volumen comun (DEC-55); sin `onVolumeChange` no se pinta el deslizador. */
+  volume?: number
+  onVolumeChange?(volume: number): void
 }
 
 /** Reproductor tipo Pokedex: carcasa con lente y luces, pantalla con la onda, barra segmentada y controles. */
@@ -80,6 +84,8 @@ export function Player(props: PlayerProps) {
           )}
         </button>
       </div>
+
+      {props.onVolumeChange && <VolumeControl volume={props.volume ?? 1} onChange={props.onVolumeChange} />}
 
       {audioStatus === 'error' && (
         <button

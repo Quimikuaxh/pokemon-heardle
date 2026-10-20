@@ -18,9 +18,12 @@ interface ResultPanelProps {
   onOpenFullSong?: () => void
   /** El tablero pinta la nota del diario al final de la pagina; sueltos (tests, otros usos) la lleva el panel. */
   showNextDayNote?: boolean
+  /** Volumen comun (DEC-55) para el video de la cancion completa. */
+  volume?: number
+  onVolumeChange?(volume: number): void
 }
 
-export function ResultPanel({ view, onOpenFullSong, showNextDayNote = true }: ResultPanelProps) {
+export function ResultPanel({ view, onOpenFullSong, showNextDayNote = true, volume, onVolumeChange }: ResultPanelProps) {
   if (view.status === 'playing') return null
   const won = view.status === 'won'
   // Un registro diario antiguo puede no traer youtubeId: se muestra la solucion y no el boton.
@@ -54,7 +57,7 @@ export function ResultPanel({ view, onOpenFullSong, showNextDayNote = true }: Re
             })}
           </div>
         </div>
-        {youtubeId && <FullSongEmbed key={youtubeId} youtubeId={youtubeId} onOpen={onOpenFullSong} />}
+        {youtubeId && <FullSongEmbed key={youtubeId} youtubeId={youtubeId} onOpen={onOpenFullSong} volume={volume} onVolumeChange={onVolumeChange} />}
       </section>
       {showNextDayNote && view.mode === 'daily' && <NextDayNote />}
     </>

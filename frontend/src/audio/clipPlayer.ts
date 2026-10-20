@@ -72,6 +72,8 @@ export interface ClipPlayer {
   pause(): void
   /** Detiene la reproduccion y vuelve a 0 (p. ej. al abrir la cancion completa). */
   stop(): void
+  /** Volumen de 0 a 1 (DEC-55). Se aplica al instante, tambien al clip que esta sonando. */
+  setVolume(volume: number): void
   /** Avisa de { playing, positionSec } en cada frame mientras suena y al parar o terminar. */
   subscribe(listener: (state: PlaybackState) => void): () => void
   dispose(): void
@@ -131,6 +133,7 @@ export function createClipPlayer(deps: ClipPlayerDeps): ClipPlayer {
   let elementResumable = false
   let frameId: number | null = null
   let disposed = false
+  let volume = 1
 
   function emit(state: PlaybackState) {
     if (disposed) return
@@ -204,7 +207,7 @@ export function createClipPlayer(deps: ClipPlayerDeps): ClipPlayer {
     const now = web.currentTime
     const { source, gain } = entry
     gain.gain.cancelScheduledValues?.(now)
-    gain.gain.setValueAtTime(1, now)
+    gain.gain.setValueAtTime(volume, now)
     gain.gain.linearRampToValueAtTime(0, now + PAUSE_FADE_SECONDS)
     source.onended = () => {
       source.disconnect()
@@ -309,6 +312,17 @@ export function createClipPlayer(deps: ClipPlayerDeps): ClipPlayer {
     if (hadPreviousClip) emit({ playing: false, positionSec: 0 })
   }
 
+  // El fundido de 50 ms va al final del tramo que queda por sonar (al reanudar, el resto del clip). Desde `from`
+  // suena al volumen actual; al cambiar el volumen se reprograma desde ese instante.
+  function scheduleGain(entry: ActiveSource, from: number) {
+    const end = entry.startTime + Math.max(entry.duration - entry.offset, 0)
+    const fadeStart = Math.max(from, end - FADE_OUT_SECONDS)
+    const { gain } = entry.gain
+    gain.setValueAtTime(volume, from)
+    gain.setValueAtTime(volume, fadeStart)
+    gain.linearRampToValueAtTime(0, end)
+  }
+
   function playBuffer(web: AudioContextLike, decoded: AudioBufferLike, offset: number) {
     useMediaPlaybackAudioSession()
     detachActiveSource()
@@ -325,13 +339,8 @@ export function createClipPlayer(deps: ClipPlayerDeps): ClipPlayer {
     const gain = web.createGain()
     source.connect(gain)
     gain.connect(web.destination)
-    // El fundido de 50 ms va al final del tramo que queda por sonar (al reanudar, el resto del clip).
-    const remaining = Math.max(duration - offset, 0)
-    const fadeStart = Math.max(startTime, startTime + remaining - FADE_OUT_SECONDS)
-    gain.gain.setValueAtTime(1, startTime)
-    gain.gain.setValueAtTime(1, fadeStart)
-    gain.gain.linearRampToValueAtTime(0, startTime + remaining)
     const entry: ActiveSource = { source, gain, startTime, offset, duration }
+    scheduleGain(entry, startTime)
     source.onended = () => {
       if (active === entry) {
         active = null
@@ -403,6 +412,20 @@ export function createClipPlayer(deps: ClipPlayerDeps): ClipPlayer {
         heldPosition = 0
       } else audio.pause()
       markEnded()
+    },
+
+    setVolume(next) {
+      volume = Number.isFinite(next) ? Math.min(Math.max(next, 0), 1) : 1
+      try {
+        audio.volume = volume
+      } catch {
+        // iOS: volume es de solo lectura en <audio>; ahi solo cuenta la ruta Web Audio
+      }
+      if (active && context) {
+        const now = context.currentTime
+        active.gain.gain.cancelScheduledValues?.(now)
+        scheduleGain(active, now)
+      }
     },
 
     subscribe(listener) {

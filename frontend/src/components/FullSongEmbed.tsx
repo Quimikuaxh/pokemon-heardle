@@ -1,33 +1,82 @@
 import { useEffect, useRef, useState } from 'react'
 import { PlayIcon } from './icons'
+import { VolumeControl } from './VolumeControl'
 
 const YOUTUBE_ID_PATTERN = /^[A-Za-z0-9_-]{11}$/
-const EMBED_PREFIX = 'https://www.youtube-nocookie.com/embed/'
+const EMBED_ORIGIN = 'https://www.youtube-nocookie.com'
+const EMBED_PREFIX = `${EMBED_ORIGIN}/embed/`
+/** `enablejsapi=1` permite fijar el volumen del video con postMessage, sin cargar el script de la IFrame API (DEC-55). */
+const EMBED_QUERY = '?enablejsapi=1'
+
+interface FullSongEmbedProps {
+  youtubeId: string
+  onOpen?: () => void
+  /** Volumen comun (DEC-55), de 0 a 1; sin `onVolumeChange` no se pinta el deslizador ni se toca el volumen del video. */
+  volume?: number
+  onVolumeChange?(volume: number): void
+}
 
 /**
  * Cancion completa de YouTube (DEC-41). El iframe NO existe hasta pulsar el boton: asi no hay peticiones a
  * YouTube al terminar ni al reabrir un diario terminado. El id se valida antes de construir la URL.
  */
-export function FullSongEmbed({ youtubeId, onOpen }: { youtubeId: string; onOpen?: () => void }) {
+export function FullSongEmbed({ youtubeId, onOpen, volume = 1, onVolumeChange }: FullSongEmbedProps) {
   const [opened, setOpened] = useState(false)
   const frameBox = useRef<HTMLDivElement>(null)
+  const frame = useRef<HTMLIFrameElement>(null)
+  const controlsVolume = onVolumeChange !== undefined
+  const volumeRef = useRef(volume)
+  volumeRef.current = volume
   // El boton desaparece al pulsarlo: se lleva el foco al contenedor para no perderlo (teclado y lectores).
   useEffect(() => {
     if (opened) frameBox.current?.focus()
   }, [opened])
+
+  const sendVolume = () => {
+    if (!controlsVolume) return
+    const message = { event: 'command', func: 'setVolume', args: [Math.round(volumeRef.current * 100)] }
+    frame.current?.contentWindow?.postMessage(JSON.stringify(message), EMBED_ORIGIN)
+  }
+  useEffect(sendVolume, [volume, controlsVolume])
+  // El reproductor de YouTube ignora las ordenes hasta estar listo: se repite el volumen con cada mensaje suyo
+  // (el primero llega al terminar de cargar) hasta que confirma estar listo.
+  useEffect(() => {
+    if (!opened || !controlsVolume) return
+    let ready = false
+    const onMessage = (event: MessageEvent) => {
+      if (ready || event.origin !== EMBED_ORIGIN || event.source !== frame.current?.contentWindow) return
+      if (typeof event.data === 'string' && event.data.includes('"onReady"')) ready = true
+      sendVolume()
+    }
+    window.addEventListener('message', onMessage)
+    return () => window.removeEventListener('message', onMessage)
+    // sendVolume lee el volumen de volumeRef: no hace falta volver a suscribirse al cambiarlo
+  }, [opened, controlsVolume])
+  // Sin este aviso el reproductor no manda eventos al padre.
+  const startListening = () => {
+    if (!controlsVolume) return
+    frame.current?.contentWindow?.postMessage(JSON.stringify({ event: 'listening' }), EMBED_ORIGIN)
+    sendVolume()
+  }
+
   if (!YOUTUBE_ID_PATTERN.test(youtubeId)) return null
 
   if (opened) {
     return (
-      <div ref={frameBox} tabIndex={-1} className="aspect-video w-full overflow-hidden rounded-lg border-2 border-edge outline-none">
-        <iframe
-          src={`${EMBED_PREFIX}${youtubeId}`}
-          title="Canción completa en YouTube"
-          className="h-full w-full"
-          referrerPolicy="strict-origin-when-cross-origin"
-          allow="encrypted-media; picture-in-picture; fullscreen"
-          allowFullScreen
-        />
+      <div className="flex flex-col gap-2">
+        <div ref={frameBox} tabIndex={-1} className="aspect-video w-full overflow-hidden rounded-lg border-2 border-edge outline-none">
+          <iframe
+            ref={frame}
+            src={`${EMBED_PREFIX}${youtubeId}${controlsVolume ? EMBED_QUERY : ''}`}
+            title="Canción completa en YouTube"
+            className="h-full w-full"
+            referrerPolicy="strict-origin-when-cross-origin"
+            allow="encrypted-media; picture-in-picture; fullscreen"
+            allowFullScreen
+            onLoad={startListening}
+          />
+        </div>
+        {onVolumeChange && <VolumeControl volume={volume} onChange={onVolumeChange} />}
       </div>
     )
   }

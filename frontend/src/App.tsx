@@ -64,6 +64,7 @@ function LoadedApp({ catalog, api }: { catalog: PublicCatalog; api: ReturnType<t
   const [tab, setTab] = useState<Tab>('daily')
   const store = useMemo(() => createStore(window.localStorage), [])
   const [settings, setSettings] = useState(() => store.getSettings())
+  const [volume, setVolume] = useState(() => store.getVolume())
   const dailyController = useMemo(() => createGameController({ api, store, catalog }), [api, store, catalog])
   const unlimitedController = useMemo(() => createGameController({ api, store, catalog }), [api, store, catalog])
 
@@ -72,14 +73,19 @@ function LoadedApp({ catalog, api }: { catalog: PublicCatalog; api: ReturnType<t
     setSettings(next)
   }
 
+  const changeVolume = (next: number) => {
+    store.setVolume(next)
+    setVolume(store.getVolume())
+  }
+
   return (
     <>
       <Header tab={tab} onTab={setTab} settings={settings} onSettingsChange={changeSettings} />
       <div hidden={tab !== 'daily'}>
-        <GameBoard mode="daily" controller={dailyController} api={api} catalog={catalog} store={store} settings={settings} />
+        <GameBoard mode="daily" controller={dailyController} api={api} catalog={catalog} store={store} settings={settings} volume={volume} onVolumeChange={changeVolume} />
       </div>
       <div hidden={tab !== 'unlimited'}>
-        <GameBoard mode="unlimited" controller={unlimitedController} api={api} catalog={catalog} store={store} settings={settings} />
+        <GameBoard mode="unlimited" controller={unlimitedController} api={api} catalog={catalog} store={store} settings={settings} volume={volume} onVolumeChange={changeVolume} />
       </div>
     </>
   )

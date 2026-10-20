@@ -7,7 +7,7 @@ import type { GameController } from '../game/controller'
 import { madridDate } from '../../../shared/date'
 import { currentClipSeconds } from '../game/view'
 import { useGameState } from '../hooks/useGameState'
-import { DEFAULT_SETTINGS } from '../storage/store'
+import { DEFAULT_SETTINGS, DEFAULT_VOLUME } from '../storage/store'
 import type { HintSettings, Store } from '../storage/store'
 import { AttemptList } from './AttemptList'
 import { FilterPanel } from './FilterPanel'
@@ -29,9 +29,12 @@ interface GameBoardProps {
   store: Store
   /** Pistas visibles (DEC-52). Las guarda y edita la App; el tablero solo las aplica. */
   settings?: HintSettings
+  /** Volumen comun del clip y del video (DEC-55). Lo guarda la App: es el mismo en diario y libre. */
+  volume?: number
+  onVolumeChange?(volume: number): void
 }
 
-export function GameBoard({ mode, controller, api, catalog, store, settings = DEFAULT_SETTINGS }: GameBoardProps) {
+export function GameBoard({ mode, controller, api, catalog, store, settings = DEFAULT_SETTINGS, volume = DEFAULT_VOLUME, onVolumeChange }: GameBoardProps) {
   const state = useGameState(controller)
   const { view, phase, notice, busy, gameSeq } = state
   const [filter, setFilter] = useState(() => controller.getFilter())
@@ -52,6 +55,7 @@ export function GameBoard({ mode, controller, api, catalog, store, settings = DE
       }),
     [api, controller],
   )
+  useEffect(() => player.setVolume(volume), [player, volume])
   useEffect(() => {
     const unsubscribe = player.subscribe(setPlayback)
     return () => {
@@ -161,12 +165,16 @@ export function GameBoard({ mode, controller, api, catalog, store, settings = DE
               onTogglePlay={togglePlay}
               onSkip={() => void controller.skip()}
               onRetryAudio={() => setAudioRetry((count) => count + 1)}
+              volume={volume}
+              onVolumeChange={onVolumeChange}
             />
             <SongSearch key={gameSeq} catalog={catalog} guesses={view.guesses} readOnly={busy} onSelect={selectSong} />
           </>
         )}
 
-        {phase === 'finished' && view && <ResultPanel view={view} showNextDayNote={false} onOpenFullSong={() => player.stop()} />}
+        {phase === 'finished' && view && (
+          <ResultPanel view={view} showNextDayNote={false} onOpenFullSong={() => player.stop()} volume={volume} onVolumeChange={onVolumeChange} />
+        )}
 
         {mode === 'unlimited' && phase !== 'loading' && !view && (
           <FilterPanel games={catalog.games} songs={catalog.songs} selected={filter} onChange={changeFilter} onStart={startUnlimited} />

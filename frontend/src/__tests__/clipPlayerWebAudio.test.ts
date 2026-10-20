@@ -431,9 +431,9 @@ describe('ClipPlayer Web Audio: ciclo de vida (FE-WA-11, 19)', () => {
     expect(ctx.sources.length).toBe(0)
   })
 
-  it('FE-WA-18 [MOD] la interfaz publica es prepare/play/pause/stop/subscribe/dispose (pause es nuevo, DEC-46)', () => {
+  it('FE-WA-18 [MOD] la interfaz publica es prepare/play/pause/stop/setVolume/subscribe/dispose (pause DEC-46, setVolume DEC-55)', () => {
     const { player } = setup()
-    expect(Object.keys(player).sort()).toEqual(['dispose', 'pause', 'play', 'prepare', 'stop', 'subscribe'])
+    expect(Object.keys(player).sort()).toEqual(['dispose', 'pause', 'play', 'prepare', 'setVolume', 'stop', 'subscribe'])
   })
 })
 

@@ -18,6 +18,9 @@ export interface HintSettings {
 
 export const DEFAULT_SETTINGS: HintSettings = { consoleHint: false, dateHint: false }
 
+/** Volumen comun del clip y del video de YouTube (DEC-55), de 0 a 1. */
+export const DEFAULT_VOLUME = 1
+
 export interface Store {
   /** true tras un fallo de escritura (cuota excedida o almacenamiento bloqueado). */
   readonly writeFailed: boolean
@@ -27,6 +30,8 @@ export interface Store {
   setDaily(date: string, record: DailyRecord): void
   getSettings(): HintSettings
   setSettings(settings: HintSettings): void
+  getVolume(): number
+  setVolume(volume: number): void
   getUnlimited(): UnlimitedRecord | null
   setUnlimited(record: UnlimitedRecord | null): void
 }
@@ -51,6 +56,10 @@ function parseSettings(value: unknown): HintSettings | null {
   return { consoleHint: consoleHint === true, dateHint: dateHint === true }
 }
 
+const isVolume = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 1
+
+export const clampVolume = (volume: number): number => (Number.isFinite(volume) ? Math.min(Math.max(volume, 0), 1) : DEFAULT_VOLUME)
+
 const RETIRED_KEY_PREFIX = `${PREFIX}stats`
 
 // Las estadisticas se retiraron (DEC-43): se borran las claves heredadas, que ya nadie lee. Idempotente y sin
@@ -73,6 +82,7 @@ export function createStore(storage: Storage): Store {
   let writeFailed = false
   // Si no se puede escribir, los ajustes siguen funcionando en memoria.
   let memorySettings: HintSettings | null = null
+  let memoryVolume: number | null = null
   removeRetiredKeys(storage)
 
   function read<T>(key: string, isValid: (value: unknown) => value is T): T | null {
@@ -114,6 +124,11 @@ export function createStore(storage: Storage): Store {
     setSettings: (settings) => {
       memorySettings = { consoleHint: settings.consoleHint, dateHint: settings.dateHint }
       write('settings', memorySettings)
+    },
+    getVolume: () => memoryVolume ?? read('volume', isVolume) ?? DEFAULT_VOLUME,
+    setVolume: (volume) => {
+      memoryVolume = clampVolume(volume)
+      write('volume', memoryVolume)
     },
     getUnlimited: () => read('unlimited', isUnlimitedRecord),
     setUnlimited: (record) => (record ? write('unlimited', record) : remove('unlimited')),

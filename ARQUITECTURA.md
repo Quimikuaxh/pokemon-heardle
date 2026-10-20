@@ -1,6 +1,6 @@
 # Pokemon Heardle - Arquitectura
 
-Estado: version inicial implementada (main). Iteracion `feature/admin-catalogo` (DEC-36 a DEC-43, seccion 6.1; DEC-27 retirada) definida. Cambio "un solo clip por cancion" (DEC-44) y fundido en el navegador (DEC-45) definidos. Iteracion `feature/pistas-y-filtro-juego` (DEC-49 a DEC-53) definida; sin preguntas abiertas. Requisitos en `REQUISITOS.md` (las decisiones de su seccion 9 no se reabren aqui).
+Estado: version inicial implementada (main). Iteracion `feature/admin-catalogo` (DEC-36 a DEC-43, seccion 6.1; DEC-27 retirada) definida. Cambio "un solo clip por cancion" (DEC-44) y fundido en el navegador (DEC-45) definidos. Iteracion `feature/pistas-y-filtro-juego` (DEC-49 a DEC-53) definida; sin preguntas abiertas. Control de volumen comun (DEC-55) implementado. Requisitos en `REQUISITOS.md` (las decisiones de su seccion 9 no se reabren aqui).
 Las preguntas de la version inicial (credencial del bucket; buscador y "juego acertado") se confirmaron el 2026-10-03.
 
 ## 1. Vision general
@@ -196,7 +196,7 @@ DEC-40: **Canciones demasiado cortas: deteccion con `ffprobe` sobre la fuente de
 - Datos actuales: 82 de las 293 fuentes descargadas duran menos de 16 s (sintonias); en el catalogo actual (109 canciones) afecta a 3, ya desactivadas a mano.
 Alternativas descartadas: duracion de `yt-dlp --flat-playlist` (redondeada y no siempre presente; mide el video, no el fichero que se corta); que `validate` falle por canciones cortas DESACTIVADAS (decision del usuario; `validate` si falla con una corta ACTIVADA, que es un estado invalido); un flag `tooShort` persistido (se desincroniza al cambiar `startSec`).
 
-DEC-41: **Cancion completa al terminar: embed `youtube-nocookie` con el `youtubeId` dentro de `solution`.** `SolutionView` gana `youtubeId`; el backend solo lo anade cuando la partida ha terminado (mismo punto donde hoy se construye `solution`). Nunca en `/catalog`, ni en `GameView` en curso, ni en cabeceras. El iframe solo existe en el arbol de React cuando `status !== 'playing'`, asi que no puede cargarse antes. URL: `https://www.youtube-nocookie.com/embed/<youtubeId>`. Carga del iframe: SOLO al pulsar el boton "Escuchar la cancion completa"; antes no hay iframe ni peticion a YouTube (decision del usuario). Descartado: cargarlo automaticamente al terminar (peticiones a YouTube cada vez que se reabre un diario terminado y mas datos en movil).
+DEC-41: **Cancion completa al terminar: embed `youtube-nocookie` con el `youtubeId` dentro de `solution`.** `SolutionView` gana `youtubeId`; el backend solo lo anade cuando la partida ha terminado (mismo punto donde hoy se construye `solution`). Nunca en `/catalog`, ni en `GameView` en curso, ni en cabeceras. El iframe solo existe en el arbol de React cuando `status !== 'playing'`, asi que no puede cargarse antes. URL: `https://www.youtube-nocookie.com/embed/<youtubeId>` (con `?enablejsapi=1` desde DEC-55). Carga del iframe: SOLO al pulsar el boton "Escuchar la cancion completa"; antes no hay iframe ni peticion a YouTube (decision del usuario). Descartado: cargarlo automaticamente al terminar (peticiones a YouTube cada vez que se reabre un diario terminado y mas datos en movil).
 Alternativa descartada: servir el tema completo o un fragmento largo propio (~1,5 GB para 500 canciones, supera el 1 GB gratis de Supabase).
 Justificacion de `youtube-nocookie`: no deja cookies de YouTube hasta que se reproduce.
 
@@ -342,6 +342,11 @@ DEC-54: **Cada grupo de seleccion tiene la misma probabilidad de salir, en diari
   - Un grupo sin canciones activas nunca sale. Un catalogo de un juego con una cancion sigue funcionando. Sin `selectionGroup`, cada juego es su propio grupo.
   - Libre con `randomInt` inyectado: solo cuentan los grupos con algun juego filtrado y con canciones activas. Con solo B2W2 filtrado, el grupo BW/B2W2 cuenta y solo aporta canciones de B2W2.
   - Validador y admin: `selectionGroup` que no existe, que apunta a un juego que no es cabeza, o en cadena -> error.
+
+DEC-55: **Un solo volumen para el clip y para el video de la cancion completa** (decision del usuario), deslizador "Volumen" de 0 a 100 % en el reproductor y bajo el video abierto. Es el mismo valor en los dos sitios y en diario y libre; se guarda en `localStorage` `heardle:volume` (0..1, por defecto 1, acotado; si no se puede escribir, sigue en memoria).
+- Clip: `ClipPlayer.setVolume(v)`. En Web Audio el volumen va en la ganancia de cada fuente (la misma que hace el fundido de DEC-45, cadena fuente -> ganancia -> destination sin nodo extra): arranca a `v`, el fundido final baja de `v` a 0 y la pausa funde desde `v`. Cambiarlo sonando cancela lo programado y lo rehace desde `currentTime`. En la ruta `<audio>` se asigna `audio.volume` (en iOS es de solo lectura y no tiene efecto; ahi suena por Web Audio).
+- Video: el iframe lleva `?enablejsapi=1` y se le manda `{"event":"command","func":"setVolume","args":[0..100]}` por `postMessage`, siempre con destino `https://www.youtube-nocookie.com`. No se carga el script de la IFrame API (no hace falta tocar la CSP, que solo permite `frame-src`). El reproductor ignora ordenes hasta estar listo: al cargar el iframe se manda `{"event":"listening"}` y el volumen, y se repite el volumen con cada mensaje del reproductor (origen y `source` comprobados) hasta recibir `onReady`. Mover el volumen desde los controles de YouTube no actualiza el deslizador.
+Alternativas descartadas: dos deslizadores independientes (decision del usuario); un nodo de ganancia maestro (cambiaria la cadena de DEC-45 sin ventaja); cargar `https://www.youtube.com/iframe_api` (obligaria a abrir `script-src` en la CSP).
 
 ## 4. Modelo de partida
 
@@ -523,7 +528,7 @@ Filtros y busqueda en la UI (en cliente, sobre `/api/catalog`): juego, activadas
 
 - Al abrir: `GET /health` (DEC-14) -> `GET /catalog`. Estados de UI: despertando / listo / error con boton de reintento.
 - Filtro: SOLO en modo ilimitado. Ids de juego en `localStorage`; filtro vacio deshabilita "Empezar" en ilimitado. Un cambio de filtro con partida ilimitada en curso solo aplica a la siguiente. El modo diario no muestra filtro.
-- `localStorage` (prefijo `heardle:`): `filter`; `settings` (`{ consoleHint, dateHint }`, DEC-52); `daily:<date>` -> `DailyRecord = { token, finished, view? }`, donde `view` es la `GameView` final (con `solution` y `results`), para mostrar un diario terminado sin llamar a la API; `unlimited` -> partida en curso. (RETIRADAS: `stats:daily` y `stats:unlimited`, DEC-43.) Durante la partida solo hay token cifrado y las jugadas propias.
+- `localStorage` (prefijo `heardle:`): `filter`; `settings` (`{ consoleHint, dateHint }`, DEC-52); `volume` (numero de 0 a 1, DEC-55); `daily:<date>` -> `DailyRecord = { token, finished, view? }`, donde `view` es la `GameView` final (con `solution` y `results`), para mostrar un diario terminado sin llamar a la API; `unlimited` -> partida en curso. (RETIRADAS: `stats:daily` y `stats:unlimited`, DEC-43.) Durante la partida solo hay token cifrado y las jugadas propias.
 - Apertura del modo diario, sin crear partidas innecesarias en servidor:
   1. El cliente calcula la fecha de hoy en Europe/Madrid con `Intl` (misma funcion que el servidor, en `shared/`).
   2. Si existe `daily:<fecha>` terminada -> muestra el resultado, sin boton de jugar, y no llama a la API.

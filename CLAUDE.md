@@ -16,6 +16,7 @@ Al añadir la playlist de un juego nuevo, en `scripts/catalog/data/catalog.json`
 - Asígnale su consola o consolas (DEC-51). No hay tabla por defecto en el script: lo hace quien añade el juego. `validate` y `upload` rechazan un juego sin consola.
 - Usa un nombre homogéneo con el resto ("Pokémon X/Y") y limpia de los títulos las coletillas de la playlist ("- Pokémon X/Y OST", "(HQ)"…).
 - Para quitar una canción del juego, desactívala; no la borres: si se borra, el siguiente `draft` de esa playlist la vuelve a añadir.
+- Desactiva las reversiones de una misma canción y deja solo la versión base: pistas sueltas o mezclas parciales (`[vocals]`, `[beatbox]`, `[no piano]`…), medleys, salas o vagones (`[1st Room]`, `[2nd Car]`), plantas (`[B1F]`), variantes de noche, estación, `[Alt.]` o fase, interpretaciones dentro del juego ("Performed By…") y pistas `[UNUSED]`. Si no hay versión base, deja una sola variante. Motivo: suenan igual, inflan el peso del juego y hacen ambiguo el acierto. Abundan en las playlists "(Restored)". Excepción: temas distintos con el mismo prefijo ("Battle! (Gym Leader)", "Trainers' Eyes Meet (Lass)") no son reversiones.
 
 ## Tests
 

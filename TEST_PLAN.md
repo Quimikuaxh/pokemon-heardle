@@ -593,6 +593,39 @@ Referencia:
 
 **Notas:** los muestreos (BE-SEL-03/04/08/15) usan semilla fija y fechas generadas, nunca `Math.random`, para no ser intermitentes. A documentar en el test: si con un solo grupo se llama a `randomInt(1)` y cómo queda el JSON al quitar el grupo.
 
+### 0.6 Volumen común del clip y del vídeo (DEC-55)
+
+Prevalece sobre las filas anteriores con el mismo ID. Fuentes: ARQUITECTURA DEC-41 y DEC-55; REQUISITOS §6. Tests en `frontend/src/__tests__/volume.test.tsx`.
+
+**Modificados**
+
+| ID | Nivel | Descripción | Precondiciones | Resultado esperado | Cubre | P |
+|---|---|---|---|---|---|---|
+| FE-WA-18 [MOD] | unit | Interfaz pública de `ClipPlayer`: `prepare/play/pause/stop/setVolume/subscribe/dispose` | - | Exactamente esas claves | DEC-45, DEC-46, DEC-55 | M |
+| FE-EMB-05 [MOD] | unit | Sin control de volumen (`onVolumeChange` ausente) el `src` es exactamente `https://www.youtube-nocookie.com/embed/<youtubeId>`; con él lleva además `?enablejsapi=1` (FE-VOL-10) | - | URL correcta | DEC-41, DEC-55 | A |
+| E2E-56, E2E-57, E2E-61 [MOD] | e2e | El `src` del iframe en la app es `https://www.youtube-nocookie.com/embed/<youtubeId>?enablejsapi=1` | - | URL correcta | DEC-41, DEC-55 | A |
+
+**Nuevos — frontend**
+
+| ID | Nivel | Descripción | Precondiciones | Resultado esperado | Cubre | P |
+|---|---|---|---|---|---|---|
+| FE-VOL-01 | unit | Sin valor guardado el volumen es 1; `setVolume` guarda en `heardle:volume` y se restaura | Storage vacío | 1 y luego el guardado | DEC-55 | A |
+| FE-VOL-02 | unit | Fuera de rango se acota a [0, 1]; un valor guardado no numérico vale 1 | - | Acotado / por defecto | DEC-55 | M |
+| FE-VOL-03 | unit | `localStorage` no escribible: el volumen funciona en memoria y `writeFailed` es true | Mock lanza | Sin excepción | DEC-55 | M |
+| FE-VOL-04 | unit | El clip (Web Audio) arranca al volumen fijado y el fundido final baja desde él a 0 | `setVolume(0.4)` antes de `play` | Ganancia 0,4 | DEC-45, DEC-55 | A |
+| FE-VOL-05 | unit | Cambiar el volumen sonando cancela la programación y la rehace desde `currentTime`, con el fundido final intacto | Sonando | Reprogramado | DEC-55 | A |
+| FE-VOL-06 | unit | La pausa funde desde el volumen actual, no desde 1 | Volumen 0,3 | Rampa desde 0,3 | DEC-46, DEC-55 | M |
+| FE-VOL-07 | unit | Ruta `<audio>`: aplica `audio.volume`, acotado | Sin Web Audio | `volume` correcto | DEC-55 | M |
+| FE-VOL-08 | unit | El reproductor muestra un `slider` "Volumen" con el valor en % y avisa con valores de 0 a 1 | - | Valor y callback | DEC-55 | A |
+| FE-VOL-09 | unit | Sin `onVolumeChange` el reproductor no pinta el deslizador | - | Sin slider | DEC-55 | B |
+| FE-VOL-10 | unit | Con volumen, el iframe es `youtube-nocookie` con `?enablejsapi=1` | - | URL correcta | DEC-41, DEC-55 | A |
+| FE-VOL-11 | unit | Al cargar el iframe manda `{event:"listening"}` y `setVolume` (0..100), siempre con destino `https://www.youtube-nocookie.com` | - | Mensajes y origen correctos | DEC-55 | A |
+| FE-VOL-12 | unit | Cambiar el volumen con el vídeo abierto manda el `setVolume` nuevo | - | Orden enviada | DEC-55 | A |
+| FE-VOL-13 | unit | Repite el volumen con cada mensaje del reproductor hasta `onReady`; ignora mensajes de otros orígenes | - | Correcto | DEC-55 | A |
+| FE-VOL-14 | unit | Bajo el vídeo hay un deslizador "Volumen" con el mismo valor | - | Valor y callback | DEC-55 | A |
+
+**Riesgos:** en iOS `audio.volume` es de solo lectura (solo cuenta la ruta Web Audio) y YouTube puede ignorar `setVolume`; el volumen del sistema sigue mandando. El protocolo `postMessage` del iframe no es API pública documentada (es el que usa el script de la IFrame API): si YouTube lo cambia, el deslizador deja de afectar al vídeo sin romper nada más. Pasada manual en navegador real.
+
 ## 1. Alcance
 
 Dentro:
