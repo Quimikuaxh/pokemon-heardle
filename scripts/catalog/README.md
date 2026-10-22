@@ -28,6 +28,12 @@ Desde esta carpeta, con `npm run cli -- <subcomando>` (todos aceptan `--data-dir
 5. `validate` comprueba que hay un `<clipKey>.mp3` por canción activa con el formato de DEC-44 (256.626 bytes, 614 tramas MPEG-1 Layer III 128 kbps 44,1 kHz estéreo, sin ID3/Xing, `main_data_begin` = 0 y los offsets de los intentos en límite de trama), duración de 16 s (de -30 ms a +60 ms: sin cabecera Xing, ffprobe mide ~40-50 ms de más; la cabecera Xing no se reactiva porque sería una huella por canción), ausencia de metadatos. Falla si hay una canción corta activada (p. ej. reactivada a mano en el JSON).
 6. `upload [--prune]` valida, sube solo los clips nuevos o distintos (por md5) y por último `catalog.json`. `--prune` borra del bucket los clips que ya no pertenecen a una canción activa: ejecútalo **después** de reiniciar el backend en Render (mientras siga con el catálogo viejo en memoria, serviría clips ya borrados). Sin `--prune`, reinicia el backend tras subir.
 
+### Duplicados y reversiones por audio: `similar`
+
+`npm run cli -- similar <juegoId> [--threshold 0.8] [--all]` compara entre sí las canciones de un juego que tienen el audio descargado en `data/work/` y lista las parejas que suenan igual, de mayor a menor similitud. Analiza 90 s de cada fuente desde su `startSec` y no modifica nada. Por defecto solo mira las activas; `--all` incluye las desactivadas, marcadas `[desactivada]`. Tarda ~1 min con 130 canciones.
+
+Úsalo después de `draft` cuando un juego mezcla fuentes (dos playlists, o una playlist añadida sobre otra), porque la misma pista suele llegar con títulos distintos según el canal ("Hurry Along" / "Follow me!"). De cada pareja deja activa una (la base, si es una reversión) y desactiva la otra. Referencia del umbral (DEC-56): la misma pista da 0,82-0,98; pistas distintas del mismo juego, 0,79 como mucho. Entre 0,75 y 0,85 compruébalo de oído. Los audios de menos de 3 s no se comparan.
+
 ## Migración del layout antiguo (6 ficheros por canción) al clip único
 
 Orden obligatorio (el detalle y los motivos están en DEC-44, `ARQUITECTURA.md`):

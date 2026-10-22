@@ -19,6 +19,8 @@ Desde la raíz o `scripts/catalog/`:
 
 Al añadir un juego nuevo: `draft` lo deja al final de `games` y sin consolas. Mueve el juego a su sitio en `games` (orden de salida, por fecha) y asigna sus consolas (admin o `catalog.json`): `validate` y `upload` rechazan un juego con canciones activas sin consolas. El detalle, incluido cómo asignar `selectionGroup`, está en `scripts/catalog/README.md`.
 
+Para encontrar duplicados de un juego con canciones de varias fuentes: `npm --prefix scripts/catalog run cli -- similar <juegoId>` (detalle en `scripts/catalog/README.md`).
+
 Todos los subcomandos aceptan `--data-dir <ruta>` (por defecto `scripts/catalog/data`). Con driver `fs` (local), el backend lee `scripts/catalog/data/out/catalog/catalog.json` y los clips. En producción, `upload` sube todo a Supabase Storage (ver despliegue).
 
 ### Backend y frontend en local

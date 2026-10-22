@@ -14,6 +14,8 @@ import type { Runner } from './duration'
 import { clipArgs, clipOutputPath, masterArgs } from './ffmpegArgs'
 import { applyLeadingSilence, measureLeadingSilence } from './silence'
 import { listAvailableVideos } from './playlist'
+import { ANALYSIS_SECONDS, chromagram, DEFAULT_THRESHOLD, ffmpegDecoder, findSimilarPairs } from './similar'
+import type { AudioDecoder, SimilarEntry } from './similar'
 import { createS3ObjectStore, readS3Settings } from './s3ObjectStore'
 import { runUpload } from './upload'
 import { createFfprobeProbe, validateOutput } from './validate'
@@ -31,6 +33,8 @@ export interface CliDeps {
   adminUiDir?: string
   /** Resuelve cuando hay que cerrar el admin (por defecto, SIGINT/SIGTERM). */
   waitForShutdown?: () => Promise<void>
+  /** Decodifica el audio de las fuentes para `similar` (por defecto, ffmpeg). */
+  decodeAudio?: AudioDecoder
 }
 
 const DEFAULT_DATA_DIR = join(__dirname, '..', 'data')
@@ -44,6 +48,8 @@ const USAGE = `Uso: npm run cli -- <subcomando> [--data-dir <ruta>]
   validate              comprueba clips, duraciones, metadatos y tamanos
   upload [--prune]      valida y sube clips y catalogo al bucket
   admin [--port 5180]   admin local del catalogo (servidor + UI en 127.0.0.1)
+  similar <juegoId> [--threshold 0.8] [--all]
+                        parejas de canciones del juego que suenan igual (duplicados y reversiones)
 --data-dir (por defecto scripts/catalog/data) vale para todos los subcomandos.`
 
 class UsageError extends Error {}
@@ -54,6 +60,8 @@ interface ParsedArgs {
   dataDir: string
   prune: boolean
   port: number
+  threshold: number
+  all: boolean
 }
 
 function parseArgs(argv: string[]): ParsedArgs {
@@ -61,14 +69,20 @@ function parseArgs(argv: string[]): ParsedArgs {
   let dataDir = DEFAULT_DATA_DIR
   let prune = false
   let port = DEFAULT_ADMIN_PORT
+  let threshold = DEFAULT_THRESHOLD
+  let all = false
   for (let index = 0; index < argv.length; index++) {
     const arg = argv[index]
     if (arg === '--prune') prune = true
-    else if (arg === '--data-dir' || arg === '--port') {
+    else if (arg === '--all') all = true
+    else if (arg === '--data-dir' || arg === '--port' || arg === '--threshold') {
       const value = argv[++index]
       if (value === undefined || value.startsWith('--')) throw new UsageError(`${arg} necesita un valor.`)
       if (arg === '--data-dir') dataDir = resolve(value)
-      else {
+      else if (arg === '--threshold') {
+        threshold = Number(value)
+        if (!/^\d+(\.\d+)?$/.test(value) || threshold > 1) throw new UsageError(`Umbral no valido: "${value}" (0-1).`)
+      } else {
         if (!/^\d+$/.test(value) || Number(value) > 65535) throw new UsageError(`Puerto no valido: "${value}" (0-65535).`)
         port = Number(value)
       }
@@ -76,7 +90,7 @@ function parseArgs(argv: string[]): ParsedArgs {
     else positional.push(arg)
   }
   const [command, ...rest] = positional
-  return { command, positional: rest, dataDir, prune, port }
+  return { command, positional: rest, dataDir, prune, port, threshold, all }
 }
 
 const dataPaths = (dataDir: string) => ({
@@ -370,6 +384,29 @@ async function upload(paths: DataPaths, run: Runner, prune: boolean, io: Io): Pr
   )
 }
 
+async function similar(paths: DataPaths, args: ParsedArgs, decode: AudioDecoder, io: Io): Promise<void> {
+  const gameId = args.positional[0]
+  if (!existsSync(paths.catalog)) throw new Error(`No existe ${paths.catalog}. Ejecuta "draft" primero.`)
+  const { catalog } = await createCatalogStore({ file: paths.catalog }).readTolerant()
+  if (!(catalog.games as Catalog['games']).some((game) => game.id === gameId)) throw new Error(`No existe el juego "${gameId}" en catalog.json.`)
+  const songs = (catalog.songs as Song[]).filter((song) => song.games.includes(gameId) && (args.all || song.enabled))
+  const entries: Array<SimilarEntry<Song>> = []
+  const missing: string[] = []
+  for (const song of songs) {
+    const file = findSourceFile(paths.work, song.source.youtubeId)
+    if (!file) {
+      missing.push(song.id)
+      continue
+    }
+    entries.push({ item: song, chroma: chromagram(await decode(file, song.startSec, ANALYSIS_SECONDS)) })
+  }
+  if (missing.length > 0) io.error(`Aviso: sin audio descargado, no se comparan: ${missing.join(', ')}`)
+  const pairs = findSimilarPairs(entries, args.threshold)
+  const label = (song: Song) => `${song.id} "${song.title}"${song.enabled ? '' : ' [desactivada]'}`
+  for (const pair of pairs) io.log(`${pair.score.toFixed(2)}  ${label(pair.a)}  ~  ${label(pair.b)}`)
+  io.log(`${pairs.length} parejas con similitud >= ${args.threshold} entre ${entries.length} canciones de ${gameId}.`)
+}
+
 function waitForSignal(): Promise<void> {
   return new Promise((done) => {
     const finish = () => done()
@@ -434,6 +471,10 @@ export async function runCli(
         return 0
       case 'admin':
         return await admin(args, deps, run, io)
+      case 'similar':
+        if (!args.positional[0]) break
+        await similar(paths, args, deps.decodeAudio ?? ffmpegDecoder, io)
+        return 0
     }
   } catch (error) {
     if (error instanceof UsageError) io.error(`${error.message}\n${USAGE}`)

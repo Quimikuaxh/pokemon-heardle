@@ -974,6 +974,11 @@ Resto del script:
 | SC-UP-05 | unit | `--prune` | - | Según flag | AR §6 | M |
 | SC-UP-06 [NUEVO] | unit | `upload` no sube clips de canciones desactivadas (cortas) y el `catalog.json` subido las mantiene `enabled:false` | Corta desactivada | 0 claves de esa canción | DEC-40 | M |
 | SC-CLI-01 | unit | Subcomando desconocido / falta URL en `fetch` | - | Uso y código != 0 | AR §6 | B |
+| SC-SIM-01..02 [NUEVO] | unit | `chromagram`: un La de 440 Hz concentra la energía en la clase 0 con norma 1 por ventana; el silencio da ceros sin NaN | Audio sintético | Cumple | DEC-56 | M |
+| SC-SIM-03..06 [NUEVO] | unit | `similarity`: misma melodía con otro volumen > 0,95; con 8 s de desfase > 0,9 en los dos sentidos; melodías distintas < 0,5; menos de 3 s → 0 | Audio sintético | Cumple | DEC-56 | A |
+| SC-SIM-07..08 [NUEVO] | unit | `findSimilarPairs`: solo parejas ≥ umbral, de mayor a menor; vacío o una entrada → sin parejas | - | Cumple | DEC-56 | A |
+| SC-SIM-09 [NUEVO] | unit (cond.) | `ffmpegDecoder` real: devuelve los segundos pedidos desde `startSec` con nombre que empieza por "-"; fichero inexistente → error que nombra ffmpeg | ffmpeg instalado | Cumple (se omite sin ffmpeg) | DEC-56 | M |
+| SC-SIM-10..16 [NUEVO] | unit | `similar <juegoId>` con decodificador simulado y `--data-dir` temporal: lista la pareja con puntuación; solo el juego pedido y las activas (`--all` añade las desactivadas, marcadas); decodifica desde `startSec` 90 s; `--threshold`; aviso de las que no tienen audio; juego inexistente, sin juego, umbral no válido o sin catálogo → código != 0 | - | Cumple | DEC-56 | A |
 | SC-GI-01 | unit | `.gitignore` cubre `node_modules`, `dist`, `.env*` (salvo `.env.example` de cada paquete, DEC-34), `scripts/catalog/data/`, `e2e/test-results`, `*.mp3` fuera de `e2e/fixtures` | - | `git check-ignore` confirma | AR §12 | M |
 | SC-GI-02 [NUEVO] | unit | `git check-ignore` confirma `scripts/catalog/admin-ui/dist`, `scripts/catalog/admin-ui/node_modules` y que `catalog.json.bak` / `catalog.json.tmp-*` dentro de `data/` quedan ignorados | - | Ignorados | DEC-37, DEC-38 | M |
 | SC-GI-03 [NUEVO] | unit | Los scripts raíz (`install:all`, `test`, `typecheck`) incluyen `scripts/catalog/admin-ui` | Leer `package.json` | Presente (DEC-38) | DEC-38 | B |
