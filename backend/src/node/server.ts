@@ -41,7 +41,7 @@ function readBody(req: IncomingMessage): Promise<Buffer> {
   })
 }
 
-/** Servidor Node para el manejador estandar: desarrollo local, e2e y Render hasta su retirada (DEC-57). */
+/** Servidor Node para el manejador estandar: desarrollo local y e2e (DEC-57). */
 export function createNodeServer(handle: ApiHandler, trustProxy: number): Server {
   return createServer(async (req, res) => {
     try {

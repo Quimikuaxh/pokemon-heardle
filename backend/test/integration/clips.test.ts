@@ -1,6 +1,6 @@
 // BE-CLP-*: clip unico por cancion (DEC-44). El backend sirve al intento N el prefijo de CLIP_BYTE_OFFSETS[N] bytes.
 // Supuesto de contrato: la comprobacion de formato (tamano y cabecera de trama en cada offset) ocurre al SERVIR (ruta de /clips),
-// no dentro de FsClipStore/S3ClipStore, y un fallo de formato cuenta como fallo del almacen (502, ticket sin consumir, DEC-22).
+// no dentro de FsClipStore/SupabaseClipStore, y un fallo de formato cuenta como fallo del almacen (502, ticket sin consumir, DEC-22).
 import { describe, it, expect, afterEach, vi } from 'vitest'
 import { startTestApp, closeAllTestApps, codeOf, type TestApp } from '../helpers/app'
 import { catalogR, makeClip, OFFSETS, referenceGroups, TOTAL_BYTES } from '../helpers/fixtures'

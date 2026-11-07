@@ -22,11 +22,18 @@ export function PokedexShell({ children }: { children: ReactNode }) {
 }
 
 /** Cabecera de la hoja izquierda: lente (color segun el estado), tres luces, logo y subtitulo. */
-export function DexTop({ lens = 'playing', subtitle }: { lens?: LensColor; subtitle?: string }) {
+export function DexTop({ lens = 'playing', subtitle, blinking = false }: { lens?: LensColor; subtitle?: string; blinking?: boolean }) {
   return (
     <div className="dex-ltop mx-1 mt-1 flex items-center gap-3 border-b-4 border-edge px-3 pb-3.5 pt-3 lg:gap-[18px] lg:px-[26px] lg:pb-[22px] lg:pt-[22px]">
       <span aria-hidden="true" className="grid size-12 flex-none place-items-center rounded-full border-4 border-edge bg-[#f4f4f2] lg:size-[86px]">
-        <span data-lens={lens} className={`dex-lens size-8 rounded-full border-[3px] border-edge lg:size-[62px] lg:border-4 ${LENS_CLASS[lens]}`} />
+        <span
+          data-lens={lens}
+          data-blinking={blinking || undefined}
+          className={`dex-lens relative size-8 rounded-full border-[3px] border-edge lg:size-[62px] lg:border-4 ${LENS_CLASS[lens]}`}
+        >
+          {/* Destello mientras suena el clip (DEC-59): solo cambia la opacidad de esta capa. */}
+          {blinking && <span className="dex-lens-glow absolute -inset-[3px] rounded-full lg:-inset-1" />}
+        </span>
       </span>
       <span aria-hidden="true" className="flex gap-1 self-start pt-1 lg:gap-2.5 lg:pt-1.5">
         <span data-light className="size-2.5 rounded-full border-2 border-edge lg:border-[3px] bg-lamp-red lg:size-[18px]" />
@@ -35,15 +42,15 @@ export function DexTop({ lens = 'playing', subtitle }: { lens?: LensColor; subti
       </span>
       <div className="ml-auto min-w-0 text-right">
         <Logo />
-        {subtitle && <p className="m-0 mt-1 font-mono text-[10px] tracking-[1px] text-dex-text lg:text-[13px] lg:tracking-[2px]">{subtitle}</p>}
+        {subtitle && <p className="m-0 mt-2 font-mono text-[10px] tracking-[1px] text-dex-text lg:text-[13px] lg:tracking-[2px]">{subtitle}</p>}
       </div>
     </div>
   )
 }
 
-/** Zonas de contenido de la rejilla. */
-export function DexRightTop({ children }: { children: ReactNode }) {
-  return <div className="dex-rtop flex items-center justify-between gap-3 px-4 pb-1 pt-3.5 lg:justify-end lg:px-[30px] lg:pb-0 lg:pt-[26px]">{children}</div>
+/** Zonas de contenido de la rejilla. Controles (pistas y modo) bajo la cabecera de la hoja izquierda (DEC-59). */
+export function DexControls({ children }: { children: ReactNode }) {
+  return <div className="dex-rtop flex items-center justify-between gap-3 px-4 pb-1 pt-3.5 lg:px-[30px] lg:pt-[22px]">{children}</div>
 }
 
 export function DexLeftBody({ children }: { children: ReactNode }) {
@@ -51,7 +58,7 @@ export function DexLeftBody({ children }: { children: ReactNode }) {
 }
 
 export function DexRightBody({ children }: { children: ReactNode }) {
-  return <div className="dex-rbody flex flex-col gap-4 px-4 pb-5 pt-4 lg:gap-[22px] lg:px-[30px] lg:pb-[30px] lg:pt-[22px]">{children}</div>
+  return <div className="dex-rbody flex flex-col gap-4 px-4 pb-5 pt-4 lg:gap-[22px] lg:px-[30px] lg:pb-[30px] lg:pt-[30px]">{children}</div>
 }
 
 /** Pantalla de la hoja izquierda: marco claro con dos puntos rojos y pantalla oscura con cabecera (titulo y lectura). */

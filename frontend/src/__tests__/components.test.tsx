@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { useState } from 'react'
-import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
+import { within, render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import { AttemptList } from '../components/AttemptList'
 import { SongSearch } from '../components/SongSearch'
 import { GameBoard } from '../components/GameBoard'
@@ -233,6 +233,35 @@ describe('App: cabecera y tablero (DEC-46)', () => {
     expect(legend.className).toMatch(/\bhidden\b/)
     expect(legend.className).toMatch(/lg:flex/)
     expect(legend.textContent).toContain('CLAVE')
+  })
+})
+
+describe('App: reparto de la Pokedex (DEC-59)', () => {
+  const route = () => {
+    globalThis.fetch = vi.fn(async (u: any) => {
+      const url = String(u)
+      const json = (b: any) => new Response(JSON.stringify(b), { status: 200 })
+      if (url.endsWith('/health')) return json({ ok: true })
+      if (url.endsWith('/catalog')) return json(mkCatalog())
+      if (url.endsWith('/games')) return json(mkView({ mode: 'daily', date: TODAY }))
+      return new Response(new Uint8Array(2))
+    }) as any
+  }
+
+  it('FE-DEX-05 hoja izquierda: controles, reproductor y leyenda; hoja derecha: historial arriba y buscador debajo', async () => {
+    route()
+    render(<App />)
+    const daily = await screen.findByRole('region', { name: 'Partida diaria' })
+    await within(daily).findByRole('combobox')
+    const controls = screen.getByRole('group', { name: 'Modo de juego' }).closest('.dex-rtop')
+    expect(controls).toBeTruthy()
+    const left = daily.querySelector('.dex-lbody')!
+    const right = daily.querySelector('.dex-rbody')!
+    expect(within(left as HTMLElement).getByRole('region', { name: 'Reproductor' })).toBeTruthy()
+    expect(within(left as HTMLElement).getByRole('complementary', { name: 'Leyenda', hidden: true })).toBeTruthy()
+    const history = within(right as HTMLElement).getByRole('list', { name: 'Intentos' })
+    const search = within(right as HTMLElement).getByRole('region', { name: 'Buscador' })
+    expect(history.compareDocumentPosition(search) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 })
 

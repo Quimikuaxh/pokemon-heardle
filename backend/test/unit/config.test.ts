@@ -41,31 +41,14 @@ describe('config loadConfig', () => {
     expect(String(e?.message)).not.toContain(short)
   })
 
-  it('BE-CFG-03 STORAGE_DRIVER=s3 sin claves/endpoint/bucket -> lanza', () => {
-    expect(() => loadConfig(ok({ STORAGE_DRIVER: 's3' }))).toThrow(/^(?!not implemented)/)
+  it('BE-CFG-03 STORAGE_DRIVER=s3 ya no existe (Render retirado, DEC-57) -> lanza', () => {
+    expect(() => loadConfig(ok({ STORAGE_DRIVER: 's3' }))).toThrow(/STORAGE_DRIVER/)
   })
 
-  it('BE-CFG-03 STORAGE_DRIVER=s3 incompleto no imprime la clave secreta', () => {
-    const e = thrown(() =>
-      loadConfig(ok({ STORAGE_DRIVER: 's3', STORAGE_S3_SECRET_ACCESS_KEY: 'SUPER-SECRET-VALUE-123' })),
-    )
-    expect(String(e?.message)).toMatch(/^(?!not implemented)/)
+  it('BE-CFG-03 la configuracion de supabase incompleta no imprime la clave', () => {
+    const e = thrown(() => loadConfig(ok({ STORAGE_DRIVER: 'supabase', SUPABASE_URL: 'https://ref.supabase.co', SUPABASE_SERVICE_ROLE_KEY: 'SUPER-SECRET-VALUE-123' })))
+    expect(String(e?.message)).toContain('STORAGE_BUCKET')
     expect(String(e?.message)).not.toContain('SUPER-SECRET-VALUE-123')
-  })
-
-  it('BE-CFG-03 s3 completo -> acepta', () => {
-    expect(() =>
-      loadConfig(
-        ok({
-          STORAGE_DRIVER: 's3',
-          STORAGE_BUCKET: 'heardle-audio',
-          STORAGE_S3_ENDPOINT: 'https://ref.supabase.co/storage/v1/s3',
-          STORAGE_S3_REGION: 'eu-west-1',
-          STORAGE_S3_ACCESS_KEY_ID: 'id',
-          STORAGE_S3_SECRET_ACCESS_KEY: 'secret',
-        }),
-      ),
-    ).not.toThrow(/^(?!not implemented)/)
   })
 
   it('BE-CFG-03 driver desconocido -> lanza', () => {

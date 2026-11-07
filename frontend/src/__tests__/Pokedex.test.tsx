@@ -1,10 +1,13 @@
 import { act, fireEvent, render, screen } from '@testing-library/react'
+import { readFileSync, existsSync } from 'node:fs'
+import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { SongSearch } from '../components/SongSearch'
 import { FilterStart } from '../components/FilterPanel'
 import { NextDayCountdown } from '../components/NextDayNote'
 import { DexTop } from '../components/Pokedex'
 import { formatCountdown, msUntilNextMadridDay } from '../game/format'
-import { GAMES } from './helpers'
+import { GAMES, mkCatalog } from './helpers'
 
 const HOUR = 3_600_000
 
@@ -15,6 +18,20 @@ describe('DexTop: cabecera de la Pokedex (DEC-58)', () => {
     expect(screen.getByText('RETO DEL DÍA · 07 NOV')).toBeTruthy()
     expect(container.querySelector('[data-lens="playing"]')).toBeTruthy()
     expect(container.querySelectorAll('[data-light]').length).toBe(3)
+  })
+
+  it('FE-DEX-01 la lente parpadea solo mientras suena el clip (DEC-59)', () => {
+    const { container, rerender } = render(<DexTop />)
+    expect(container.querySelector('[data-blinking]')).toBeNull()
+    expect(container.querySelector('.dex-lens-glow')).toBeNull()
+    rerender(<DexTop blinking />)
+    expect(container.querySelector('[data-lens][data-blinking]')).toBeTruthy()
+    expect(container.querySelector('.dex-lens-glow')).toBeTruthy()
+  })
+
+  it('FE-DEX-01 la animacion del destello se desactiva con prefers-reduced-motion', () => {
+    const css = readFileSync(join(__dirname, '..', 'index.css'), 'utf8')
+    expect(css).toMatch(/@media \(prefers-reduced-motion: reduce\)\s*{\s*\.dex-lens-glow\s*{[^}]*animation:\s*none/)
   })
 
   it('FE-DEX-01 la lente cambia de color con el resultado: verde al acertar, roja al perder', () => {
@@ -96,5 +113,30 @@ describe('FilterStart: hoja izquierda del modo libre (DEC-58)', () => {
     const start = screen.getByRole('button', { name: 'Empezar partida' }) as HTMLButtonElement
     expect(start.disabled).toBe(true)
     expect(screen.getByRole('alert')).toBeTruthy()
+  })
+})
+
+describe('Pantalla del buscador (DEC-59)', () => {
+  it('FE-DEX-06 sin texto muestra el aviso en el hueco de resultados; al escribir, la lista ocupa ese hueco con scroll propio', () => {
+    render(<SongSearch catalog={mkCatalog()} guesses={[]} onSelect={vi.fn()} />)
+    const screenRegion = screen.getByRole('region', { name: 'Buscador' })
+    expect(screenRegion.textContent).toContain('Escribe el nombre de una canción o de un juego.')
+    expect(screen.queryByRole('listbox')).toBeNull()
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'twinleaf' } })
+    const list = screen.getByRole('listbox')
+    expect(screenRegion.contains(list)).toBe(true)
+    expect(list.className).toMatch(/overflow-y-auto/)
+    expect(list.className).not.toMatch(/\babsolute\b/)
+    expect(screenRegion.textContent).not.toContain('Escribe el nombre')
+  })
+})
+
+describe('Favicon (DEC-59)', () => {
+  it('FE-DEX-07 index.html enlaza el favicon SVG y el fichero existe en public/', () => {
+    const root = join(__dirname, '..', '..')
+    expect(readFileSync(join(root, 'index.html'), 'utf8')).toContain('<link rel="icon" type="image/svg+xml" href="/favicon.svg" />')
+    const svg = readFileSync(join(root, 'public', 'favicon.svg'), 'utf8')
+    expect(existsSync(join(root, 'public', 'favicon.svg'))).toBe(true)
+    expect(svg).toMatch(/^<svg[^>]+viewBox="0 0 64 64"/)
   })
 })

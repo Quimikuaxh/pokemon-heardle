@@ -61,7 +61,7 @@ Si el bucket y `data/out/` tienen aún el layout antiguo (`clips/<clipKey>/<n>.m
 
 Frontend en **GitHub Pages** y API en la **Edge Function `heardle`** de Supabase (DEC-57). Proyecto de Supabase compartido con claude-test y daily-pwt: ref `xvkvzrdvtcnjnbhtydfn`. Este repo solo usa el bucket `heardle-audio`, el esquema `heardle` y la función `public.heardle_rate_limit_hit`.
 
-Orden: bucket y clips → migración → secretos → función → GitHub Pages → verificación. Render (`render.yaml`) y Vercel (`frontend/vercel.json`) siguen en el repo hasta comprobar Pages en producción después del merge a `main`; luego se borran y se dan de baja.
+Orden: bucket y clips → migración → secretos → función → GitHub Pages → verificación. Render y Vercel se retiraron (DEC-57): ya no hay backend Node en producción.
 
 ### 1. Bucket privado y claves S3 (solo para `upload`)
 
@@ -105,8 +105,8 @@ Los secretos son de todo el proyecto (los ven también las funciones de daily-pw
 
 | Secreto | Valor |
 |---|---|
-| `HEARDLE_GAME_TOKEN_SECRET` | el de Render si se quiere que sigan valiendo las partidas en curso; si no, nuevo con `openssl rand -base64 32` |
-| `HEARDLE_DAILY_SEED` | **el mismo de Render**: otro valor cambia la canción del día |
+| `HEARDLE_GAME_TOKEN_SECRET` | el que ya está en producción (cambiarlo invalida las partidas en curso); en un proyecto nuevo, `openssl rand -base64 32` |
+| `HEARDLE_DAILY_SEED` | **el que ya está en producción**: otro valor cambia la canción del día; en un proyecto nuevo, `openssl rand -hex 32` |
 | `HEARDLE_ALLOWED_ORIGIN` | `https://quimikuaxh.github.io` (origen de Pages, sin ruta ni barra final) |
 
 `SUPABASE_URL` y `SUPABASE_SERVICE_ROLE_KEY` los pone Supabase y se leen sin prefijo. Cualquier otra variable de `backend/src/config.ts` se puede fijar igual, con el prefijo (p. ej. `HEARDLE_RATE_LIMIT_CLIPS`). El resto tiene valores por defecto en `backend/src/edge/main.ts` (bucket `heardle-audio`, rate-limit en Postgres, espera del catálogo de 8 s) y en `backend/src/config.ts` (límites de DEC-13).

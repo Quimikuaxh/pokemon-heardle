@@ -9,7 +9,7 @@
  * config.ts
  *   loadConfig(env: Record<string, string | undefined>): Config  (lanza si faltan/cortos los secretos)
  *   Config: { port, nodeEnv, allowedOrigin, gameTokenSecret: string (el base64 tal cual),
- *             dailySeed, storageDriver: 'fs'|'s3', storageDir, clipTicketTtlSec, clipCacheMb,
+ *             dailySeed, storageDriver: 'fs'|'supabase', storageDir, clipTicketTtlSec, clipCacheMb,
  *             trustProxy: number,
  *             rateLimit: { global, createGame, action, clips, perGame } }   // peticiones/minuto
  *   Env de rate-limit: RATE_LIMIT_GLOBAL, RATE_LIMIT_CREATE_GAME, RATE_LIMIT_ACTION,
@@ -57,7 +57,7 @@
  *
  * storage/ClipStore.ts       interface ClipStore { getCatalog(): Promise<unknown>; getClip(clipKey): Promise<Buffer> }  // fichero entero (DEC-44)
  * storage/FsClipStore.ts     new FsClipStore(rootDir)   (rootDir/catalog/catalog.json, rootDir/clips/<clipKey>.mp3)
- * storage/S3ClipStore.ts     new S3ClipStore({ client: { send(cmd) }, bucket })  (Key 'clips/<clipKey>.mp3', 'catalog/catalog.json')
+ * storage/SupabaseClipStore.ts new SupabaseClipStore({ url, serviceRoleKey, bucket, fetchFn? })  (API REST de Storage, DEC-57)
  * storage/LruCache.ts        new LruCache(maxBytes): get(key), set(key, Buffer), has(key), bytes
  * storage/CachedClipStore.ts new CachedClipStore(inner: ClipStore, cache: LruCache)
  *

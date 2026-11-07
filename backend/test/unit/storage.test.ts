@@ -4,7 +4,6 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { LruCache } from '../../src/storage/LruCache'
 import { FsClipStore } from '../../src/storage/FsClipStore'
-import { S3ClipStore } from '../../src/storage/S3ClipStore'
 import { CachedClipStore } from '../../src/storage/CachedClipStore'
 import { catalogR, makeClip, writeStore } from '../helpers/fixtures'
 import { isValidClipLocation } from '../../src/storage/clipLocation'
@@ -116,62 +115,6 @@ describe('storage/FsClipStore', () => {
 
   it('BE-CLP-06 isValidClipLocation ya no admite un numero de clip: (clipKey, n) deja de ser una forma valida de pedir audio', () => {
     expect(isValidClipLocation.length).toBeLessThanOrEqual(1)
-  })
-})
-
-describe('storage/S3ClipStore (cliente simulado)', () => {
-  function client(body: Buffer | Error) {
-    return {
-      send: vi.fn(async () => {
-        if (body instanceof Error) throw body
-        return {
-          Body: {
-            transformToByteArray: async () => new Uint8Array(body),
-            transformToString: async () => body.toString('utf8'),
-          },
-        }
-      }),
-    }
-  }
-
-  it('BE-STO-04 getClip pide Bucket y Key clips/<clipKey>.mp3', async () => {
-    const cl = client(buf(10))
-    await new S3ClipStore({ client: cl as any, bucket: 'heardle-audio' }).getClip('abcdef0123456789')
-    const input = (cl.send.mock.calls[0] as any[])[0].input
-    expect(input).toMatchObject({ Bucket: 'heardle-audio', Key: 'clips/abcdef0123456789.mp3' })
-  })
-
-  it('BE-STO-04 una sola lectura por getClip y nunca la clave antigua clips/<clipKey>/<n>.mp3', async () => {
-    const cl = client(buf(10))
-    await new S3ClipStore({ client: cl as any, bucket: 'b' }).getClip('abcdef0123456789')
-    expect(cl.send).toHaveBeenCalledTimes(1)
-    for (const call of cl.send.mock.calls as any[][]) expect(call[0].input.Key).not.toMatch(/\/[0-9]\.mp3$|abcdef0123456789\//)
-  })
-
-  it('BE-STO-04 getClip devuelve los bytes', async () => {
-    const data = buf(32, 7)
-    const got = await new S3ClipStore({ client: client(data) as any, bucket: 'b' }).getClip('abcdef0123456789')
-    expect(got.equals(data)).toBe(true)
-  })
-
-  it('BE-STO-04 getCatalog pide catalog/catalog.json y parsea el JSON', async () => {
-    const cl = client(Buffer.from(JSON.stringify({ version: 1 })))
-    const got = await new S3ClipStore({ client: cl as any, bucket: 'b' }).getCatalog()
-    expect([(cl.send.mock.calls[0] as any[])[0].input.Key, got]).toEqual(['catalog/catalog.json', { version: 1 }])
-  })
-
-  it('BE-STO-04 error del cliente -> STORAGE_ERROR (502) sin detalles internos', async () => {
-    const e = await rejected(
-      new S3ClipStore({ client: client(new Error('AccessDenied key=SECRET123')) as any, bucket: 'b' }).getClip('abcdef0123456789'),
-    )
-    expect([e?.code, e?.status, String(e?.message).includes('SECRET123')]).toEqual(['STORAGE_ERROR', 502, false])
-  })
-
-  it('clipKey fuera de [0-9a-f]{16} se rechaza antes de llamar al cliente', async () => {
-    const cl = client(buf(1))
-    await rejected(new S3ClipStore({ client: cl as any, bucket: 'b' }).getClip('../x'))
-    await rejected(new S3ClipStore({ client: cl as any, bucket: 'b' }).getClip('abcdef0123456789/3'))
-    expect(cl.send).not.toHaveBeenCalled()
   })
 })
 

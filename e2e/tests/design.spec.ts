@@ -144,6 +144,13 @@ test('E2E-82_should_look_the_same_in_light_and_dark_mode_with_readable_contrast'
   const read = () =>
     page.evaluate(() => {
       const css = (el: Element) => getComputedStyle(el)
+      const paintedBackground = (el: Element): string => {
+        for (let node: Element | null = el; node; node = node.parentElement) {
+          const bg = css(node).backgroundColor
+          if (bg !== 'rgba(0, 0, 0, 0)' && bg !== 'transparent') return bg
+        }
+        return css(document.body).backgroundColor
+      }
       const body = css(document.body)
       const skip = Array.from(document.querySelectorAll('button')).find((b) => /^Saltar/.test(b.textContent ?? ''))!
       const play = document.querySelector('section[aria-label="Reproductor"] button[aria-label^="Reproducir"], section[aria-label="Reproductor"] button[aria-label^="Cargando"]')!
@@ -152,7 +159,8 @@ test('E2E-82_should_look_the_same_in_light_and_dark_mode_with_readable_contrast'
         body: { bg: body.backgroundColor, fg: body.color },
         skip: { bg: css(skip).backgroundColor, fg: css(skip).color },
         play: { bg: css(play).backgroundColor, fg: css(play).color },
-        field: { bg: css(search.parentElement!).backgroundColor, fg: css(search).color },
+        // Fondo que se ve detras del texto: el primer ancestro con fondo pintado (DEC-59: la caja va dentro de la pantalla LCD).
+        field: { bg: paintedBackground(search), fg: css(search).color },
       }
     })
   const light = await read()

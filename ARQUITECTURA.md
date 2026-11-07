@@ -30,29 +30,29 @@ En local y en e2e el mismo manejador lo sirve Node (`backend/src/node/server.ts`
 ```
 pokemon-heardle/
   README.md  REQUISITOS.md  ARQUITECTURA.md  DESARROLLO.md (guia local + despliegue)
-  .gitignore  render.yaml  package.json (scripts raiz: install:all, dev con concurrently, e2e)
+  .gitignore  package.json (scripts raiz: install:all, dev con concurrently, e2e, build:edge, deploy:edge)
   shared/                     TS puro sin dependencias, importado por ruta relativa
     api.ts                    DTOs de la API (peticiones, respuestas, codigos de error)
     catalog.ts                tipos de catalog.json + validador (lo usan backend y script)
     rules.ts                  constantes de juego: CLIP_SECONDS = [1,2,4,7,11,16], MAX_ATTEMPTS = 6, y del formato del clip unico: CLIP_FRAME_COUNTS, CLIP_BYTE_OFFSETS, CLIP_TOTAL_BYTES (DEC-44)
     date.ts                   fecha de hoy en Europe/Madrid (la usan backend y frontend, DEC-09 y AR 7)
   backend/
-    package.json tsconfig.json vitest.config.ts Dockerfile (opcional, portabilidad)
+    package.json tsconfig.json vitest.config.ts
     src/
-      index.ts                arranque Node: config, carga de catalogo, listen (local, e2e, Render hasta su retirada)
+      index.ts                arranque Node: config, carga de catalogo, listen (desarrollo local y e2e, driver fs)
       app.ts                  createApp(deps) -> { handle, catalogReady } (inyectable en tests)
       node/server.ts          servidor node:http para el manejador estandar (IP con la regla de TRUST_PROXY)
       edge/main.ts            entrada de la Edge Function (Deno), empaquetada con esbuild (DEC-57)
       config.ts               lectura y validacion de env (falla al arrancar si falta un secreto)
       catalog/                carga, indice por id, pool del filtro (solo ilimitado)
       game/                   daily.ts (seleccion), token.ts (cifrado), tickets.ts (clips), engine.ts (reglas)
-      storage/                ClipStore (interfaz), FsClipStore, S3ClipStore, SupabaseClipStore, LruCache
+      storage/                ClipStore (interfaz), FsClipStore, SupabaseClipStore, CachedClipStore, LruCache
       http/                   handler.ts (rutas con Request/Response), errors.ts, rateLimit.ts (memoria), postgresRateLimiter.ts, validate.ts
     scripts/build-edge.mjs    bundle de la Edge Function -> supabase/functions/heardle/index.js (ignorado)
   supabase/                   config.toml (funcion `heardle`, Supabase local en 553xx), migrations/ (rate-limit, DEC-57)
   .github/workflows/deploy.yml  tests + build del frontend + GitHub Pages
   frontend/
-    package.json vite.config.ts vercel.json index.html
+    package.json vite.config.ts index.html (con la CSP en <meta>)
     src/ api/ (cliente + reintentos), game/ (estado), storage/ (localStorage), components/, hooks/
   scripts/catalog/
     package.json README.md (instalacion de yt-dlp y ffmpeg, flujo completo)
@@ -177,7 +177,7 @@ DEC-33: **Frontend sin `StrictMode`**: en desarrollo duplicaria la llamada de ca
 
 DEC-34: **`.env.example` por paquete** (`backend/`, `scripts/catalog/`, `frontend/`) en lugar de uno en la raiz: cada paquete se despliega o ejecuta por separado con sus propias variables.
 
-DEC-35: **`tsx` es dependency (no devDependency) y `render.yaml` instala con `npm ci`**: `npm start` usa `tsx` y Render instala con `NODE_ENV=production`, que omite devDependencies. Descartado `npm ci --include=dev`: instalaba todas las devDependencies en produccion solo por `tsx`. Sin probar aun en Render.
+DEC-35: **RETIRADA** (DEC-57: ya no hay despliegue en Render). Definia que `tsx` fuera dependency y que `render.yaml` instalara con `npm ci`.
 
 DEC-36: **Admin del catalogo local en `scripts/catalog`, servidor `node:http` en `127.0.0.1`, sin login, con token de sesion y comprobacion de `Host`** (iteracion admin-catalogo, decision del usuario).
 Alternativa descartada: admin en la web desplegada con login (mas superficie de ataque y complejidad). Express: no hace falta para 6 rutas locales y el paquete de scripts no lo tiene.
@@ -361,12 +361,12 @@ Alternativas descartadas: script Python con numpy (anadia una dependencia fuera 
 
 DEC-57: **Frontend en GitHub Pages y API en una Supabase Edge Function (`heardle`) del mismo proyecto; Render y Vercel se retiran** (rama `feature/github-pages`, decision del usuario 2026-11-07). Motivo: el arranque en frio de Render free (hasta ~90 s, DEC-14) obligaba a esperar; una Edge Function arranca en ~0,2-1 s y GitHub Pages sirve la web sin espera.
 - Se mantiene el antitrampas: token cifrado, ticket de clip de un solo uso, prefijo por intento, catalogo publico sin `clipKey`. Descartado: web 100 % estatica (catalogo, cancion del dia y clips publicos), porque la respuesta y los 16 s completos quedarian a la vista en las herramientas del navegador.
-- Un solo manejador HTTP con `Request`/`Response` estandar (`backend/src/http/handler.ts`), con dos anfitriones: Node (`backend/src/index.ts`, desarrollo local, e2e y Render hasta su retirada) y Deno (`backend/src/edge/main.ts`, empaquetado con esbuild en `supabase/functions/heardle/`). Express se elimina. Descartado: reescribir la API para Deno aparte, porque duplicaria la logica y los tests.
+- Un solo manejador HTTP con `Request`/`Response` estandar (`backend/src/http/handler.ts`), con dos anfitriones: Node (`backend/src/index.ts`, desarrollo local y e2e) y Deno (`backend/src/edge/main.ts`, empaquetado con esbuild en `supabase/functions/heardle/`). Express se elimina. Descartado: reescribir la API para Deno aparte, porque duplicaria la logica y los tests.
 - Tickets usados: en la memoria de cada instancia, como hoy (decision del usuario). Efecto aceptado: si una peticion cae en otra instancia, un ticket se puede canjear otra vez durante su TTL de 60 s; sigue dando solo el prefijo de ese intento.
 - Rate-limit (DEC-13): en la Edge Function, en Postgres (tabla `heardle.rate_limits` y funcion `public.heardle_rate_limit_hit`, solo para `service_role`, llamada por PostgREST). Motivo: en memoria cada instancia cuenta por su lado y se recicla a menudo, asi que el limite no frenaria nada. En Node sigue en memoria. Una llamada por peticion con todas las comprobaciones (las claves, IP y nonce, van como hash: la tabla no guarda IP). Si la RPC falla, la peticion sigue (se registra el error): un fallo del contador no debe tumbar el juego. La limpieza de ventanas caducadas la hace la propia funcion de vez en cuando (1 %), sin `pg_cron`.
 - Catalogo y clips: la funcion los lee de Storage (`heardle-audio`, sigue privado) con la API REST y la clave `service_role`, sin SDK de S3. Catalogo y cache LRU viven en la memoria de la instancia; una peticion que llega con el catalogo sin cargar lo espera (hasta 8 s) en lugar de responder 503.
 - Medido en produccion (2026-11-07, desde Espana; funcion en eu-west-3, base de datos en eu-west-1): arranque en frio ~1,4 s en la primera peticion; en caliente ~150-200 ms de red mas ~30-150 ms de la RPC del rate-limit; primer clip ~1 s (lectura de Storage, despues queda en la cache de la instancia). IP del cliente: el proxy de Supabase reescribe `X-Forwarded-For`, asi que su primera entrada es fiable (una cabecera falsa no cambia la clave contada).
-- Fin de Render y Vercel: `render.yaml`, `frontend/vercel.json` y el driver S3 se borran despues de mergear a `main` y comprobar la web en GitHub Pages (decision del usuario).
+- Fin de Render y Vercel (hecho tras comprobar la web publicada en GitHub Pages, decision del usuario): se borran `render.yaml`, `frontend/vercel.json`, el driver S3 del backend (`S3ClipStore`, `@aws-sdk/client-s3`, variables `STORAGE_S3_*` del backend) y sus tests. El script de catalogo sigue subiendo por S3 (DEC-08). Los servicios de Render y Vercel los da de baja el usuario.
 - Despues de la migracion, en la misma rama, se repasa la interfaz partiendo del estilo actual (DEC-46). La propuesta se ensena al usuario antes de implementarla.
 - Orden de puesta en produccion (decision del usuario): primero el rediseno, despues el despliegue completo (secretos `HEARDLE_*` puestos por el usuario, funcion, Pages y merge). Estado a 2026-11-07: migracion del rate-limit aplicada y funcion desplegada sin secretos (responde 500, nadie la usa); queda un secreto `ALLOWED_ORIGIN` sin prefijo que no usa nadie, pendiente de borrar con confirmacion.
 
@@ -378,6 +378,14 @@ DEC-58: **Rediseno "Pokedex completa"** (rama `feature/github-pages`, decision d
 - El boton "Escuchar la cancion completa" es azul plano, sin degradado ni brillo (decision del usuario).
 - El diario terminado muestra una cuenta atras hasta la siguiente cancion del dia (medianoche de Europe/Madrid), en lugar del texto "Vuelve manana..." (decision del usuario).
 - El aspecto es el mismo en modo claro y oscuro: la Pokedex ya es roja sobre fondo oscuro (decision del usuario). Los tokens claros/oscuros de DEC-46 dejan de cambiar la pagina del juego.
+
+DEC-59: **Reparto de la Pokedex: buscador en la hoja derecha, sin desplazar la pagina** (decision del usuario 2026-11-07, ajusta DEC-58). Motivo: en escritorio el desplegable del buscador quedaba bajo el borde inferior de la ventana y habia que hacer scroll para ver los resultados.
+- Hoja izquierda: cabecera (lente, logo, fecha), controles (Pistas y Diario/Libre), reproductor o resultado, y la leyenda. Hoja derecha: historial arriba y, debajo, la pantalla LCD del buscador.
+- La pantalla del buscador tiene un hueco de resultados de alto fijo (192 px en movil, 220 px en escritorio) con scroll propio; sin texto muestra "Escribe el nombre de una cancion o de un juego.". La lista no flota sobre la pagina. Descartado: lista que crece con los resultados (volveria a empujar la pagina).
+- Movil: mismo orden que escritorio, apilado (decision del usuario).
+- La lente parpadea mientras suena el clip (solo cambia la opacidad de una capa; sin animacion con `prefers-reduced-motion`).
+- Favicon SVG (`frontend/public/favicon.svg`): Pokeball con una corchea amarilla, con contorno negro para leerse a 16 px sobre pestanas claras y oscuras.
+- Ajuste de DEC-58: la fecha bajo el logo lleva mas separacion (el logo la pisaba en algunos navegadores).
 
 ## 4. Modelo de partida
 
@@ -581,8 +589,8 @@ Filtros y busqueda en la UI (en cliente, sobre `/api/catalog`): juego, activadas
 - Secretos solo en variables de entorno; `config.ts` aborta el arranque si faltan o son cortos (`GAME_TOKEN_SECRET` >= 32 bytes en base64).
 - Bucket privado; credenciales de solo backend/script, nunca en el frontend.
 - Entrada validada en cada endpoint; tamano de cuerpo limitado (`express.json({ limit: '4kb' })`).
-- `trust proxy` = 1 (Render pone un proxy delante) para que el rate-limit use la IP real; configurable por env por portabilidad.
-- Embed de YouTube (DEC-41): `youtubeId` validado con `[A-Za-z0-9_-]{11}` en `shared/catalog.ts` y codificado al construir la URL; `vercel.json` anade `Content-Security-Policy: frame-src https://www.youtube-nocookie.com` (solo restringe iframes; no hay CSP global hoy). El iframe usa `referrerpolicy="strict-origin-when-cross-origin"` (YouTube rechaza embeds sin `Referer`) y `allow="encrypted-media; picture-in-picture; fullscreen"`.
+- IP del cliente: en la Edge Function, primera entrada de `X-Forwarded-For` (el proxy de Supabase la reescribe, DEC-57); en el servidor Node local, `TRUST_PROXY` saltos de confianza.
+- Embed de YouTube (DEC-41): `youtubeId` validado con `[A-Za-z0-9_-]{11}` en `shared/catalog.ts` y codificado al construir la URL; `frontend/index.html` lleva en una `<meta>` la `Content-Security-Policy: frame-src https://www.youtube-nocookie.com` (solo restringe iframes; no hay CSP global hoy). El iframe usa `referrerpolicy="strict-origin-when-cross-origin"` (YouTube rechaza embeds sin `Referer`) y `allow="encrypted-media; picture-in-picture; fullscreen"`.
 - Admin local (DEC-36): solo `127.0.0.1`; rechaza `Host` distinto de `127.0.0.1:<puerto>` / `localhost:<puerto>` (defensa ante DNS rebinding); mutaciones con `X-Admin-Token` aleatorio por arranque (una web cualquiera abierta en el navegador no puede hacer POST/PATCH al admin); solo `Content-Type: application/json`, cuerpo <= 16 KB. El audio se localiza por id de cancion via el catalogo, nunca con rutas del cliente (sin path traversal).
 - Rutas para ffmpeg/ffprobe siempre absolutas: 6 de los 291 `youtubeId` actuales empiezan por `-` y, con ruta relativa, ffprobe los interpreta como opcion (comprobado: `ffprobe -BRQ_XVwg-M.webm` -> "Missing argument for option"). El codigo actual ya usa rutas absolutas; `duration.ts` y el admin deben mantenerlo.
 - Limitaciones aceptadas (no se mitigan, se documentan): Shazam/grabacion; un cliente puede reutilizar un token antiguo o abrir partidas diarias nuevas en otro navegador para probar canciones por fuerza bruta (sin BD no hay forma de impedirlo; el rate-limit lo encarece); un atacante paciente puede construir una tabla hash(clip 1) -> cancion jugando en ilimitado (equivale a reconocer el audio).
@@ -615,15 +623,12 @@ Backend:
 | `ALLOWED_ORIGIN` | https://quimikuaxh.github.io | CORS |
 | `GAME_TOKEN_SECRET` | 32+ bytes base64 | clave maestra de tokens y tickets |
 | `DAILY_SEED` | cadena aleatoria larga | semilla de la cancion diaria; cambiarla cambia todas las canciones del dia |
-| `STORAGE_DRIVER` | `supabase` (Edge Function) / `s3` (Render) / `fs` (local, tests) | |
+| `STORAGE_DRIVER` | `supabase` (Edge Function) / `fs` (local, tests) | |
 | `STORAGE_DIR` | ../scripts/catalog/data/out | raiz local con `catalog/` y `clips/` (driver fs) |
-| `STORAGE_BUCKET` | heardle-audio | drivers s3 y supabase |
+| `STORAGE_BUCKET` | heardle-audio | driver supabase |
 | `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` | los inyecta Supabase en la funcion | driver supabase y rate-limit postgres (DEC-57) |
 | `RATE_LIMIT_STORE` | `memory` (Node) / `postgres` (Edge Function) | DEC-13, DEC-57 |
 | `CATALOG_WAIT_MS` | 0 (Node) / 8000 (Edge Function) | espera del catalogo antes de responder 503 |
-| `STORAGE_S3_ENDPOINT` | https://<ref>.supabase.co/storage/v1/s3 | driver s3 |
-| `STORAGE_S3_REGION` | region del proyecto | driver s3 |
-| `STORAGE_S3_ACCESS_KEY_ID` / `STORAGE_S3_SECRET_ACCESS_KEY` | | driver s3; se generan en Storage -> S3 Access Keys (DEC-08) |
 | `CLIP_TICKET_TTL_SEC` | 60 | |
 | `CLIP_CACHE_MB` | 32 | |
 | `TRUST_PROXY` | 1 | |
@@ -635,7 +640,7 @@ Backend:
 
 Frontend: `VITE_API_URL` (URL de la Edge Function, `https://<ref>.supabase.co/functions/v1/heardle`; en local Vite proxifica `/api`, como claude-test).
 Edge Function: los valores por defecto de `STORAGE_DRIVER`, `RATE_LIMIT_STORE`, `STORAGE_BUCKET` y `CATALOG_WAIT_MS` estan en `backend/src/edge/main.ts`; los secretos son `HEARDLE_GAME_TOKEN_SECRET`, `HEARDLE_DAILY_SEED` y `HEARDLE_ALLOWED_ORIGIN`: los secretos de Edge Functions son de todo el proyecto, compartido con daily-pwt, y el prefijo evita choques; `edge/main.ts` lo quita y solo lee sin prefijo `SUPABASE_URL` y `SUPABASE_SERVICE_ROLE_KEY`.
-Script: mismas `STORAGE_*` que el backend (en `scripts/catalog/.env`, ignorado).
+Script de catalogo (`scripts/catalog/.env`, ignorado): `STORAGE_BUCKET`, `STORAGE_S3_ENDPOINT`, `STORAGE_S3_REGION`, `STORAGE_S3_ACCESS_KEY_ID` y `STORAGE_S3_SECRET_ACCESS_KEY` (claves S3 de Storage, DEC-08).
 
 ## 11. Estrategia de tests
 
@@ -692,20 +697,15 @@ E2E (Playwright en `e2e/`, backend con driver `fs` y fixtures de tonos senoidale
 ## 12. Despliegue
 
 - Repo GitHub privado (cerrado). `.gitignore`: `node_modules`, `dist`, `.env*` (salvo `.env.example`), `scripts/catalog/data/`, `e2e/test-results`, `*.mp3` fuera de `e2e/fixtures`.
-- Desde DEC-57: frontend en GitHub Pages (`.github/workflows/deploy.yml`) y API en la Edge Function `heardle` (`npm run deploy:edge`); pasos en `DESARROLLO.md`. Lo que sigue de Render y Vercel vale hasta su retirada.
-- Backend: `render.yaml` en la raiz (servicio `pokemon-heardle-backend`, `rootDir: backend`, `npm ci` (DEC-35), `npm start` con `tsx` como claude-test), plan free, sin health-check periodico propio ni cron. `Dockerfile` opcional para migrar.
-- Frontend: Vercel con raiz `frontend`, `vercel.json` con rewrite a `index.html`, `VITE_API_URL`.
+- Frontend en GitHub Pages (`.github/workflows/deploy.yml`, en cada push a `main`) y API en la Edge Function `heardle` (`npm run deploy:edge`); pasos en `DESARROLLO.md` (DEC-57).
 - Storage: crear bucket privado `heardle-audio` en el proyecto Supabase de claude-test y claves en Storage -> S3 Access Keys (DEC-08).
 - Orden de puesta en marcha: bucket -> script (`fetch`, `draft`, revision, `build`, `upload`) -> backend -> frontend.
 - `DESARROLLO.md` documentara entorno local (driver `fs`, sin Supabase) y despliegue.
 
 ## 13. Riesgos tecnicos
 
-- **`shared/` fuera de las raices de despliegue**: Render (`rootDir: backend`) y Vercel (raiz `frontend`) deben ver `../shared`. Render clona el repo completo; Vercel lo permite con "Include files outside the Root Directory" (activo por defecto). Verificar en el primer despliegue; plan B: compilar `shared` dentro de cada paquete en el build.
-- **Horas de Render compartidas con el Team Builder** (cerrado en REQUISITOS 9): sin keep-alive; vigilar consumo mensual.
 - **Arranque en frio** de 30-60 s: mitigado solo en UI.
 - **yt-dlp** cambia a menudo por cambios de YouTube: fijar version en el README y actualizar cuando falle.
-- **`trust proxy`** mal configurado haria que todas las peticiones compartan IP en el rate-limit o permitiria falsear la IP; probar en Render con `X-Forwarded-For`.
 - **Cambio de catalogo a mitad de dia** cambia la cancion diaria de partidas nuevas (DEC-09); ahora afecta a cualquier alta o baja en el catalogo, no solo a un juego concreto.
 - **Clip unico (DEC-44)**: si un cambio de version de ffmpeg/LAME alterase el patron de tramas o el retardo, `validate` fallaria (tamano u offsets) antes de subir nada; habria que recalcular las constantes. El orden de despliegue de la migracion es obligatorio (backend nuevo antes de subir los ficheros nuevos -> todos los clips fallan).
 - **Orden de juegos (DEC-48/DEC-51)**: ahora alimenta la pista de fecha; un juego nuevo anadido al final por `draft` da flechas erroneas hasta que se mueve a mano. `validate` no puede detectarlo.

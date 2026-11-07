@@ -59,7 +59,7 @@ export interface RateLimiter {
   check(checks: RateCheck[]): Promise<void>
 }
 
-/** Rate-limit en memoria: Node (desarrollo, e2e, Render). */
+/** Rate-limit en memoria: servidor Node (desarrollo y e2e). */
 export class MemoryRateLimiter implements RateLimiter {
   private readonly limiters = new Map<string, FixedWindowLimiter>()
 

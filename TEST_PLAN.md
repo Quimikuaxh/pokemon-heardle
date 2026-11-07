@@ -676,6 +676,30 @@ Prevalece sobre las filas anteriores con el mismo ID. Fuente: ARQUITECTURA DEC-5
 
 **Verificación manual:** capturas en 390×844 y 1920×1080 de carga, partida con pistas, buscador abierto, panel de pistas, victoria, derrota y modo libre (antes y después de jugar), y repaso con `armonia-visual`.
 
+### 0.9 Retirada de Render y Vercel (DEC-57)
+
+Prevalece sobre las filas anteriores con el mismo ID. Sin backend Node en producción ni Vercel: se borran `render.yaml`, `frontend/vercel.json` y el driver S3 del backend.
+
+| ID | Nivel | Descripción | Precondiciones | Resultado esperado | Cubre | P |
+|---|---|---|---|---|---|---|
+| BE-STO-04 [RETIRADO] | - | `S3ClipStore` ya no existe; su papel en producción lo cubre `SupabaseClipStore` (BE-SUP-01..04) | - | - | DEC-57 | - |
+| BE-CFG-03 [MOD] | unit | `STORAGE_DRIVER=s3` lanza (driver retirado); con `supabase` incompleto el error nombra la variable que falta y nunca muestra la clave | - | Cumple | DEC-57 | A |
+| FE-CSP-01 [MOD] | unit | `frontend/index.html` lleva una sola `<meta http-equiv="Content-Security-Policy">` en el `<head>` con valor exactamente `frame-src https://www.youtube-nocookie.com` (GitHub Pages no admite cabeceras) | - | Cumple | DEC-41, DEC-57 | A |
+| FE-CSP-02 [MOD] | unit | Esa CSP no incluye `default-src`, `script-src`, `connect-src`, `media-src`, `img-src` ni `style-src` | - | Cumple | DEC-41 | A |
+| E2E-59 [MOD] | e2e | La CSP real es la `<meta>` de `index.html` (la sirve Vite tal cual): el embed `youtube-nocookie` no la viola y otro origen sí | - | Cumple | DEC-41, DEC-57 | A |
+
+### 0.10 Reparto de la Pokédex, parpadeo y favicon (DEC-59)
+
+| ID | Nivel | Descripción | Precondiciones | Resultado esperado | Cubre | P |
+|---|---|---|---|---|---|---|
+| FE-DEX-01 [MOD] | unit | Además: la lente parpadea solo con `blinking` (capa `.dex-lens-glow`) y la animación se desactiva con `prefers-reduced-motion` | - | Cumple | DEC-59 | M |
+| FE-DEX-05 | unit | Controles en la zona `dex-rtop`; reproductor y leyenda en la hoja izquierda; historial y, después, el buscador en la hoja derecha | `App` renderizada | Cumple | DEC-59 | A |
+| FE-DEX-06 | unit | Pantalla del buscador: sin texto, aviso en el hueco de resultados; al escribir, la lista está dentro de la pantalla, con scroll propio y sin posición absoluta | - | Cumple | DEC-59 | A |
+| E2E-82 [MOD] | e2e | El contraste del buscador se mide contra el primer fondo pintado detrás del texto (la pantalla LCD), no contra el contenedor inmediato | - | ≥ 4,5:1 | DEC-59 | A |
+| FE-DEX-07 | unit | `index.html` enlaza `/favicon.svg` y el SVG existe en `public/` | - | Cumple | DEC-59 | B |
+
+**Verificación manual:** a 1895×911 y 1920×1080 la Pokédex entera cabe sin scroll con resultados de búsqueda a la vista; captura del favicon a 16, 32, 64 y 128 px.
+
 ## 1. Alcance
 
 Dentro:

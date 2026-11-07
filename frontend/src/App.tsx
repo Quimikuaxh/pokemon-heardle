@@ -3,7 +3,7 @@ import type { PublicCatalog } from '../../shared/api'
 import { createApiClient } from './api/client'
 import { useBackendWarmup } from './api/warmup'
 import { GameBoard } from './components/GameBoard'
-import { DexLeftBody, DexPanel, DexRightBody, DexRightTop, DexScreen, DexTop, PokedexShell } from './components/Pokedex'
+import { DexLeftBody, DexPanel, DexRightBody, DexControls, DexScreen, DexTop, PokedexShell } from './components/Pokedex'
 import { SettingsPanel } from './components/SettingsPanel'
 import { API_BASE_URL } from './config'
 import { createGameController } from './game/controller'
@@ -24,10 +24,10 @@ interface ControlsProps {
   onSettingsChange: (settings: HintSettings) => void
 }
 
-/** Cabecera de la hoja derecha (DEC-58): tecla de pistas y selector de modo. */
+/** Controles bajo la cabecera de la hoja izquierda (DEC-59): tecla de pistas y selector de modo. */
 function Controls({ tab, onTab, settings, onSettingsChange }: ControlsProps) {
   return (
-    <DexRightTop>
+    <DexControls>
       <SettingsPanel settings={settings} onChange={onSettingsChange} />
       <div role="group" aria-label="Modo de juego" className="flex flex-none rounded-[10px] border-[3px] border-edge shadow-[0_4px_0_var(--edge)]">
         <button type="button" className={toggleButton(tab === 'daily', 'first')} aria-pressed={tab === 'daily'} onClick={() => onTab('daily')}>
@@ -43,7 +43,7 @@ function Controls({ tab, onTab, settings, onSettingsChange }: ControlsProps) {
           Libre
         </button>
       </div>
-    </DexRightTop>
+    </DexControls>
   )
 }
 
@@ -97,7 +97,7 @@ export default function App() {
 
   const statusText = 'm-0 font-mono text-sm tracking-[1px]'
   return (
-    <div className="flex min-h-dvh flex-col px-3 py-3 lg:justify-center lg:px-12 lg:py-8">
+    <div className="flex min-h-dvh flex-col px-3 py-3 lg:justify-center lg:px-12 lg:py-6">
       <main>
         <PokedexShell>
           {ready ? (

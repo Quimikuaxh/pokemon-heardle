@@ -8,7 +8,7 @@ const READ_TIMEOUT_MS = 15_000
 
 /**
  * Lee del bucket privado con la API REST de Storage y la clave service_role (Edge Function, DEC-57).
- * Mismas claves que S3ClipStore: catalog/catalog.json y clips/<clipKey>.mp3.
+ * Mismas claves que sube el script de catalogo: catalog/catalog.json y clips/<clipKey>.mp3.
  */
 export class SupabaseClipStore implements ClipStore {
   private readonly baseUrl: string

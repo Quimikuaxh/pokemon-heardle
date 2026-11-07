@@ -12,13 +12,10 @@ export interface Config {
   allowedOrigin: string
   gameTokenSecret: string
   dailySeed: string
-  storageDriver: 'fs' | 's3' | 'supabase'
+  /** fs: local, e2e y tests; supabase: Edge Function (DEC-57). */
+  storageDriver: 'fs' | 'supabase'
   storageDir: string
   storageBucket?: string
-  storageS3Endpoint?: string
-  storageS3Region?: string
-  storageS3AccessKeyId?: string
-  storageS3SecretAccessKey?: string
   /** Driver `supabase` (Edge Function, DEC-57): API REST de Storage y PostgREST con la clave service_role. */
   supabaseUrl?: string
   supabaseServiceRoleKey?: string
@@ -58,8 +55,8 @@ export function loadConfig(env: Env): Config {
   const dailySeed = requireValue(env, 'DAILY_SEED')
 
   const storageDriver = env.STORAGE_DRIVER ?? 'fs'
-  if (storageDriver !== 'fs' && storageDriver !== 's3' && storageDriver !== 'supabase') {
-    throw new Error('STORAGE_DRIVER debe ser "fs", "s3" o "supabase"')
+  if (storageDriver !== 'fs' && storageDriver !== 'supabase') {
+    throw new Error('STORAGE_DRIVER debe ser "fs" o "supabase"')
   }
   const rateLimitStore = env.RATE_LIMIT_STORE || 'memory'
   if (rateLimitStore !== 'memory' && rateLimitStore !== 'postgres') {
@@ -69,17 +66,6 @@ export function loadConfig(env: Env): Config {
     for (const name of ['SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY']) requireValue(env, name)
   }
   if (storageDriver === 'supabase') requireValue(env, 'STORAGE_BUCKET')
-  if (storageDriver === 's3') {
-    for (const name of [
-      'STORAGE_BUCKET',
-      'STORAGE_S3_ENDPOINT',
-      'STORAGE_S3_REGION',
-      'STORAGE_S3_ACCESS_KEY_ID',
-      'STORAGE_S3_SECRET_ACCESS_KEY',
-    ]) {
-      requireValue(env, name)
-    }
-  }
 
   return {
     port: readInt(env, 'PORT', 3002),
@@ -90,10 +76,6 @@ export function loadConfig(env: Env): Config {
     storageDriver,
     storageDir: env.STORAGE_DIR || '../scripts/catalog/data/out',
     storageBucket: env.STORAGE_BUCKET,
-    storageS3Endpoint: env.STORAGE_S3_ENDPOINT,
-    storageS3Region: env.STORAGE_S3_REGION,
-    storageS3AccessKeyId: env.STORAGE_S3_ACCESS_KEY_ID,
-    storageS3SecretAccessKey: env.STORAGE_S3_SECRET_ACCESS_KEY,
     supabaseUrl: env.SUPABASE_URL,
     supabaseServiceRoleKey: env.SUPABASE_SERVICE_ROLE_KEY,
     rateLimitStore,

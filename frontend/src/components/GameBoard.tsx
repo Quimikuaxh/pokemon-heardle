@@ -128,7 +128,7 @@ export function GameBoard({ mode, controller, api, catalog, store, settings = DE
   // `contents`: la seccion no crea caja propia; sus hijos se colocan en las zonas de la Pokedex (DEC-58).
   return (
     <section aria-label={mode === 'daily' ? 'Partida diaria' : 'Partida libre'} className="contents">
-      <DexTop lens={lens} subtitle={subtitle} />
+      <DexTop lens={lens} subtitle={subtitle} blinking={isPlaying && playback.playing} />
 
       <DexLeftBody>
         <NoticeBanner notice={notice} />
@@ -155,26 +155,23 @@ export function GameBoard({ mode, controller, api, catalog, store, settings = DE
         )}
 
         {isPlaying && view && (
-          <>
-            <Player
-              attempt={view.attempt}
-              maxAttempts={view.maxAttempts}
-              clipSeconds={view.clipSeconds}
-              unlockedSec={seconds ?? 0}
-              nextSeconds={nextSeconds}
-              positionSec={playback.positionSec}
-              playing={playback.playing}
-              audioStatus={audioStatus}
-              peaks={peaks}
-              skipDisabled={busy}
-              onTogglePlay={togglePlay}
-              onSkip={() => void controller.skip()}
-              onRetryAudio={() => setAudioRetry((count) => count + 1)}
-              volume={volume}
-              onVolumeChange={onVolumeChange}
-            />
-            <SongSearch key={gameSeq} catalog={catalog} guesses={view.guesses} readOnly={busy} onSelect={selectSong} />
-          </>
+          <Player
+            attempt={view.attempt}
+            maxAttempts={view.maxAttempts}
+            clipSeconds={view.clipSeconds}
+            unlockedSec={seconds ?? 0}
+            nextSeconds={nextSeconds}
+            positionSec={playback.positionSec}
+            playing={playback.playing}
+            audioStatus={audioStatus}
+            peaks={peaks}
+            skipDisabled={busy}
+            onTogglePlay={togglePlay}
+            onSkip={() => void controller.skip()}
+            onRetryAudio={() => setAudioRetry((count) => count + 1)}
+            volume={volume}
+            onVolumeChange={onVolumeChange}
+          />
         )}
 
         {phase === 'finished' && view && (
@@ -183,6 +180,7 @@ export function GameBoard({ mode, controller, api, catalog, store, settings = DE
         {phase === 'finished' && view?.mode === 'daily' && <NextDayCountdown onExpire={openDaily} />}
 
         {mode === 'unlimited' && phase !== 'loading' && (!view || !isPlaying) && <FilterStart {...filterProps} onStart={startUnlimited} compact={view !== null} />}
+        {view && <Legend />}
       </DexLeftBody>
 
       <DexRightBody>
@@ -191,7 +189,7 @@ export function GameBoard({ mode, controller, api, catalog, store, settings = DE
             <AttemptList view={view} catalog={catalog} settings={settings} />
           </DexPanel>
         )}
-        {view && <Legend />}
+        {isPlaying && view && <SongSearch key={gameSeq} catalog={catalog} guesses={view.guesses} readOnly={busy} onSelect={selectSong} />}
         {mode === 'unlimited' && phase !== 'loading' && !view && <FilterGames {...filterProps} />}
         {mode === 'unlimited' && phase !== 'loading' && view && (
           <details open={!isPlaying} className="group">

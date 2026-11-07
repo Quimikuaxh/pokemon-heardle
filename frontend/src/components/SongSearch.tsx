@@ -121,15 +121,13 @@ export const SongSearch = memo(function SongSearch({ catalog, guesses, disabled 
     } ${key === activeKey ? 'bg-lcd-ink text-lcd hover:bg-lcd-ink' : ''}`
 
   return (
-    <div className="relative">
-      <label htmlFor={inputId} className="mb-2 block text-sm font-bold tracking-[0.5px] text-white lg:text-base">
+    // Pantalla LCD de la hoja derecha (DEC-59): caja arriba y resultados debajo, en un hueco de alto fijo con scroll
+    // propio, para no tener que desplazar la pagina para verlos.
+    <section aria-label="Buscador" className="dex-lcd rounded-[12px] border-4 border-edge p-3 text-lcd-ink lg:p-4">
+      <label htmlFor={inputId} className="mb-2 block px-0.5 font-mono text-xs font-bold uppercase tracking-[2px] lg:text-[13px]">
         ¿Qué canción es?
       </label>
-      <div
-        className={`dex-lcd flex min-h-14 items-center gap-3 border-4 border-edge px-4 py-1 text-lcd-ink focus-within:outline-[3px] focus-within:outline-offset-2 focus-within:outline-[#ffcb05] lg:min-h-[62px] ${
-          isOpen ? 'rounded-t-[10px]' : 'rounded-[10px]'
-        }`}
-      >
+      <div className="flex min-h-12 items-center gap-3 rounded-lg border-[3px] border-lcd-ink px-3 focus-within:outline-[3px] focus-within:outline-offset-2 focus-within:outline-[#ffcb05] lg:min-h-[54px]">
         <SearchIcon className="flex-none text-lcd-ink" />
         {bubble && (
           <span className="inline-flex min-w-0 max-w-[45%] flex-none items-center gap-1 rounded-full bg-lcd-ink py-0.5 pl-2.5 pr-0.5 font-mono text-xs font-bold text-lcd">
@@ -179,6 +177,11 @@ export const SongSearch = memo(function SongSearch({ catalog, guesses, disabled 
       <div role="status" aria-live="polite" className="sr-only">
         {[bubbleNotice, isOpen ? `${resultCount} ${resultCount === 1 ? 'resultado' : 'resultados'}` : ''].filter(Boolean).join('. ')}
       </div>
+      {!isOpen && (
+        <p className="m-0 mt-3 grid h-48 place-items-center border-t-2 border-dotted border-lcd-dim px-4 text-center font-mono text-sm text-lcd-dim lg:h-[220px]">
+          Escribe el nombre de una canción o de un juego.
+        </p>
+      )}
       {isOpen && (
         <div
           id={listId}
@@ -186,7 +189,7 @@ export const SongSearch = memo(function SongSearch({ catalog, guesses, disabled 
           aria-label="Sugerencias"
           // Mantiene el foco en el input al pulsar una opcion con el raton.
           onMouseDown={(event) => event.preventDefault()}
-          className="dex-lcd absolute z-10 max-h-80 w-full overflow-y-auto rounded-b-[12px] border-4 border-t-2 border-edge border-t-lcd-dim px-3 pb-2 text-lcd-ink shadow-[0_10px_0_rgba(0,0,0,0.25)]"
+          className="mt-3 h-48 overflow-y-auto overscroll-contain border-t-2 border-dotted border-lcd-dim pr-1 lg:h-[220px]"
         >
           {resultCount === 0 && <div className="px-1.5 py-3 font-mono text-sm text-lcd-dim">Sin resultados</div>}
           {games.length > 0 && (
@@ -242,6 +245,6 @@ export const SongSearch = memo(function SongSearch({ catalog, guesses, disabled 
           )}
         </div>
       )}
-    </div>
+    </section>
   )
 })
