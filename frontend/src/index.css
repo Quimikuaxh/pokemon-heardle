@@ -80,9 +80,8 @@
 
 body {
   margin: 0;
-  background-color: var(--color-night);
-  background-image: radial-gradient(circle at 1px 1px, var(--color-night-dot) 1px, transparent 1.5px);
-  background-size: 14px 14px;
+  /* Negro puro detras de la Pokedex (decision del usuario, DEC-59). */
+  background-color: #000000;
   /* Texto claro por defecto: el fondo es oscuro (los componentes fijan su propio color sobre el rojo y las pantallas). */
   color: var(--color-screen-ink);
   font-family: var(--font-sans);
@@ -116,23 +115,30 @@ body {
 .dex-lcd-scroll::-webkit-scrollbar-track { background: var(--color-lcd-edge); border-radius: 5px; }
 .dex-lcd-scroll::-webkit-scrollbar-thumb { background: var(--color-lcd-dim); border-radius: 5px; border: 2px solid var(--color-lcd-edge); }
 
-/* Destello de la lente mientras suena el clip (DEC-59). Sin animacion si se pide reducir el movimiento. */
+/*
+ * Lente (DEC-59), como la Pokedex del anime: color de estado con un unico brillo claro de bordes nitidos arriba a la
+ * izquierda (sin difuminar ni formas superpuestas) y el borde inferior algo mas oscuro. Mientras suena el clip, la capa
+ * `.dex-lens-glow` la cambia de golpe a turquesa claro, con el mismo brillo nitido, y vuelve. Sin parpadeo si se pide
+ * reducir el movimiento.
+ */
+.dex-lens {
+  background-image:
+    radial-gradient(ellipse 30% 22% at 38% 32%, rgb(255 255 255 / 0.85) 0 98%, transparent 100%),
+    radial-gradient(circle at 50% 40%, transparent 0 58%, rgb(0 0 0 / 0.22) 59%);
+}
 @keyframes dex-lens-blink {
-  0%, 100% { opacity: 0.15; }
-  50% { opacity: 1; }
+  0%, 49% { opacity: 0; }
+  50%, 100% { opacity: 1; }
 }
 .dex-lens-glow {
-  background: radial-gradient(circle at 40% 35%, #ffffff 0 10%, #bfe6ff 30%, rgb(79 163 217 / 0) 72%);
-  box-shadow: 0 0 18px 6px rgb(127 205 255 / 0.75);
-  animation: dex-lens-blink 0.9s ease-in-out infinite;
+  background-color: #8ff3e6;
+  background-image:
+    radial-gradient(ellipse 30% 22% at 38% 32%, rgb(255 255 255 / 0.9) 0 98%, transparent 100%);
+  box-shadow: 0 0 16px 6px rgb(150 245 232 / 0.6);
+  animation: dex-lens-blink 0.6s steps(1, end) infinite;
 }
 @media (prefers-reduced-motion: reduce) {
-  .dex-lens-glow { animation: none; opacity: 0.7; }
-}
-
-/* Lente grande: brillo de cristal sobre el color de estado. */
-.dex-lens {
-  background-image: radial-gradient(circle at 35% 30%, rgb(255 255 255 / 0.75) 0 12%, transparent 40%);
+  .dex-lens-glow { animation: none; opacity: 0; }
 }
 
 input::placeholder {

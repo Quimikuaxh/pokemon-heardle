@@ -168,7 +168,7 @@ test('E2E-82_should_look_the_same_in_light_and_dark_mode_with_readable_contrast'
   const dark = await read()
 
   expect(dark, 'mismo aspecto en claro y oscuro').toEqual(light)
-  expect(light.body.bg, 'fondo oscuro de la Pokedex').toBe('rgb(27, 29, 34)')
+  expect(light.body.bg, 'fondo negro detras de la Pokedex (DEC-59)').toBe('rgb(0, 0, 0)')
   expect(contrast(light.body.bg, light.body.fg), 'contraste del texto').toBeGreaterThanOrEqual(4.5)
   expect(contrast(light.skip.bg, light.skip.fg), 'contraste del boton Saltar').toBeGreaterThanOrEqual(4.5)
   expect(contrast(light.play.bg, light.play.fg), 'contraste del boton de reproducir').toBeGreaterThanOrEqual(4.5)

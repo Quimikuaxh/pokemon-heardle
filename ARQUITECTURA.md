@@ -383,7 +383,8 @@ DEC-59: **Reparto de la Pokedex: buscador en la hoja derecha, sin desplazar la p
 - Hoja izquierda: cabecera (lente, logo, fecha), controles (Pistas y Diario/Libre), reproductor o resultado, y la leyenda. Hoja derecha: historial arriba y, debajo, la pantalla LCD del buscador.
 - La pantalla del buscador tiene un hueco de resultados de alto fijo (192 px en movil, 220 px en escritorio) con scroll propio; sin texto muestra "Escribe el nombre de una cancion o de un juego.". La lista no flota sobre la pagina. Su barra de scroll usa los colores de la pantalla (`.dex-lcd-scroll`: `scrollbar-color` y los pseudoelementos `::-webkit-scrollbar` para Safari). Descartado: lista que crece con los resultados (volveria a empujar la pagina).
 - Movil: mismo orden que escritorio, apilado (decision del usuario).
-- La lente parpadea mientras suena el clip (solo cambia la opacidad de una capa; sin animacion con `prefers-reduced-motion`).
+- Fondo detras de la Pokedex: negro puro, sin trama de puntos (decision del usuario).
+- Lente como la de la Pokedex del anime (referencia del usuario): aro blanco, color de estado (azul profundo en juego, verde al acertar, rojo al perder), un unico brillo casi blanco de bordes nitidos arriba a la izquierda y una sombra suave abajo. Mientras suena el clip cambia de golpe a turquesa claro y vuelve, cada 0,3 s (solo cambia la opacidad de una capa; sin parpadeo con `prefers-reduced-motion`). Descartados por el usuario: destello con halo grande y estrella ("tiene forma"), brillo difuminado y dos brillos superpuestos.
 - Favicon SVG (`frontend/public/favicon.svg`): Pokeball con una corchea amarilla, con contorno negro para leerse a 16 px sobre pestanas claras y oscuras.
 - Ajuste de DEC-58: la fecha bajo el logo lleva mas separacion (el logo la pisaba en algunos navegadores).
 

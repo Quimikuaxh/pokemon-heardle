@@ -4,7 +4,8 @@ import { Logo } from './Logo'
 export type LensColor = 'playing' | 'won' | 'lost'
 
 const LENS_CLASS: Record<LensColor, string> = {
-  playing: 'bg-lens',
+  // Azul profundo como la lente del anime (DEC-59); verde o rojo al terminar.
+  playing: 'bg-[#2366b8]',
   won: 'bg-lamp-green',
   lost: 'bg-lamp-red',
 }
@@ -25,14 +26,14 @@ export function PokedexShell({ children }: { children: ReactNode }) {
 export function DexTop({ lens = 'playing', subtitle, blinking = false }: { lens?: LensColor; subtitle?: string; blinking?: boolean }) {
   return (
     <div className="dex-ltop mx-1 mt-1 flex items-center gap-3 border-b-4 border-edge px-3 pb-3.5 pt-3 lg:gap-[18px] lg:px-[26px] lg:pb-[22px] lg:pt-[22px]">
-      <span aria-hidden="true" className="grid size-12 flex-none place-items-center rounded-full border-4 border-edge bg-[#f4f4f2] lg:size-[86px]">
+      <span aria-hidden="true" className="grid size-12 flex-none place-items-center rounded-full border-[3px] border-edge bg-[#f4f4f2] lg:size-[86px] lg:border-4">
         <span
           data-lens={lens}
           data-blinking={blinking || undefined}
-          className={`dex-lens relative size-8 rounded-full border-[3px] border-edge lg:size-[62px] lg:border-4 ${LENS_CLASS[lens]}`}
+          className={`dex-lens relative size-[34px] rounded-full border-[3px] border-edge lg:size-[62px] lg:border-4 ${LENS_CLASS[lens]}`}
         >
-          {/* Destello mientras suena el clip (DEC-59): solo cambia la opacidad de esta capa. */}
-          {blinking && <span className="dex-lens-glow absolute -inset-[3px] rounded-full lg:-inset-1" />}
+          {/* Mientras suena el clip la lente cambia de color (DEC-59): solo cambia la opacidad de esta capa. */}
+          {blinking && <span className="dex-lens-glow absolute inset-0 rounded-full" />}
         </span>
       </span>
       <span aria-hidden="true" className="flex gap-1 self-start pt-1 lg:gap-2.5 lg:pt-1.5">

@@ -102,7 +102,7 @@ test.describe('Barra en movil oscuro', () => {
       const get = (selector: string) => getComputedStyle(el.querySelector(selector)!).backgroundColor
       return { track: getComputedStyle(el).backgroundColor, unlocked: get('[data-zone="unlocked"]'), locked: get('[data-zone="locked"]'), page: getComputedStyle(document.body).backgroundColor }
     })
-    expect(colors.page, 'fondo de la pagina (igual en claro y oscuro, DEC-58)').toBe('rgb(27, 29, 34)')
+    expect(colors.page, 'fondo de la pagina (igual en claro y oscuro, DEC-58)').toBe('rgb(0, 0, 0)')
     expect(colors.unlocked).not.toBe(colors.locked)
     expect(colors.unlocked).not.toBe(colors.page)
   })
