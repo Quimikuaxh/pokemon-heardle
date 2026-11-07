@@ -1,5 +1,6 @@
 import { randomInt as cryptoRandomInt } from 'node:crypto'
 import type { Catalog, Game, Song } from '../../../shared/catalog'
+import { seriesOf } from '../../../shared/catalog'
 import type { PublicCatalog } from '../../../shared/api'
 import { buildSelectionGroups, effectiveGroupId } from '../game/selectionGroups'
 import type { SelectionGroup } from '../game/selectionGroups'
@@ -33,7 +34,7 @@ export function indexCatalog(catalog: Catalog): CatalogIndex {
     version: catalog.version,
     games: catalog.games
       .filter((game) => enabledSongs.some((song) => song.games.includes(game.id)))
-      .map((game) => ({ id: game.id, name: game.name })),
+      .map((game) => ({ id: game.id, name: game.name, series: seriesOf(game) })),
     songs: enabledSongs.map((song) => ({ id: song.id, title: song.title, games: [...song.games] })),
   }
 

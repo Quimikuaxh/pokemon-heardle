@@ -1,6 +1,6 @@
 // Tipos de catalog.json y su validador (lo usan backend y script de catalogo).
-import { CONSOLES } from './rules'
-import type { ConsoleName } from './rules'
+import { CONSOLES, SERIES } from './rules'
+import type { ConsoleName, Series } from './rules'
 export interface Game {
   id: string
   name: string
@@ -8,7 +8,12 @@ export interface Game {
   consoles?: ConsoleName[]
   /** Juego "cabeza" del grupo de seleccion (DEC-54). Ausente: el juego es su propio grupo. */
   selectionGroup?: string
+  /** Serie (DEC-60). Ausente: `main`. */
+  series?: Series
 }
+
+/** Serie efectiva de un juego (DEC-60): sin `series`, la principal. */
+export const seriesOf = (game: { series?: Series }): Series => game.series ?? 'main'
 export interface Song {
   id: string; title: string; games: string[]; clipKey: string
   /** Segundo de la fuente donde empieza el clip. Automatico (silencio inicial, DEC-47) salvo `startSecManual`. */
@@ -60,6 +65,9 @@ function validateGames(rawGames: unknown, errors: string[]): Set<string> {
       errors.push(`games[${index}].name debe ser un texto no vacio (juego ${describeValue(id)})`)
     }
     if (game.consoles !== undefined) validateConsoles(game.consoles, describeValue(id), errors)
+    if (game.series !== undefined && !(SERIES as readonly unknown[]).includes(game.series)) {
+      errors.push(`juego ${describeValue(id)}: series debe ser ${SERIES.join(' o ')} (recibido ${describeValue(game.series)})`)
+    }
   })
   validateSelectionGroups(rawGames, gameIds, errors)
   return gameIds
@@ -84,9 +92,11 @@ function validateConsoles(consoles: unknown, gameLabel: string, errors: string[]
 /** selectionGroup: id de un juego "cabeza" (cuyo propio grupo es el mismo): sin cadenas ni ciclos (DEC-54). */
 function validateSelectionGroups(rawGames: unknown[], gameIds: Set<string>, errors: string[]): void {
   const groupOf = new Map<string, string>()
+  const seriesById = new Map<string, unknown>()
   for (const game of rawGames) {
     if (!isRecord(game) || typeof game.id !== 'string') continue
     groupOf.set(game.id, typeof game.selectionGroup === 'string' ? game.selectionGroup : game.id)
+    if (game.series !== undefined) seriesById.set(game.id, game.series)
   }
   for (const game of rawGames) {
     if (!isRecord(game) || typeof game.id !== 'string' || game.selectionGroup === undefined) continue
@@ -97,6 +107,9 @@ function validateSelectionGroups(rawGames: unknown[], gameIds: Set<string>, erro
       errors.push(`juego ${id}: selectionGroup apunta a un juego inexistente (${selectionGroup})`)
     } else if (groupOf.get(selectionGroup) !== selectionGroup) {
       errors.push(`juego ${id}: selectionGroup ${selectionGroup} no es un juego cabeza de grupo (ya pertenece a ${groupOf.get(selectionGroup)}); no se permiten cadenas`)
+    } else if ((seriesById.get(id) ?? 'main') !== (seriesById.get(selectionGroup) ?? 'main')) {
+      // Cada diario elige grupos de una sola serie (DEC-60): un grupo no puede mezclar series.
+      errors.push(`juego ${id}: selectionGroup ${selectionGroup} es de otra serie; un grupo no puede mezclar principal y spin-off`)
     }
   }
 }

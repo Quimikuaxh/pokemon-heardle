@@ -40,6 +40,7 @@ export interface FakeGame {
   name: string
   consoles?: string[]
   selectionGroup?: string
+  series?: 'main' | 'spinoff'
 }
 
 export const GAMES: FakeGame[] = [
@@ -97,6 +98,7 @@ export function fakeAdmin(initial: { songs?: FakeSong[]; games?: FakeGame[] } = 
       name: g.name,
       consoles: g.consoles ?? [],
       selectionGroup: g.selectionGroup ?? g.id, // grupo efectivo
+      series: g.series ?? 'main',
       missingConsoles: (g.consoles ?? []).length === 0 && state.songs.some((s) => s.enabled && s.games.includes(g.id)),
       songCount: state.songs.filter((s) => s.games.includes(g.id)).length,
     })),
@@ -164,6 +166,11 @@ export function fakeAdmin(initial: { songs?: FakeSong[]; games?: FakeGame[] } = 
         if (!Array.isArray(body.consoles) || body.consoles.length === 0) return err(400, 'VALIDATION_ERROR', 'Elige al menos una consola')
         game.consoles = body.consoles
       }
+      if (body.series !== undefined) {
+        if (body.series !== 'main' && body.series !== 'spinoff') return err(400, 'VALIDATION_ERROR', 'Serie no valida')
+        if (body.series === 'main') delete game.series
+        else game.series = body.series
+      }
       if (body.selectionGroup !== undefined) {
         if (body.selectionGroup === null || body.selectionGroup === game.id) delete game.selectionGroup
         else {
@@ -172,7 +179,7 @@ export function fakeAdmin(initial: { songs?: FakeSong[]; games?: FakeGame[] } = 
           game.selectionGroup = head.id
         }
       }
-      return json(200, { id: game.id, name: game.name, consoles: game.consoles ?? [], selectionGroup: game.selectionGroup ?? game.id })
+      return json(200, { id: game.id, name: game.name, consoles: game.consoles ?? [], selectionGroup: game.selectionGroup ?? game.id, series: game.series ?? 'main' })
     }
     return err(404, 'NOT_FOUND')
   })

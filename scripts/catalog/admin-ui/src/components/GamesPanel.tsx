@@ -14,11 +14,14 @@ interface GameRowProps {
   onInvalid(message: string): void
 }
 
-/** Un juego puede unirse al grupo de otro solo si no es cabeza de nadie, y el destino debe ser cabeza (DEC-54). */
+/**
+ * Un juego puede unirse al grupo de otro solo si no es cabeza de nadie, el destino debe ser cabeza (DEC-54) y de la
+ * misma serie (DEC-60).
+ */
 function groupOptions(game: AdminGame, games: AdminGame[]): AdminGame[] {
   const isHeadOfOthers = games.some((other) => other.id !== game.id && other.selectionGroup === game.id)
   if (isHeadOfOthers) return []
-  return games.filter((other) => other.id !== game.id && other.selectionGroup === other.id)
+  return games.filter((other) => other.id !== game.id && other.selectionGroup === other.id && other.series === game.series)
 }
 
 function GameRow({ game, games, onPatchGame, onInvalid }: GameRowProps) {
@@ -74,6 +77,19 @@ function GameRow({ game, games, onPatchGame, onInvalid }: GameRowProps) {
           Guardar consolas
         </button>
       </div>
+
+      <label className="flex basis-full flex-wrap items-center gap-2 text-sm">
+        Serie
+        <select
+          aria-label={`Serie ${game.id}`}
+          className={inputClass}
+          value={game.series}
+          onChange={(event) => void onPatchGame(game.id, { series: event.target.value as AdminGame['series'] })}
+        >
+          <option value="main">Principal</option>
+          <option value="spinoff">Spin-off</option>
+        </select>
+      </label>
 
       <label className="flex basis-full flex-wrap items-center gap-2 text-sm">
         Grupo de selección

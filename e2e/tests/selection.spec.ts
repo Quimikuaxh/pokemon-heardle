@@ -44,11 +44,13 @@ test('E2E-99_should_list_grouped_games_separately_and_pick_from_either', async (
   expect([ONLY_D.title, ONLY_E.title]).toContain(await u.solution.innerText())
 })
 
-test('E2E-100_should_report_a_wrong_game_for_a_song_of_the_other_game_of_the_same_group', async ({ app }) => {
+test('E2E-100_should_report_a_wrong_game_for_a_song_of_the_other_game_of_the_same_group', async ({ app, page }) => {
+  // DEC-60: Echo tiene que estar en la partida para poder elegirlo; objetivo identificado por el tono.
+  await page.addInitScript(INSTRUMENT_WEBAUDIO)
   const u = app.unlimited
   await app.goto()
-  await app.startUnlimited([DELTA]) // objetivo fijo: ONLY_D
-  await u.guess(ONLY_E.title) // Echo comparte grupo de seleccion con Delta, pero es otro juego
+  const target = await app.startUnlimitedFor([DELTA, ECHO], [ONLY_D, ONLY_E])
+  await u.guess((target.id === ONLY_D.id ? ONLY_E : ONLY_D).title) // Delta y Echo comparten grupo de seleccion, pero son juegos distintos
   await expect(u.rows.nth(0)).toContainText('Juego incorrecto')
   await expect(u.rows.nth(0)).not.toContainText('Juego acertado')
 })

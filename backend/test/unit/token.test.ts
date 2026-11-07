@@ -31,6 +31,13 @@ describe('game/token', () => {
     expect(decryptToken(encryptToken(p, SECRET_A), SECRET_A, NOW_MS)).toEqual(p)
   })
 
+  it('BE-TOK-20 ida y vuelta de un diario spin-off (m: s, con d); sin fecha no es valido (DEC-60)', () => {
+    const p = payload({ m: 's', d: '2026-11-07' })
+    expect(decryptToken(encryptToken(p, SECRET_A), SECRET_A, NOW_MS)).toEqual(p)
+    expect(codeOf(() => decryptToken(encryptToken(payload({ m: 's' }), SECRET_A), SECRET_A, NOW_MS))).toBe('TOKEN_INVALID')
+    expect(codeOf(() => decryptToken(encryptToken(payload({ m: 'x', d: '2026-11-07' }), SECRET_A), SECRET_A, NOW_MS))).toBe('TOKEN_INVALID')
+  })
+
   it('BE-TOK-01 ida y vuelta de un payload diario (con d)', () => {
     const p = payload({ m: 'd', d: '2026-10-03', r: ['M', 'S', 'G'], q: ['1111111111111111', '2222222222222222'] })
     expect(decryptToken(encryptToken(p, SECRET_A), SECRET_A, NOW_MS)).toEqual(p)

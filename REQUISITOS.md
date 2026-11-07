@@ -31,6 +31,13 @@ Juego web estilo Heardle: adivinar la cancion de un juego de Pokemon a partir de
 - Barra de reproduccion: al reproducir, una barra muestra el avance en tiempo real sobre la escala total de 16 s, dividida en los segmentos de los fragmentos (marcas en 1/2/4/7/11/16 s); la parte desbloqueada del intento actual se distingue de la bloqueada.
 - Cancion completa al terminar (acierto o fallo): se ofrece el video original de YouTube embebido (`youtube-nocookie`) tras pulsar "Escuchar la cancion completa". El id del video solo llega al cliente dentro de la solucion revelada, nunca antes; el iframe no se carga antes de terminar.
 
+## 3.1 Diario de spin-offs (2026-11-07, ARQUITECTURA DEC-60)
+- Ademas del diario de la serie principal hay un diario de spin-offs (Mundo Misterioso, Ranger, Colosseum, XD y los que se anadan): otra cancion del dia, comun a todos, que cambia a la misma hora (medianoche de Europe/Madrid).
+- Se elige dentro de Diario con un conmutador Principal / Spin-off. Cada diario se juega una vez al dia y se guarda por separado.
+- El buscador de cada diario solo ofrece canciones y juegos de su serie; el de una partida libre, solo los de los juegos elegidos para esa partida.
+- En el modo libre los spin-offs aparecen en su propia seccion del filtro, sin marcar por defecto.
+- Anadir spin-offs al catalogo no cambia la cancion del dia principal.
+
 ## 4. Catalogo (script)
 - El usuario aporta una playlist de YouTube.
 - Script reproducible: descarga con yt-dlp, recorta/normaliza con ffmpeg, elimina metadatos y genera `catalog.json` (juego(s), titulo, inicio del fragmento, fichero).

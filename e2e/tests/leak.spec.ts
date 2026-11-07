@@ -1,6 +1,7 @@
 import { test, expect } from '../support/test.ts'
 import { RECORD_AUDIO_SRC, expectNoLeak } from '../support/leak.ts'
-import { GAME_NAME, SOLO_C, dailyTargetR, gamesText, nonTargets } from '../support/oracle.ts'
+import { GAME_NAME, ONLY_D, SOLO_C, dailyTargetR, gamesText, nonTargets } from '../support/oracle.ts'
+import { INSTRUMENT_WEBAUDIO } from '../support/webaudio.ts'
 import type { FixtureSong } from '../fixtures/catalogs.ts'
 
 const gameNeedles = (song: FixtureSong) => [song.games[0], GAME_NAME[song.games[0]]]
@@ -25,15 +26,17 @@ test('E2E-26_should_not_leak_the_daily_solution_before_the_game_ends', async ({ 
 })
 
 test('E2E-26_should_not_leak_the_unlimited_solution_before_the_game_ends', async ({ app, page, net }) => {
-  const [wrong] = nonTargets(SOLO_C)
+  // DEC-60: el fallo tiene que ser de un juego de la partida: Charlie y Delta, objetivo identificado por el tono.
+  await page.addInitScript(INSTRUMENT_WEBAUDIO)
   await app.goto()
-  await app.startUnlimited(['Pokemon Game Charlie'])
+  const target = await app.startUnlimitedFor(['Pokemon Game Charlie', 'Pokemon Game Delta'], [SOLO_C, ONLY_D])
+  const wrong = target.id === SOLO_C.id ? ONLY_D : SOLO_C
   const u = app.unlimited
   await u.guess(wrong.title)
   await u.ready()
   await u.skip()
   await u.ready()
-  await expectNoLeak(page, net, SOLO_C, [wrong], gameNeedles(SOLO_C))
+  await expectNoLeak(page, net, target, [wrong], gameNeedles(target))
 })
 
 test('E2E-31_should_reveal_title_and_games_when_the_game_ends', async ({ app }) => {
@@ -95,7 +98,8 @@ test('E2E-92_should_send_the_hints_with_exact_keys_and_never_reveal_the_target_g
   const views = net.responses.filter((r) => r.path.startsWith('/api/games') && r.status === 200).map((r) => JSON.parse(r.body!.toString('utf8')))
   expect(views.length).toBeGreaterThanOrEqual(3)
   for (const view of views) {
-    expect(Object.keys(view).sort(), 'claves de GameView').toEqual(['attempt', 'clipSeconds', 'clipUrl', 'date', 'guesses', 'hints', 'maxAttempts', 'mode', 'results', 'status', 'token'].sort())
+    // DEC-60: los diarios llevan tambien su serie.
+    expect(Object.keys(view).sort(), 'claves de GameView').toEqual(['attempt', 'clipSeconds', 'clipUrl', 'date', 'guesses', 'hints', 'maxAttempts', 'mode', 'results', 'series', 'status', 'token'].sort())
     expect(view.hints, 'hints alineado con results').toHaveLength(view.results.length)
     for (const hint of view.hints) {
       if (hint === null) continue

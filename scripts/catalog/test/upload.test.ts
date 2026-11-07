@@ -1,5 +1,5 @@
 // Contrato: src/upload.ts exporta
-//   runUpload({ catalog, outDir, store, validate, prune? }): Promise<{ uploaded: string[]; deleted: string[] }>
+//   runUpload({ catalog, outDir, store, validate, prune?, clipsOnly? }): Promise<{ uploaded: string[]; deleted: string[] }>
 //     store: ObjectStore { list(prefix): Promise<Map<key, { md5: string }>>;
 //                          put(key, body: Buffer): Promise<void>; delete(key): Promise<void> }
 //     validate: () => Promise<{ ok: boolean; errors: string[] }>   (si falla, runUpload rechaza y no sube nada)
@@ -197,6 +197,23 @@ describe('runUpload', () => {
     const { store, calls } = fakeStore({ 'clips/ffffffffffffffff.mp3': 'x' })
     await runUpload({ catalog: catalog([song('a', K1)]), outDir: out, store, validate: okValidate, prune: true })
     expect(calls.indexOf('put catalog/catalog.json')).toBeLessThan(calls.indexOf('delete clips/ffffffffffffffff.mp3'))
+  })
+
+  it('SC-UP-07 --clips-only sube los clips nuevos y no toca catalog/catalog.json (DEC-60)', async () => {
+    const { out } = setup([K1, K2])
+    const { store, calls } = fakeStore({ 'catalog/catalog.json': 'viejo' })
+    const result = await runUpload({ catalog: catalog([song('a', K1), song('b', K2)]), outDir: out, store, validate: okValidate, clipsOnly: true })
+    expect(calls).toContain(`put ${clipKeyOf(K1)}`)
+    expect(calls).toContain(`put ${clipKeyOf(K2)}`)
+    expect(calls.some((x) => x.includes('catalog/catalog.json'))).toBe(false)
+    expect(result.uploaded).not.toContain('catalog/catalog.json')
+  })
+
+  it('SC-UP-07 --clips-only con --prune se rechaza sin subir ni borrar nada', async () => {
+    const { out } = setup([K1])
+    const { store, calls } = fakeStore({ 'clips/ffffffffffffffff.mp3': 'x' })
+    await expect(runUpload({ catalog: catalog([song('a', K1)]), outDir: out, store, validate: okValidate, clipsOnly: true, prune: true })).rejects.toThrow(/clips-only/)
+    expect(calls.filter((x) => x.startsWith('put') || x.startsWith('delete'))).toEqual([])
   })
 
   it('SC-UP-06 no sube clips de canciones desactivadas (cortas) y el catalog.json subido las mantiene enabled:false', async () => {

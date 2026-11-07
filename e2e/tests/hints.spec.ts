@@ -50,11 +50,14 @@ test.describe('Pistas de consola y de fecha (DEC-50, DEC-52)', () => {
     await expect(d.consoleHints).toHaveCount(0)
   })
 
-  test('E2E-90_should_point_to_earlier_and_later_games_and_say_nothing_for_skips_or_the_same_game', async ({ app }) => {
+  test('E2E-90_should_point_to_earlier_and_later_games_and_say_nothing_for_skips_or_the_same_game', async ({ app, page }) => {
+    await page.addInitScript(INSTRUMENT_WEBAUDIO)
     const u = app.unlimited
     await app.goto()
     await app.setHints({ date: true })
-    await app.startUnlimited([GAME.charlie]) // objetivo fijo: Charlie (3.er juego)
+    // DEC-60: los juegos de los fallos tienen que estar en la partida; se repite hasta que el objetivo sea Charlie.
+    const pool = ENABLED_R.filter((song) => ['game-alpha', 'game-charlie', 'game-foxtrot'].includes(song.games[0]))
+    await app.startUnlimitedFor([GAME.alpha, GAME.charlie, GAME.foxtrot], pool, SOLO_C.id)
     const earlierGame = byId('a-one-song-01') // Alpha sale antes que Charlie: la buscada es posterior
     const laterGame = ONLY_F // Foxtrot sale despues: la buscada es anterior
     await u.guess(earlierGame.title)
@@ -86,14 +89,15 @@ test.describe('Pistas de consola y de fecha (DEC-50, DEC-52)', () => {
   })
 
   test.describe('Reglas de Legends: Z-A (consolas Switch y Switch 2)', () => {
-    const cases: Array<{ name: string; filter: string; target: string; guesses: Array<{ title: string; label: string }> }> = [
-      { name: 'a_elegida_Z-A_buscada_Switch_es_Switch_verde', filter: GAME.foxtrot, target: ONLY_F.title, guesses: [{ title: ONLY_Z.title, label: 'Consola: Switch, coincide' }] },
-      { name: 'b_elegida_Z-A_buscada_Switch_2_es_Switch_2_verde', filter: GAME.golf, target: ONLY_G.title, guesses: [{ title: ONLY_Z.title, label: 'Consola: Switch 2, coincide' }] },
-      { name: 'c_elegida_Z-A_buscada_de_otra_consola_es_Switch_roja', filter: GAME.charlie, target: SOLO_C.title, guesses: [{ title: ONLY_Z.title, label: 'Consola: Switch, no coincide' }] },
+    // DEC-60: el filtro incluye los juegos de los fallos y se repite la partida hasta que sale el objetivo.
+    const cases: Array<{ name: string; filter: string[]; target: typeof ONLY_F; guesses: Array<{ title: string; label: string }> }> = [
+      { name: 'a_elegida_Z-A_buscada_Switch_es_Switch_verde', filter: [GAME.foxtrot, GAME.zeta], target: ONLY_F, guesses: [{ title: ONLY_Z.title, label: 'Consola: Switch, coincide' }] },
+      { name: 'b_elegida_Z-A_buscada_Switch_2_es_Switch_2_verde', filter: [GAME.golf, GAME.zeta], target: ONLY_G, guesses: [{ title: ONLY_Z.title, label: 'Consola: Switch 2, coincide' }] },
+      { name: 'c_elegida_Z-A_buscada_de_otra_consola_es_Switch_roja', filter: [GAME.charlie, GAME.zeta], target: SOLO_C, guesses: [{ title: ONLY_Z.title, label: 'Consola: Switch, no coincide' }] },
       {
         name: 'd_buscada_Z-A_elegida_Switch_o_Switch_2_es_esa_consola_verde',
-        filter: GAME.zeta,
-        target: ONLY_Z.title,
+        filter: [GAME.zeta, GAME.foxtrot, GAME.golf],
+        target: ONLY_Z,
         guesses: [
           { title: ONLY_F.title, label: 'Consola: Switch, coincide' },
           { title: ONLY_G.title, label: 'Consola: Switch 2, coincide' },
@@ -101,11 +105,13 @@ test.describe('Pistas de consola y de fecha (DEC-50, DEC-52)', () => {
       },
     ]
     for (const c of cases) {
-      test(`E2E-91_should_apply_rule_${c.name}`, async ({ app }) => {
+      test(`E2E-91_should_apply_rule_${c.name}`, async ({ app, page }) => {
+        await page.addInitScript(INSTRUMENT_WEBAUDIO)
         const u = app.unlimited
         await app.goto()
         await app.setHints({ console: true })
-        await app.startUnlimited([c.filter])
+        const candidates = [ONLY_F, ONLY_G, ONLY_Z, SOLO_C]
+        await app.startUnlimitedFor(c.filter, candidates, c.target.id)
         for (const [i, guess] of c.guesses.entries()) {
           await u.guess(guess.title)
           await u.ready()

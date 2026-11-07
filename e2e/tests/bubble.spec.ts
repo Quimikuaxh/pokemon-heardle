@@ -114,11 +114,12 @@ test.describe('Buscador con burbuja de juego (DEC-49)', () => {
   test('E2E-87_should_not_persist_the_bubble_nor_touch_the_unlimited_filter', async ({ app, page }) => {
     const u = app.unlimited
     await app.goto()
-    await app.startUnlimited([ALPHA])
+    // DEC-60: el buscador del libre solo ofrece los juegos de la partida: Bravo tiene que estar en el filtro.
+    await app.startUnlimited([ALPHA, BRAVO])
     const filterBefore = (await app.localStorageDump())['heardle:filter']
-    expect(JSON.parse(filterBefore)).toEqual(['game-alpha'])
+    expect(JSON.parse(filterBefore)).toEqual(['game-alpha', 'game-bravo'])
 
-    await u.type('bravo') // Bravo esta fuera del pool del filtro libre
+    await u.type('bravo')
     await u.gameOption(BRAVO).click()
     await expect(u.songOptions).toHaveCount(3)
     const dump = await app.localStorageDump()
@@ -138,7 +139,7 @@ test.describe('Buscador con burbuja de juego (DEC-49)', () => {
     await Promise.all([page.waitForResponse((r) => r.url().endsWith('/api/games') && r.request().method() === 'POST'), u.startButton.click()])
     await u.ready()
     await expect(u.bubbleRemove).toHaveCount(0)
-    expect(JSON.parse((await app.localStorageDump())['heardle:filter'])).toEqual(['game-alpha'])
+    expect(JSON.parse((await app.localStorageDump())['heardle:filter'])).toEqual(['game-alpha', 'game-bravo'])
   })
 
   test('E2E-88_should_keep_attempted_songs_visible_and_disabled_under_a_bubble', async ({ app, net }) => {

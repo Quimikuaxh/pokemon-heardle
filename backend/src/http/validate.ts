@@ -4,7 +4,7 @@ const MAX_FILTER_GAMES = 50
 const MAX_ID_LENGTH = 64
 const MAX_TOKEN_LENGTH = 1024
 
-export type CreateGameRequest = { mode: 'daily' } | { mode: 'unlimited'; games: string[] }
+export type CreateGameRequest = { mode: 'daily'; series: 'main' | 'spinoff' } | { mode: 'unlimited'; games: string[] }
 
 function asRecord(body: unknown): Record<string, unknown> {
   if (typeof body !== 'object' || body === null || Array.isArray(body)) {
@@ -17,7 +17,9 @@ export function parseCreateGame(body: unknown): CreateGameRequest {
   const record = asRecord(body)
   if (record.mode === 'daily') {
     if ('games' in record) throw errors.validation('El modo diario no admite filtro de juegos.')
-    return { mode: 'daily' }
+    const series = record.series ?? 'main'
+    if (series !== 'main' && series !== 'spinoff') throw errors.validation('La serie debe ser "main" o "spinoff".')
+    return { mode: 'daily', series }
   }
   if (record.mode === 'unlimited') {
     const games = record.games

@@ -4,11 +4,12 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { SongSearch } from '../components/SongSearch'
 import { AttemptList } from '../components/AttemptList'
+import { ResultPanel } from '../components/ResultPanel'
 import { FilterStart } from '../components/FilterPanel'
 import { NextDayCountdown } from '../components/NextDayNote'
 import { DexTop } from '../components/Pokedex'
 import { formatCountdown, msUntilNextMadridDay } from '../game/format'
-import { GAMES, mkCatalog } from './helpers'
+import { GAMES, mkCatalog, mkFinished } from './helpers'
 
 const HOUR = 3_600_000
 
@@ -176,5 +177,21 @@ describe('Alto estable de la Pokedex (DEC-59)', () => {
     const css = readFileSync(join(__dirname, '..', 'index.css'), 'utf8')
     expect(css).toMatch(/\.dex \{[^}]*min-height: min\(860px, calc\(100dvh - 24px\)\)/)
     expect(css).toMatch(/font-family: 'Pokemon Solid';[^}]*ascent-override: 100%;[^}]*descent-override: 40%;[^}]*line-gap-override: 0%/)
+  })
+})
+
+describe('Video de la cancion completa dentro de la pantalla (DEC-59)', () => {
+  it('FE-DEX-09 al abrirlo, el video va dentro de la pantalla del resultado, la solucion sigue a la vista y el volumen ocupa el sitio del boton', () => {
+    render(<ResultPanel view={mkFinished()} showNextDayNote={false} volume={0.5} onVolumeChange={vi.fn()} />)
+    expect(document.querySelectorAll('iframe').length).toBe(0)
+    fireEvent.click(screen.getByRole('button', { name: 'Escuchar la canción completa' }))
+    const frames = document.querySelectorAll('iframe')
+    expect(frames.length).toBe(1)
+    const screenEl = document.querySelector('.dex-screen')!
+    expect(screenEl.contains(frames[0])).toBe(true)
+    expect(screen.getByText('Littleroot Town')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Escuchar la canción completa' })).toBeNull()
+    expect(screen.getByRole('slider', { name: 'Volumen' })).toBeTruthy()
+    expect(screenEl.contains(screen.getByRole('slider', { name: 'Volumen' }))).toBe(false)
   })
 })

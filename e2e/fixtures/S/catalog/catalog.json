@@ -1,0 +1,55 @@
+{
+  "version": 1,
+  "generatedAt": "2026-11-07T12:00:00Z",
+  "games": [
+    {
+      "id": "game-sigma",
+      "name": "Pokemon Game Sigma",
+      "consoles": [
+        "GBA"
+      ]
+    },
+    {
+      "id": "game-spin",
+      "name": "Pokemon Spin Dungeon",
+      "consoles": [
+        "GC"
+      ],
+      "series": "spinoff"
+    }
+  ],
+  "songs": [
+    {
+      "id": "sigma-main-theme",
+      "title": "Sigma Main Theme",
+      "games": [
+        "game-sigma"
+      ],
+      "clipKey": "c1c1c1c1c1c1c1c1",
+      "startSec": 7,
+      "enabled": true,
+      "reviewed": true,
+      "source": {
+        "youtubeId": "ytc1c1c1c1c",
+        "videoTitle": "Video original de Sigma Main Theme (OST)",
+        "durationSec": 60
+      }
+    },
+    {
+      "id": "spin-dungeon-theme",
+      "title": "Dungeon Spin Theme",
+      "games": [
+        "game-spin"
+      ],
+      "clipKey": "c2c2c2c2c2c2c2c2",
+      "startSec": 7,
+      "enabled": true,
+      "reviewed": true,
+      "source": {
+        "youtubeId": "ytc2c2c2c2c",
+        "videoTitle": "Video original de Dungeon Spin Theme (OST)",
+        "durationSec": 60
+      }
+    }
+  ]
+}

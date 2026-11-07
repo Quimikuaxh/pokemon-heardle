@@ -104,7 +104,8 @@ describe('catalogo: un juego por cancion y orden de juegos', () => {
     const app = await startTestApp({ catalog: c })
     const r = await app.get('/api/catalog')
     for (const s of r.json.songs) expect(s.games.length).toBe(1)
-    for (const g of r.json.games) expect(Object.keys(g).sort()).toEqual(['id', 'name'])
+    // DEC-60: cada juego lleva tambien su serie efectiva.
+    for (const g of r.json.games) expect(Object.keys(g).sort()).toEqual(['id', 'name', 'series'])
     for (const k of ['selectionGroup', 'consoles', 'hints', 'clipKey', 'youtubeId']) expect(r.text).not.toContain(k)
   })
 

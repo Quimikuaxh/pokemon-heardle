@@ -1,6 +1,6 @@
 // AU-CON-01..07 (consolas) y AU-SEL-01..05 (grupo de seleccion) en el panel de juegos del admin.
 // Convenciones de accesibilidad asumidas (como las del panel actual, que identifica cada juego por su id):
-//  - por juego, un group "Consolas del juego <id>" con 7 checkboxes (nombre = consola) y un boton "Guardar consolas <id>";
+//  - por juego, un group "Consolas del juego <id>" con una checkbox por consola de CONSOLES (nombre = consola) y un boton "Guardar consolas <id>";
 //  - marca de texto "Sin consola" en el juego cuando el servidor devuelve missingConsoles;
 //  - por juego, un combobox "Grupo de seleccion <id>" con la opcion "Su propio grupo" y los juegos cabeza (se guarda al cambiar).
 import { describe, it, expect } from 'vitest'
@@ -21,10 +21,10 @@ const groupSelect = (id: string) => screen.getByRole('combobox', { name: new Reg
 const optionLabels = (select: HTMLSelectElement) => [...select.options].map((o) => o.textContent)
 
 describe('AU-CON consolas por juego', () => {
-  it('AU-CON-01 7 casillas de consola por juego marcadas segun consoles', async () => {
+  it('AU-CON-01 8 casillas de consola por juego (GC: DEC-60) marcadas segun consoles', async () => {
     await mount()
     const group = consolesGroup('rse')
-    expect(within(group).getAllByRole('checkbox').map((c) => (c as HTMLInputElement).labels?.[0]?.textContent ?? c.getAttribute('aria-label'))).toEqual(['GB', 'GBC', 'GBA', 'DS', '3DS', 'Switch', 'Switch 2'])
+    expect(within(group).getAllByRole('checkbox').map((c) => (c as HTMLInputElement).labels?.[0]?.textContent ?? c.getAttribute('aria-label'))).toEqual(['GB', 'GBC', 'GBA', 'GC', 'DS', '3DS', 'Switch', 'Switch 2'])
     expect(box('rse', 'GBA').checked).toBe(true)
     expect(box('rse', 'DS').checked).toBe(false)
     expect(box('dp', 'DS').checked).toBe(true)
@@ -151,5 +151,27 @@ describe('AU-SEL grupo de seleccion por juego', () => {
     await waitFor(() => expect(fake.catalogGets()).toBeGreaterThan(before))
     await waitFor(() => expect(optionLabels(groupSelect('rse'))).toEqual(['Su propio grupo'])) // rse pasa a ser cabeza de dp
     expect(groupSelect('dp').value).toBe('rse')
+  })
+})
+
+const seriesSelect = (id: string) => screen.getByRole('combobox', { name: new RegExp(`^serie ${id}$`, 'i') }) as HTMLSelectElement
+
+describe('AU-SER serie por juego (DEC-60)', () => {
+  it('AU-SER-01 desplegable "Serie" con Principal y Spin-off, que refleja la serie del servidor', async () => {
+    await mount(fakeAdmin({ games: GAMES.map((g) => (g.id === 'unused' ? { ...g, series: 'spinoff' as const } : g)) }))
+    expect(optionLabels(seriesSelect('rse'))).toEqual(['Principal', 'Spin-off'])
+    expect(seriesSelect('rse').value).toBe('main')
+    expect(seriesSelect('unused').value).toBe('spinoff')
+  })
+
+  it('AU-SER-02 cambiar la serie envia PATCH { series }', async () => {
+    const fake = await mount()
+    fireEvent.change(seriesSelect('dp'), { target: { value: 'spinoff' } })
+    await waitFor(() => expect(patches(fake).at(-1)).toMatchObject({ path: '/api/games/dp', body: { series: 'spinoff' } }))
+  })
+
+  it('AU-SER-03 el grupo de seleccion solo ofrece juegos cabeza de la misma serie', async () => {
+    await mount(fakeAdmin({ games: GAMES.map((g) => (g.id === 'rse' ? { ...g, series: 'spinoff' as const } : g)) }))
+    expect(optionLabels(groupSelect('unused'))).toEqual(['Su propio grupo', GAMES[1].name])
   })
 })

@@ -18,6 +18,8 @@ import { Legend } from './Legend'
 import { NextDayCountdown } from './NextDayNote'
 import { DexLeftBody, DexPanel, DexRightBody, DexTop, DexVents } from './Pokedex'
 import { formatDayLabel } from '../game/format'
+import { gamesOfSeries, scopeCatalog } from '../game/scope'
+import type { Series } from '../../../shared/rules'
 import { Player } from './Player'
 import type { AudioStatus } from './Player'
 import { computePeaks } from '../audio/waveform'
@@ -25,6 +27,8 @@ import type { AudioBufferLike } from '../audio/clipPlayer'
 
 interface GameBoardProps {
   mode: 'daily' | 'unlimited'
+  /** Serie del diario (DEC-60); por defecto la principal. */
+  series?: Series
   controller: GameController
   api: Pick<ApiClient, 'fetchClip'>
   catalog: PublicCatalog
@@ -36,7 +40,7 @@ interface GameBoardProps {
   onVolumeChange?(volume: number): void
 }
 
-export function GameBoard({ mode, controller, api, catalog, store, settings = DEFAULT_SETTINGS, volume = DEFAULT_VOLUME, onVolumeChange }: GameBoardProps) {
+export function GameBoard({ mode, series = 'main', controller, api, catalog, store, settings = DEFAULT_SETTINGS, volume = DEFAULT_VOLUME, onVolumeChange }: GameBoardProps) {
   const state = useGameState(controller)
   const { view, phase, notice, busy, gameSeq } = state
   const [filter, setFilter] = useState(() => controller.getFilter())
@@ -122,12 +126,21 @@ export function GameBoard({ mode, controller, api, catalog, store, settings = DE
 
   const openDaily = useCallback(() => void controller.openDaily(), [controller])
   const lens = view?.status === 'won' ? 'won' : view?.status === 'lost' ? 'lost' : 'playing'
-  const subtitle = mode === 'unlimited' ? 'MODO LIBRE' : `RETO DEL DÍA · ${formatDayLabel(view?.date ?? madridDate(Date.now()))}`
+  const dayLabel = formatDayLabel(view?.date ?? madridDate(Date.now()))
+  const subtitle = mode === 'unlimited' ? 'MODO LIBRE' : series === 'spinoff' ? `SPIN-OFF DEL DÍA · ${dayLabel}` : `RETO DEL DÍA · ${dayLabel}`
+  // Buscador por modo (DEC-60): cada diario, solo su serie; el libre, solo los juegos de la partida en curso.
+  const pool = mode === 'unlimited' ? controller.getPool() : null
+  const poolKey = pool?.join(',') ?? ''
+  const searchScope = useMemo(
+    () => scopeCatalog(catalog, mode === 'daily' ? gamesOfSeries(catalog, series) : pool ? new Set(pool) : null),
+    // poolKey resume el contenido del pool (el array cambia de identidad en cada partida)
+    [catalog, mode, series, poolKey, gameSeq],
+  )
   const filterProps = { games: catalog.games, songs: catalog.songs, selected: filter, onChange: changeFilter }
 
   // `contents`: la seccion no crea caja propia; sus hijos se colocan en las zonas de la Pokedex (DEC-58).
   return (
-    <section aria-label={mode === 'daily' ? 'Partida diaria' : 'Partida libre'} className="contents">
+    <section aria-label={mode === 'unlimited' ? 'Partida libre' : series === 'spinoff' ? 'Partida diaria spin-off' : 'Partida diaria'} className="contents">
       <DexTop lens={lens} subtitle={subtitle} blinking={isPlaying && playback.playing} />
 
       <DexLeftBody>
@@ -189,7 +202,7 @@ export function GameBoard({ mode, controller, api, catalog, store, settings = DE
             <AttemptList view={view} catalog={catalog} settings={settings} />
           </DexPanel>
         )}
-        {isPlaying && view && <SongSearch key={gameSeq} catalog={catalog} guesses={view.guesses} readOnly={busy} onSelect={selectSong} />}
+        {isPlaying && view && <SongSearch key={gameSeq} catalog={searchScope} guesses={view.guesses} readOnly={busy} onSelect={selectSong} />}
         {mode === 'unlimited' && phase !== 'loading' && !view && <FilterGames {...filterProps} />}
         {mode === 'unlimited' && phase === 'finished' && view && <FilterStart {...filterProps} onStart={startUnlimited} compact />}
         {/* Plegado por defecto: al terminar, "Empezar partida" ya esta en la hoja izquierda y la lista abierta

@@ -51,7 +51,7 @@ export function DexTop({ lens = 'playing', subtitle, blinking = false }: { lens?
 
 /** Zonas de contenido de la rejilla. Controles (pistas y modo) bajo la cabecera de la hoja izquierda (DEC-59). */
 export function DexControls({ children }: { children: ReactNode }) {
-  return <div className="dex-rtop flex items-center justify-between gap-3 px-4 pb-1 pt-3.5 lg:px-[30px] lg:pt-4">{children}</div>
+  return <div className="dex-rtop flex flex-wrap items-center justify-between gap-3 px-4 pb-1 pt-3.5 lg:px-[30px] lg:pt-4">{children}</div>
 }
 
 export function DexLeftBody({ children }: { children: ReactNode }) {

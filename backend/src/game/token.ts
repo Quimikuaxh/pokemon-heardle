@@ -12,7 +12,8 @@ export type ResultSymbol = 'S' | 'M' | 'G' | 'H'
 export interface TokenPayload {
   v: 1
   n: string
-  m: 'd' | 'u'
+  /** d: diario principal, s: diario spin-off (DEC-60), u: libre. */
+  m: 'd' | 's' | 'u'
   d?: string
   k: string
   r: ResultSymbol[]
@@ -29,8 +30,8 @@ function isValidShape(value: any): value is TokenPayload {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return false
   if (value.v !== 1) return false
   if (typeof value.n !== 'string' || !HEX16.test(value.n)) return false
-  if (value.m !== 'd' && value.m !== 'u') return false
-  if (value.m === 'd' && (typeof value.d !== 'string' || !DATE_PATTERN.test(value.d))) return false
+  if (value.m !== 'd' && value.m !== 's' && value.m !== 'u') return false
+  if ((value.m === 'd' || value.m === 's') && (typeof value.d !== 'string' || !DATE_PATTERN.test(value.d))) return false
   if (typeof value.k !== 'string' || !HEX16.test(value.k)) return false
   if (!Array.isArray(value.r) || value.r.length > MAX_RESULTS) return false
   if (!value.r.every((symbol: unknown) => typeof symbol === 'string' && RESULT_SYMBOLS.has(symbol))) return false

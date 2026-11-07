@@ -1,8 +1,8 @@
 import { join } from 'node:path'
 import type { Catalog, Game, Song } from '../../../../shared/catalog'
-import { tooShort, validateCatalog } from '../../../../shared/catalog'
-import { CONSOLES } from '../../../../shared/rules'
-import type { ConsoleName } from '../../../../shared/rules'
+import { seriesOf, tooShort, validateCatalog } from '../../../../shared/catalog'
+import { CONSOLES, SERIES } from '../../../../shared/rules'
+import type { ConsoleName, Series } from '../../../../shared/rules'
 import { CatalogFileError } from '../catalogStore'
 import type { CatalogStore } from '../catalogStore'
 import { findSourceFile } from '../duration'
@@ -83,6 +83,7 @@ export async function getCatalogView(ctx: AdminContext) {
       id: game.id,
       name: game.name,
       consoles: Array.isArray(game.consoles) ? game.consoles : [],
+      series: seriesOf(game),
       // Grupo efectivo (DEC-54): una referencia a un juego que no existe cuenta como grupo propio.
       selectionGroup: typeof game.selectionGroup === 'string' && gameIds.has(game.selectionGroup) ? game.selectionGroup : game.id,
       missingConsoles:
@@ -187,9 +188,11 @@ interface GamePatch {
   consoles?: ConsoleName[]
   /** null: quitar el grupo (el juego vuelve a su propio grupo). */
   selectionGroup?: string | null
+  /** Serie (DEC-60). `main` se guarda quitando el campo. */
+  series?: Series
 }
 
-const GAME_PATCH_KEYS = new Set(['name', 'consoles', 'selectionGroup'])
+const GAME_PATCH_KEYS = new Set(['name', 'consoles', 'selectionGroup', 'series'])
 
 function parseGamePatch(body: unknown): GamePatch {
   if (!isRecord(body)) throw validation('El cuerpo debe ser un objeto JSON.')
@@ -213,6 +216,10 @@ function parseGamePatch(body: unknown): GamePatch {
     }
     patch.selectionGroup = group
   }
+  if ('series' in body) {
+    if (!(SERIES as readonly unknown[]).includes(body.series)) throw validation(`series debe ser ${SERIES.join(' o ')}.`)
+    patch.series = body.series as Series
+  }
   if (Object.keys(patch).length === 0) throw validation('No hay ningun campo que cambiar.')
   return patch
 }
@@ -225,6 +232,9 @@ function applySelectionGroup(catalog: Catalog, game: Game, group: string | null)
   }
   const target = catalog.games.find((candidate) => candidate.id === group)
   if (!target) throw validation(`El grupo ${group} no es un juego del catalogo.`)
+  if (seriesOf(target) !== seriesOf(game)) {
+    throw validation(`El juego ${group} es de otra serie: un grupo no puede mezclar principal y spin-off.`)
+  }
   if (target.selectionGroup !== undefined && target.selectionGroup !== target.id) {
     throw validation(`El juego ${group} ya pertenece al grupo ${target.selectionGroup}: no se admiten cadenas.`)
   }
@@ -237,7 +247,7 @@ function applySelectionGroup(catalog: Catalog, game: Game, group: string | null)
 
 export async function patchGame(ctx: AdminContext, gameId: string, body: unknown) {
   const patch = parseGamePatch(body)
-  let result!: { id: string; name: string; consoles: ConsoleName[] | undefined; selectionGroup: string }
+  let result!: { id: string; name: string; consoles: ConsoleName[] | undefined; selectionGroup: string; series: Series }
   await ctx.store.update((catalog: Catalog) => {
     const game = catalog.games.find((candidate) => candidate.id === gameId)
     if (!game) throw notFound('El juego')
@@ -249,8 +259,15 @@ export async function patchGame(ctx: AdminContext, gameId: string, body: unknown
       game.name = name
     }
     if (patch.consoles) game.consoles = patch.consoles
+    if (patch.series !== undefined && patch.series !== seriesOf(game)) {
+      // Un grupo no puede mezclar series (DEC-60): cambiar la serie exige sacar antes el juego de su grupo.
+      const inGroup = (game.selectionGroup !== undefined && game.selectionGroup !== game.id) || catalog.games.some((other) => other !== game && other.selectionGroup === game.id)
+      if (inGroup) throw validation(`El juego ${game.id} esta en un grupo de seleccion: quitale el grupo antes de cambiar la serie.`)
+      if (patch.series === 'main') delete game.series
+      else game.series = patch.series
+    }
     if (patch.selectionGroup !== undefined) applySelectionGroup(catalog, game, patch.selectionGroup)
-    result = { id: game.id, name: game.name, consoles: game.consoles, selectionGroup: game.selectionGroup ?? game.id }
+    result = { id: game.id, name: game.name, consoles: game.consoles, selectionGroup: game.selectionGroup ?? game.id, series: seriesOf(game) }
   })
   return result
 }

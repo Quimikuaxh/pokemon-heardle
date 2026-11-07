@@ -1,4 +1,5 @@
 import type { GameView } from '../../../shared/api'
+import type { Series } from '../../../shared/rules'
 
 export interface DailyRecord {
   token: string
@@ -8,6 +9,8 @@ export interface DailyRecord {
 
 export interface UnlimitedRecord {
   token: string
+  /** Juegos con los que empezo la partida: acotan el buscador (DEC-60). Ausente en registros antiguos. */
+  games?: string[]
 }
 
 /** Pistas opcionales (DEC-52): ambas desactivadas por defecto; se aplican de forma retroactiva a lo ya jugado. */
@@ -26,8 +29,12 @@ export interface Store {
   readonly writeFailed: boolean
   getFilter(): string[]
   setFilter(ids: string[]): void
-  getDaily(date: string): DailyRecord | null
-  setDaily(date: string, record: DailyRecord): void
+  /** Un registro por serie y fecha (DEC-60): `daily:<fecha>` y `daily-spinoff:<fecha>`. */
+  getDaily(date: string, series?: Series): DailyRecord | null
+  setDaily(date: string, record: DailyRecord, series?: Series): void
+  /** Ultima serie elegida en Diario (DEC-60); por defecto la principal. */
+  getDailySeries(): Series
+  setDailySeries(series: Series): void
   getSettings(): HintSettings
   setSettings(settings: HintSettings): void
   getVolume(): number
@@ -46,7 +53,13 @@ const isDailyRecord = (value: unknown): value is DailyRecord =>
   typeof value.finished === 'boolean' &&
   (value.view === undefined || isRecord(value.view))
 
-const isUnlimitedRecord = (value: unknown): value is UnlimitedRecord => isRecord(value) && typeof value.token === 'string'
+const isUnlimitedRecord = (value: unknown): value is UnlimitedRecord =>
+  isRecord(value) &&
+  typeof value.token === 'string' &&
+  (value.games === undefined || (Array.isArray(value.games) && value.games.every((id) => typeof id === 'string')))
+
+const dailyKey = (date: string, series: Series = 'main') => (series === 'spinoff' ? `daily-spinoff:${date}` : `daily:${date}`)
+const isSeries = (value: unknown): value is Series => value === 'main' || value === 'spinoff'
 
 function parseSettings(value: unknown): HintSettings | null {
   if (!isRecord(value)) return null
@@ -118,8 +131,10 @@ export function createStore(storage: Storage): Store {
     },
     getFilter: () => read('filter', (v): v is string[] => Array.isArray(v) && v.every((id) => typeof id === 'string')) ?? [],
     setFilter: (ids) => write('filter', ids),
-    getDaily: (date) => read(`daily:${date}`, isDailyRecord),
-    setDaily: (date, record) => write(`daily:${date}`, record),
+    getDaily: (date, series) => read(dailyKey(date, series), isDailyRecord),
+    setDaily: (date, record, series) => write(dailyKey(date, series), record),
+    getDailySeries: () => read('dailySeries', isSeries) ?? 'main',
+    setDailySeries: (series) => write('dailySeries', series),
     getSettings: () => memorySettings ?? parseSettings(read('settings', isRecord)) ?? DEFAULT_SETTINGS,
     setSettings: (settings) => {
       memorySettings = { consoleHint: settings.consoleHint, dateHint: settings.dateHint }

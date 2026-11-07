@@ -1,7 +1,7 @@
 import { expect } from '@playwright/test'
 import type { Locator, Page, Response } from '@playwright/test'
 
-export type Mode = 'daily' | 'unlimited'
+export type Mode = 'daily' | 'spinoff' | 'unlimited'
 
 /** Page Object de la app: un tablero por modo (los dos estan montados, solo uno visible). */
 export class Board {
@@ -10,7 +10,8 @@ export class Board {
     readonly page: Page,
     readonly mode: Mode,
   ) {
-    this.root = page.getByRole('region', { name: mode === 'daily' ? 'Partida diaria' : 'Partida libre' })
+    const name = { daily: 'Partida diaria', spinoff: 'Partida diaria spin-off', unlimited: 'Partida libre' }[mode]
+    this.root = page.getByRole('region', { name, exact: true })
   }
 
   get rows() {
@@ -136,10 +137,18 @@ export class Board {
 
 export class HeardlePage {
   readonly daily: Board
+  /** Diario spin-off (DEC-60): solo existe si el catalogo tiene spin-offs y tras elegirlo. */
+  readonly spinoff: Board
   readonly unlimited: Board
   constructor(readonly page: Page) {
     this.daily = new Board(page, 'daily')
+    this.spinoff = new Board(page, 'spinoff')
     this.unlimited = new Board(page, 'unlimited')
+  }
+
+  /** Conmutador Principal / Spin-off dentro de Diario (DEC-60). */
+  seriesButton(series: 'Principal' | 'Spin-off') {
+    return this.page.getByRole('group', { name: 'Serie del diario' }).getByRole('button', { name: series, exact: true })
   }
 
   async goto() {
@@ -176,6 +185,29 @@ export class HeardlePage {
   }
   async showDaily() {
     await this.page.getByRole('button', { name: 'Diario', exact: true }).click()
+  }
+
+  /**
+   * Partida libre con varios juegos cuyo objetivo se identifica por el tono del clip (DEC-60: el buscador del libre
+   * solo ofrece los juegos de la partida, asi que un fallo de otro juego exige que ese juego este en el filtro).
+   * Con `wantedId`, repite la partida (saltando las 6 veces) hasta que el objetivo sea esa cancion. Requiere
+   * `page.addInitScript(INSTRUMENT_WEBAUDIO)` antes de `goto()`.
+   */
+  async startUnlimitedFor<T extends { id: string; toneHz: number }>(gameNames: string[], candidates: T[], wantedId?: string, maxTries = 30): Promise<T> {
+    const { identifyByTone } = await import('../support/webaudio.ts')
+    await this.startUnlimited(gameNames)
+    for (let attempt = 0; ; attempt++) {
+      const target = await identifyByTone(this.page, candidates)
+      if (!wantedId || target.id === wantedId) return target
+      if (attempt >= maxTries) throw new Error(`El objetivo ${wantedId} no salio en ${maxTries} partidas`)
+      await this.unlimited.skipAll()
+      await expect(this.unlimited.resultHeading).toBeVisible()
+      await Promise.all([
+        this.page.waitForResponse((r) => r.url().endsWith('/api/games') && r.request().method() === 'POST'),
+        this.unlimited.startButton.click(),
+      ])
+      await this.unlimited.ready()
+    }
   }
 
   /** Inicia una partida libre con el filtro dado (nombres de juego) y espera la vista. */

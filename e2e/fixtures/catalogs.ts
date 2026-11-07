@@ -23,6 +23,8 @@ export interface FixtureGame {
   consoles: string[]
   /** Grupo de seleccion (DEC-54): id del juego cabeza. Ausente = su propio grupo. */
   selectionGroup?: string
+  /** Serie (DEC-60). Ausente = principal. */
+  series?: 'main' | 'spinoff'
 }
 
 export interface FixtureCatalog {
@@ -105,9 +107,29 @@ export const M_CATALOG: FixtureCatalog = {
   songs: M_SONGS.map(({ toneHz: _t, ...rest }) => rest),
 }
 
+/**
+ * Catalogo S (DEC-60): un juego principal y un spin-off, con una cancion cada uno; cada diario resuelve siempre a la
+ * cancion de su serie. La cancion spin-off contiene la palabra de busqueda comun ("Theme") para probar el buscador.
+ */
+export const S_SONGS: FixtureSong[] = [
+  song('sigma-main-theme', 'Sigma Main Theme', ['game-sigma'], 'c1c1c1c1c1c1c1c1', 350),
+  song('spin-dungeon-theme', 'Dungeon Spin Theme', ['game-spin'], 'c2c2c2c2c2c2c2c2', 420),
+]
+
+export const S_CATALOG: FixtureCatalog = {
+  version: 1,
+  generatedAt: '2026-11-07T12:00:00Z',
+  games: [
+    { id: 'game-sigma', name: 'Pokemon Game Sigma', consoles: ['GBA'] },
+    { id: 'game-spin', name: 'Pokemon Spin Dungeon', consoles: ['GC'], series: 'spinoff' },
+  ],
+  songs: S_SONGS.map(({ toneHz: _t, ...rest }) => rest),
+}
+
 export const STORES = {
   R: { catalog: R_CATALOG, songs: R_SONGS },
   M: { catalog: M_CATALOG, songs: M_SONGS },
+  S: { catalog: S_CATALOG, songs: S_SONGS },
 } as const
 
 // ---- Fixture del admin (E2E-62..72) ---------------------------------------------------------------------

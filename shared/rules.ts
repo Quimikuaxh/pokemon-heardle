@@ -2,7 +2,12 @@ export const CLIP_SECONDS: readonly number[] = [1, 2, 4, 7, 11, 16]
 export const MAX_ATTEMPTS = 6
 
 /** Consolas de los juegos, en orden canonico de salida (DEC-50, DEC-51). Unico origen: nadie mas lista consolas. */
-export const CONSOLES = ['GB', 'GBC', 'GBA', 'DS', '3DS', 'Switch', 'Switch 2'] as const
+// Orden canonico = orden de salida. GC (GameCube) para Colosseum y XD (DEC-60).
+export const CONSOLES = ['GB', 'GBC', 'GBA', 'GC', 'DS', '3DS', 'Switch', 'Switch 2'] as const
+
+/** Serie de un juego (DEC-60): la principal o un spin-off. Un juego sin `series` es de la principal. */
+export const SERIES = ['main', 'spinoff'] as const
+export type Series = (typeof SERIES)[number]
 export type ConsoleName = (typeof CONSOLES)[number]
 
 // Formato del clip unico de 16 s (DEC-44): MPEG-1 Layer III, 128 kbps CBR, 44,1 kHz, estereo, sin Xing.

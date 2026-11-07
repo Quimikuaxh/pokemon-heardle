@@ -122,8 +122,8 @@ export function createHandler(deps: HandlerDeps): ApiHandler {
     let payload: TokenPayload
     if (parsed.mode === 'daily') {
       const date = madridDate(now())
-      const target = selectDaily(index.enabledSongs, index.games, config.dailySeed, date)
-      payload = createPayload({ mode: 'daily', target, date, nowMs: now() })
+      const target = selectDaily(index.enabledSongs, index.games, config.dailySeed, date, parsed.series)
+      payload = createPayload({ mode: 'daily', target, date, series: parsed.series, nowMs: now() })
     } else {
       const target = selectUnlimited(index, parsed.games, randomInt)
       payload = createPayload({ mode: 'unlimited', target, nowMs: now() })

@@ -314,7 +314,7 @@ test.describe('Admin: consolas y grupos de seleccion', () => {
     await expect(charlie).toContainText('Sin consola')
     await expect(gameRow(page, 'alpha')).not.toContainText('Sin consola')
     const group = charlie.getByRole('group', { name: 'Consolas del juego charlie' })
-    await expect(group.getByRole('checkbox')).toHaveCount(7)
+    await expect(group.getByRole('checkbox'), 'una casilla por consola de CONSOLES (GC incluida, DEC-60)').toHaveCount(8)
     await expect(charlie.getByRole('button', { name: 'Guardar consolas charlie' }), 'sin ninguna casilla no se puede guardar').toBeDisabled()
 
     await group.getByRole('checkbox', { name: 'Switch 2', exact: true }).check()

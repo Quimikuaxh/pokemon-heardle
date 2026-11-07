@@ -4,6 +4,8 @@ import type { Song } from '../../../shared/catalog'
 export interface GroupedGame {
   id: string
   selectionGroup?: string
+  /** Serie (DEC-60); ausente = principal. */
+  series?: 'main' | 'spinoff'
 }
 
 export interface SelectionGroup {

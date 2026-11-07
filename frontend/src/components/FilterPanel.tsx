@@ -4,7 +4,8 @@ import { DexNote, DexPanel, DexScreen } from './Pokedex'
 import { PlayIcon } from './icons'
 
 interface FilterGamesProps {
-  games: Array<{ id: string; name: string }>
+  /** `series` (DEC-60): con algun spin-off, la lista se parte en "Principales" y "Spin-offs". */
+  games: Array<{ id: string; name: string; series?: 'main' | 'spinoff' }>
   selected: string[]
   onChange(ids: string[]): void
   /** Canciones del catalogo publico: con ellas se muestran los contadores por juego y el total en juego. */
@@ -47,23 +48,50 @@ export function FilterGames({ games, selected, onChange, songs }: FilterGamesPro
   const selectedSet = new Set(selected)
   const counts = songs ? new Map(games.map((game) => [game.id, songs.filter((song) => song.games.includes(game.id)).length])) : null
   const toggle = (gameId: string) => onChange(selectedSet.has(gameId) ? selected.filter((id) => id !== gameId) : [...selected, gameId])
+  // Secciones (DEC-60): solo si hay spin-offs; si no, una lista como siempre.
+  const spinoffs = games.filter((game) => game.series === 'spinoff')
+  const sections: Array<{ title: string | null; label: string; games: typeof games }> =
+    spinoffs.length > 0
+      ? [
+          { title: 'Principales', label: 'los principales', games: games.filter((game) => game.series !== 'spinoff') },
+          { title: 'Spin-offs', label: 'los spin-offs', games: spinoffs },
+        ]
+      : [{ title: null, label: '', games }]
+  const selectAll = (ids: string[]) => onChange([...new Set([...selected, ...ids])])
 
   return (
     <section aria-label="Elegir juegos" className="flex flex-col gap-4">
       <DexPanel title="JUEGOS" label={`${selected.length} DE ${games.length} JUEGOS`}>
-        <div className="grid gap-x-[18px] px-3 py-2 lg:grid-cols-2 lg:px-[18px]">
-          {games.map((game) => {
-            const checked = selectedSet.has(game.id)
-            return (
-              <label key={game.id} className="flex min-h-11 cursor-pointer items-center gap-3 border-b-2 border-track py-1.5">
-                <input type="checkbox" className="m-0 size-5 flex-none accent-played" checked={checked} onChange={() => toggle(game.id)} />
-                <GameSwatch gameId={game.id} />
-                <span className={`flex-1 text-[15px] ${checked ? 'font-semibold' : 'text-screen-dim'}`}>{shortGameName(game.name)}</span>
-                {counts && <span className="font-mono text-xs text-screen-dim">{counts.get(game.id)}</span>}
-              </label>
-            )
-          })}
-        </div>
+        {sections.map((section) => (
+          <div key={section.title ?? 'todos'} role={section.title ? 'group' : undefined} aria-label={section.title ?? undefined}>
+            {section.title && (
+              <div className="flex items-center justify-between gap-3 border-b-2 border-track px-3 pb-1 pt-3 lg:px-[18px]">
+                <span className="font-mono text-[11px] font-bold tracking-[2px] text-screen-dim uppercase">{section.title}</span>
+                <button
+                  type="button"
+                  aria-label={`Todos ${section.label}`}
+                  onClick={() => selectAll(section.games.map((game) => game.id))}
+                  className="min-h-9 rounded-md border-2 border-screen-ink px-2.5 text-xs font-bold text-screen-ink hover:bg-track"
+                >
+                  Todos
+                </button>
+              </div>
+            )}
+            <div className="grid gap-x-[18px] px-3 py-2 lg:grid-cols-2 lg:px-[18px]">
+              {section.games.map((game) => {
+                const checked = selectedSet.has(game.id)
+                return (
+                  <label key={game.id} className="flex min-h-11 cursor-pointer items-center gap-3 border-b-2 border-track py-1.5">
+                    <input type="checkbox" className="m-0 size-5 flex-none accent-played" checked={checked} onChange={() => toggle(game.id)} />
+                    <GameSwatch gameId={game.id} />
+                    <span className={`flex-1 text-[15px] ${checked ? 'font-semibold' : 'text-screen-dim'}`}>{shortGameName(game.name)}</span>
+                    {counts && <span className="font-mono text-xs text-screen-dim">{counts.get(game.id)}</span>}
+                  </label>
+                )
+              })}
+            </div>
+          </div>
+        ))}
       </DexPanel>
       <div className="flex gap-2.5">
         <button type="button" className={pillClass} onClick={() => onChange(games.map((game) => game.id))}>

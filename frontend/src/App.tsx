@@ -8,6 +8,8 @@ import { SettingsPanel } from './components/SettingsPanel'
 import { API_BASE_URL } from './config'
 import { createGameController } from './game/controller'
 import { createStore } from './storage/store'
+import { hasSpinoffs } from './game/scope'
+import type { Series } from '../../shared/rules'
 import type { HintSettings } from './storage/store'
 
 type Tab = 'daily' | 'unlimited'
@@ -22,13 +24,31 @@ interface ControlsProps {
   onTab: (tab: Tab) => void
   settings: HintSettings
   onSettingsChange: (settings: HintSettings) => void
+  /** Serie del diario y su cambio (DEC-60); sin `onSeries` no hay spin-offs y no se pinta el conmutador. */
+  series: Series
+  onSeries?: (series: Series) => void
 }
 
-/** Controles bajo la cabecera de la hoja izquierda (DEC-59): tecla de pistas y selector de modo. */
-function Controls({ tab, onTab, settings, onSettingsChange }: ControlsProps) {
+/** Controles bajo la cabecera de la hoja izquierda (DEC-59): tecla de pistas, serie del diario (DEC-60) y modo. */
+function Controls({ tab, onTab, settings, onSettingsChange, series, onSeries }: ControlsProps) {
   return (
     <DexControls>
       <SettingsPanel settings={settings} onChange={onSettingsChange} />
+      {onSeries && tab === 'daily' && (
+        // Movil: segunda fila a todo el ancho, bajo Pistas y Diario/Libre; escritorio: en la misma fila, antes del modo.
+        <div
+          role="group"
+          aria-label="Serie del diario"
+          className="order-last flex basis-full rounded-[10px] border-[3px] border-edge shadow-[0_4px_0_var(--edge)] lg:order-none lg:ml-auto lg:basis-auto lg:flex-none"
+        >
+          <button type="button" className={`flex-1 lg:flex-none ${toggleButton(series === 'main', 'first')}`} aria-pressed={series === 'main'} onClick={() => onSeries('main')}>
+            Principal
+          </button>
+          <button type="button" className={`flex-1 lg:flex-none ${toggleButton(series === 'spinoff', 'last')}`} aria-pressed={series === 'spinoff'} onClick={() => onSeries('spinoff')}>
+            Spin-off
+          </button>
+        </div>
+      )}
       <div role="group" aria-label="Modo de juego" className="flex flex-none rounded-[10px] border-[3px] border-edge shadow-[0_4px_0_var(--edge)]">
         <button type="button" className={toggleButton(tab === 'daily', 'first')} aria-pressed={tab === 'daily'} onClick={() => onTab('daily')}>
           Diario
@@ -55,7 +75,18 @@ function LoadedApp({ catalog, api }: { catalog: PublicCatalog; api: ReturnType<t
   const [settings, setSettings] = useState(() => store.getSettings())
   const [volume, setVolume] = useState(() => store.getVolume())
   const dailyController = useMemo(() => createGameController({ api, store, catalog }), [api, store, catalog])
+  const spinoffController = useMemo(() => createGameController({ api, store, catalog, dailySeries: 'spinoff' }), [api, store, catalog])
   const unlimitedController = useMemo(() => createGameController({ api, store, catalog }), [api, store, catalog])
+  // Diario spin-off (DEC-60): solo con juegos spin-off en el catalogo; su tablero se monta la primera vez que se elige
+  // (montarlo crea la partida del dia).
+  const spinoffs = useMemo(() => hasSpinoffs(catalog), [catalog])
+  const [series, setSeries] = useState<Series>(() => (spinoffs ? store.getDailySeries() : 'main'))
+  const [spinoffMounted, setSpinoffMounted] = useState(series === 'spinoff')
+  const changeSeries = (next: Series) => {
+    store.setDailySeries(next)
+    setSeries(next)
+    if (next === 'spinoff') setSpinoffMounted(true)
+  }
 
   const changeSettings = (next: HintSettings) => {
     store.setSettings(next)
@@ -69,8 +100,13 @@ function LoadedApp({ catalog, api }: { catalog: PublicCatalog; api: ReturnType<t
 
   return (
     <>
-      <Controls tab={tab} onTab={setTab} settings={settings} onSettingsChange={changeSettings} />
-      <div hidden={tab !== 'daily'} className="contents">
+      <Controls tab={tab} onTab={setTab} settings={settings} onSettingsChange={changeSettings} series={series} onSeries={spinoffs ? changeSeries : undefined} />
+      {spinoffMounted && (
+        <div hidden={tab !== 'daily' || series !== 'spinoff'} className="contents">
+          <GameBoard mode="daily" series="spinoff" controller={spinoffController} api={api} catalog={catalog} store={store} settings={settings} volume={volume} onVolumeChange={changeVolume} />
+        </div>
+      )}
+      <div hidden={tab !== 'daily' || series !== 'main'} className="contents">
         <GameBoard mode="daily" controller={dailyController} api={api} catalog={catalog} store={store} settings={settings} volume={volume} onVolumeChange={changeVolume} />
       </div>
       <div hidden={tab !== 'unlimited'} className="contents">

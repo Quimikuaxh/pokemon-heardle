@@ -30,6 +30,8 @@ export function createPayload(options: {
   mode: 'daily' | 'unlimited'
   target: Song
   date?: string
+  /** Serie del diario (DEC-60); por defecto la principal. */
+  series?: 'main' | 'spinoff'
   nowMs: number
 }): TokenPayload {
   const iat = Math.floor(options.nowMs / 1000)
@@ -38,7 +40,7 @@ export function createPayload(options: {
     if (!options.date) throw new Error('El modo diario necesita fecha')
     return {
       ...base,
-      m: 'd',
+      m: options.series === 'spinoff' ? 's' : 'd',
       d: options.date,
       exp: Math.floor(endOfMadridDayMs(options.date) / 1000) + DAILY_GRACE_SEC,
     }
@@ -107,7 +109,7 @@ export function buildGameView(
   const guesses = payload.q.map((clipKey) => index.songByClipKey(clipKey)?.id).filter((id): id is string => !!id)
   const view: GameView = {
     token: extras.token,
-    mode: payload.m === 'd' ? 'daily' : 'unlimited',
+    mode: payload.m === 'u' ? 'unlimited' : 'daily',
     status,
     attempt: payload.r.length,
     maxAttempts: MAX_ATTEMPTS as 6,
@@ -116,7 +118,10 @@ export function buildGameView(
     guesses,
     hints: buildHints(payload, index),
   }
-  if (payload.m === 'd') view.date = payload.d
+  if (payload.m !== 'u') {
+    view.date = payload.d
+    view.series = payload.m === 's' ? 'spinoff' : 'main'
+  }
   if (status === 'playing' && extras.clipUrl) view.clipUrl = extras.clipUrl
   if (status !== 'playing') {
     const target = index.songByClipKey(payload.k)

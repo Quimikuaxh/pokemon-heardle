@@ -111,11 +111,13 @@ test.describe('Ilimitado, filtro y feedback de juego', () => {
     await expect(u.solution).toHaveText(target.title)
   })
 
-  test('E2E-18_should_report_wrong_game_when_failed_song_shares_none', async ({ app }) => {
+  test('E2E-18_should_report_wrong_game_when_failed_song_shares_none', async ({ app, page }) => {
+    // DEC-60: el juego del fallo tiene que estar en la partida: Charlie y Delta, objetivo identificado por el tono.
+    await page.addInitScript(INSTRUMENT_WEBAUDIO)
     const u = app.unlimited
     await app.goto()
-    await app.startUnlimited([CHARLIE])
-    const other = byId('b-one-song-03')
+    const target = await app.startUnlimitedFor([CHARLIE, DELTA], [SOLO_C, ONLY_D])
+    const other = target.id === SOLO_C.id ? ONLY_D : SOLO_C
     await u.guess(other.title)
     await expect(u.rows.nth(0)).toContainText(LABEL.miss)
   })

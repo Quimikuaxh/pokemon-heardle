@@ -1,4 +1,4 @@
-import type { ConsoleName } from '../../../../shared/rules'
+import type { ConsoleName, Series } from '../../../../shared/rules'
 
 export interface AdminSong {
   id: string
@@ -21,6 +21,8 @@ export interface AdminGame {
   consoles: ConsoleName[]
   /** Grupo de seleccion efectivo (DEC-54): el propio id si el juego no tiene grupo. */
   selectionGroup: string
+  /** Serie efectiva (DEC-60). */
+  series: Series
   /** El juego tiene canciones activas y ninguna consola: validate y upload lo rechazan. */
   missingConsoles: boolean
   songCount: number
@@ -31,6 +33,7 @@ export interface GamePatch {
   consoles?: ConsoleName[]
   /** null: el juego vuelve a su propio grupo. */
   selectionGroup?: string | null
+  series?: Series
 }
 
 export interface AdminCatalog {
@@ -43,7 +46,7 @@ export interface AdminApi {
   patchSong(id: string, patch: Record<string, unknown>): Promise<AdminSong>
   createGame(name: string): Promise<{ id: string; name: string }>
   renameGame(id: string, name: string): Promise<{ id: string; name: string }>
-  patchGame(id: string, patch: GamePatch): Promise<{ id: string; name: string; consoles: ConsoleName[]; selectionGroup: string }>
+  patchGame(id: string, patch: GamePatch): Promise<{ id: string; name: string; consoles: ConsoleName[]; selectionGroup: string; series: Series }>
 }
 
 export class AdminApiError extends Error {}

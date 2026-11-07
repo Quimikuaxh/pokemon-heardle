@@ -1,3 +1,4 @@
+import type { Series } from '../../../shared/rules'
 import type { GameView, PublicCatalog } from '../../../shared/api'
 import { madridDate } from '../../../shared/date'
 import { ApiError } from '../api/client'
@@ -37,6 +38,8 @@ export interface GameController {
   subscribe(listener: () => void): () => void
   getFilter(): string[]
   setFilter(ids: string[]): void
+  /** Juegos con los que empezo la partida libre en curso (DEC-60); null si no se conocen. */
+  getPool(): string[] | null
   openDaily(): Promise<void>
   startUnlimited(): Promise<void>
   resumeUnlimited(): Promise<void>
@@ -90,8 +93,13 @@ export function createGameController(options: {
   store: Store
   catalog: PublicCatalog
   nowMs?: () => number
+  /** Serie del diario que lleva este controlador (DEC-60); por defecto la principal. */
+  dailySeries?: Series
 }): GameController {
   const { api, store, catalog } = options
+  const dailySeries: Series = options.dailySeries ?? 'main'
+  // Juegos de la partida libre en curso (acotan el buscador, DEC-60); null si no se conocen.
+  let pool: string[] | null = null
   const nowMs = options.nowMs ?? Date.now
   const listeners = new Set<() => void>()
   let state: GameState = { phase: 'idle', mode: null, view: null, notice: null, busy: false, gameSeq: 0 }
@@ -105,11 +113,11 @@ export function createGameController(options: {
   function applyView(view: GameView, options: { newGame?: boolean } = {}) {
     const finished = view.status !== 'playing'
     if (view.mode === 'daily' && view.date) {
-      store.setDaily(view.date, { token: view.token, finished, ...(finished ? { view } : {}) })
+      store.setDaily(view.date, { token: view.token, finished, ...(finished ? { view } : {}) }, view.series ?? dailySeries)
     } else if (finished) {
       store.setUnlimited(null)
     } else {
-      store.setUnlimited({ token: view.token })
+      store.setUnlimited({ token: view.token, ...(pool ? { games: pool } : {}) })
     }
     update({
       phase: finished ? 'finished' : 'playing',
@@ -126,9 +134,9 @@ export function createGameController(options: {
   }
 
   async function createDaily(rejectedToken?: string) {
-    const view = await api.createGame({ mode: 'daily' })
+    const view = await api.createGame(dailySeries === 'spinoff' ? { mode: 'daily', series: 'spinoff' } : { mode: 'daily' })
     const serverDate = view.date ?? madridDate(nowMs())
-    const existing = store.getDaily(serverDate)
+    const existing = store.getDaily(serverDate, dailySeries)
     if (existing?.finished && existing.view) {
       // Reloj del cliente desviado: esa fecha ya esta jugada, el token nuevo se descarta.
       showFinishedDaily(existing.view)
@@ -172,6 +180,8 @@ export function createGameController(options: {
 
     getFilter,
 
+    getPool: () => pool,
+
     setFilter(ids) {
       store.setFilter([...new Set(ids)])
     },
@@ -180,7 +190,7 @@ export function createGameController(options: {
       update({ phase: 'loading', mode: 'daily', view: null, notice: null, busy: true })
       await run(async () => {
         const today = madridDate(nowMs())
-        const record = store.getDaily(today)
+        const record = store.getDaily(today, dailySeries)
         if (record?.finished && record.view) showFinishedDaily(record.view)
         else if (record) await resumeDaily(record.token)
         else await createDaily()
@@ -194,13 +204,18 @@ export function createGameController(options: {
         return
       }
       update({ phase: 'loading', mode: 'unlimited', view: null, notice: null, busy: true })
-      await run(async () => applyView(await api.createGame({ mode: 'unlimited', games: filter }), { newGame: true }))
+      await run(async () => {
+        const view = await api.createGame({ mode: 'unlimited', games: filter })
+        pool = filter
+        applyView(view, { newGame: true })
+      })
       if (state.phase === 'loading') update({ phase: 'idle' })
     },
 
     async resumeUnlimited() {
       const record = store.getUnlimited()
       if (!record) return
+      pool = record.games ?? null
       update({ phase: 'loading', mode: 'unlimited', view: null, notice: null, busy: true })
       await run(
         async () => applyView(await api.getState(record.token), { newGame: true }),

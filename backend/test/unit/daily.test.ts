@@ -105,3 +105,43 @@ describe('game/daily selectDaily', () => {
     ])
   })
 })
+
+describe('game/daily selectDaily por serie (DEC-60)', () => {
+  const withSpinoffs = () => {
+    const c: any = THREE()
+    const extra: any = groupedCatalog([{ id: 'md1', songs: 4 }, { id: 'md2', songs: 2, group: 'md1' }, { id: 'xd', songs: 3 }])
+    for (const g of extra.games) c.games.push({ ...g, series: 'spinoff' })
+    // clipKeys distintos de los de THREE
+    for (const s of extra.songs) c.songs.push({ ...s, clipKey: `f${s.clipKey.slice(1)}` })
+    return c
+  }
+
+  it('BE-DAY-23 anadir juegos spin-off no cambia la cancion del dia principal (60 fechas)', () => {
+    const base = THREE()
+    const mixed = withSpinoffs()
+    for (const d of dateRange(60)) expect(selectDaily(mixed.songs, mixed.games, SEED, d, 'main').id).toBe(pick(base, d).id)
+  })
+
+  it('BE-DAY-24 el diario spin-off solo elige canciones de juegos spin-off, con la etiqueta daily-spinoff|v1|', () => {
+    const mixed = withSpinoffs()
+    const spinoffOnly = { ...mixed, games: mixed.games.filter((g: any) => g.series === 'spinoff').map(({ series, ...g }: any) => g) }
+    for (const d of dateRange(60)) {
+      const song = selectDaily(mixed.songs, mixed.games, SEED, d, 'spinoff')
+      expect(['md1', 'md2', 'xd']).toContain(song.games[0])
+      const groups = new Map<string, any[]>()
+      for (const g of spinoffOnly.games) groups.set(g.selectionGroup ?? g.id, [])
+      for (const s of [...mixed.songs].filter((s: any) => s.enabled).sort((a: any, b: any) => (a.id < b.id ? -1 : 1))) {
+        const g = spinoffOnly.games.find((x: any) => x.id === s.games[0])
+        if (g) groups.get(g.selectionGroup ?? g.id)!.push(s)
+      }
+      const ordered = [...groups].filter(([, l]) => l.length).sort(([a], [b]) => (a < b ? -1 : 1))
+      const mac = require('node:crypto').createHmac('sha256', SEED).update(`daily-spinoff|v1|${d}`).digest()
+      const [, list] = ordered[mac.readUIntBE(0, 6) % ordered.length]
+      expect(song.id).toBe(list[mac.readUIntBE(6, 6) % list.length].id)
+    }
+  })
+
+  it('BE-DAY-25 sin canciones spin-off el diario spin-off es EMPTY_FILTER', () => {
+    expect(() => selectDaily(THREE().songs as any, THREE().games as any, SEED, '2026-11-07', 'spinoff')).toThrow(expect.objectContaining({ code: 'EMPTY_FILTER' }))
+  })
+})

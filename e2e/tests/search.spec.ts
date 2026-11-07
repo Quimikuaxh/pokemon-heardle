@@ -21,14 +21,16 @@ test('E2E-20_should_search_by_title_and_by_game_name_and_select', async ({ app }
   expect(res.status()).toBe(200)
 })
 
-test('E2E-21_should_list_whole_catalog_regardless_of_filter_and_mode', async ({ app }) => {
+test('E2E-21_should_list_only_the_games_of_the_free_game_and_the_whole_series_in_the_daily', async ({ app }) => {
+  // DEC-60: el libre solo ofrece los juegos con los que empezo la partida; el diario, toda su serie.
   await app.goto()
   await app.startUnlimited(['Pokemon Game Charlie'])
   const u = app.unlimited
   await u.type('Bravo')
-  await expect(u.option('Obsidian Lantern'), 'cancion de B aunque el filtro sea {C}').toBeVisible()
-  await expect(u.gameOption('Game Bravo'), 'juego fuera del filtro').toBeVisible()
-  await expect(u.songOptions).toHaveCount(3)
+  await expect(u.options, 'ni canciones ni juegos fuera de la partida').toHaveCount(0)
+  await u.type('Charlie')
+  await expect(u.gameOption('Game Charlie')).toBeVisible()
+  await expect(u.songOptions).toHaveCount(1)
 
   await app.showDaily()
   await app.daily.ready()

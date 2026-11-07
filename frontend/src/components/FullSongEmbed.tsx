@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { PlayIcon } from './icons'
 import { VolumeControl } from './VolumeControl'
 
@@ -14,13 +15,18 @@ interface FullSongEmbedProps {
   /** Volumen comun (DEC-55), de 0 a 1; sin `onVolumeChange` no se pinta el deslizador ni se toca el volumen del video. */
   volume?: number
   onVolumeChange?(volume: number): void
+  /**
+   * Hueco dentro de la pantalla del resultado donde va el video al abrirlo (DEC-60/59): asi la Pokedex no crece y el
+   * volumen ocupa el sitio del boton. Sin hueco (uso suelto, tests), el video va aqui mismo.
+   */
+  frameTarget?: HTMLElement | null
 }
 
 /**
  * Cancion completa de YouTube (DEC-41). El iframe NO existe hasta pulsar el boton: asi no hay peticiones a
  * YouTube al terminar ni al reabrir un diario terminado. El id se valida antes de construir la URL.
  */
-export function FullSongEmbed({ youtubeId, onOpen, volume = 1, onVolumeChange }: FullSongEmbedProps) {
+export function FullSongEmbed({ youtubeId, onOpen, volume = 1, onVolumeChange, frameTarget }: FullSongEmbedProps) {
   const [opened, setOpened] = useState(false)
   const frameBox = useRef<HTMLDivElement>(null)
   const frame = useRef<HTMLIFrameElement>(null)
@@ -62,9 +68,12 @@ export function FullSongEmbed({ youtubeId, onOpen, volume = 1, onVolumeChange }:
   if (!YOUTUBE_ID_PATTERN.test(youtubeId)) return null
 
   if (opened) {
-    return (
-      <div className="flex flex-col gap-2">
-        <div ref={frameBox} tabIndex={-1} className="aspect-video w-full overflow-hidden rounded-xl border-4 border-edge outline-none">
+    const frameElement = (
+        <div
+          ref={frameBox}
+          tabIndex={-1}
+          className={`aspect-video w-full overflow-hidden outline-none ${frameTarget ? 'rounded-md border-2 border-track' : 'rounded-xl border-4 border-edge'}`}
+        >
           <iframe
             ref={frame}
             src={`${EMBED_PREFIX}${youtubeId}${controlsVolume ? EMBED_QUERY : ''}`}
@@ -76,6 +85,25 @@ export function FullSongEmbed({ youtubeId, onOpen, volume = 1, onVolumeChange }:
             onLoad={startListening}
           />
         </div>
+    )
+    if (frameTarget) {
+      return (
+        <>
+          {createPortal(frameElement, frameTarget)}
+          {/* Mismo alto que el boton al que sustituye. */}
+          <div className="flex min-h-14 items-center lg:min-h-[68px]">
+            {onVolumeChange && (
+              <div className="w-full">
+                <VolumeControl volume={volume} onChange={onVolumeChange} />
+              </div>
+            )}
+          </div>
+        </>
+      )
+    }
+    return (
+      <div className="flex flex-col gap-2">
+        {frameElement}
         {onVolumeChange && <VolumeControl volume={volume} onChange={onVolumeChange} />}
       </div>
     )

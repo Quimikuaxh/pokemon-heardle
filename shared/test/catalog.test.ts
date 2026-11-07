@@ -6,7 +6,7 @@
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import { validateCatalog, tooShort } from '../catalog'
+import { validateCatalog, tooShort, seriesOf } from '../catalog'
 
 function base(): any {
   return {
@@ -543,5 +543,29 @@ describe('shared/catalog validateCatalog', () => {
     const c = grouped({ dp2: { selectionGroup: 'zz', consoles: [] } })
     c.songs[0].games = ['rse', 'dp']
     expect(errorsOf(validateCatalog(c)).length).toBeGreaterThanOrEqual(3)
+  })
+
+  // ---- DEC-60: Game.series ----
+  it('SH-CAT-40 series ausente, main o spinoff es valido', () => {
+    expect(errorsOf(validateCatalog(grouped({})))).toEqual([])
+    expect(errorsOf(validateCatalog(grouped({ dp2: { series: 'spinoff' }, c: { series: 'main' } })))).toEqual([])
+  })
+
+  for (const [label, value] of [['otro texto', 'side'], ['numero', 1], ['null', null]] as const) {
+    it(`SH-CAT-41 series no valida (${label}) -> error que nombra juego y valor`, () => {
+      const errors = errorsOf(validateCatalog(grouped({ dp2: { series: value } })))
+      expect(errors.some((e: string) => e.includes('dp2') && e.includes('series'))).toBe(true)
+    })
+  }
+
+  it('SH-CAT-42 un grupo de seleccion no puede mezclar series', () => {
+    const errors = errorsOf(validateCatalog(grouped({ dp2: { selectionGroup: 'dp', series: 'spinoff' } })))
+    expect(errors.some((e: string) => e.includes('dp2') && e.includes('otra serie'))).toBe(true)
+    expect(errorsOf(validateCatalog(grouped({ dp: { series: 'spinoff' }, dp2: { selectionGroup: 'dp', series: 'spinoff' } })))).toEqual([])
+  })
+
+  it('SH-CAT-43 seriesOf: sin series es main', () => {
+    expect(seriesOf({})).toBe('main')
+    expect(seriesOf({ series: 'spinoff' })).toBe('spinoff')
   })
 })

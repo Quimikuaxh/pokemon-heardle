@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import type { GameView, ResultName } from '../../../shared/api'
 import { FullSongEmbed } from './FullSongEmbed'
 import { GameSwatch } from './GameSwatch'
@@ -24,6 +25,9 @@ interface ResultPanelProps {
 }
 
 export function ResultPanel({ view, onOpenFullSong, showNextDayNote = true, volume, onVolumeChange }: ResultPanelProps) {
+  // Video abierto (DEC-59): va dentro de la pantalla, en el sitio del titulo grande; asi la Pokedex no crece.
+  const [videoOpen, setVideoOpen] = useState(false)
+  const [videoSlot, setVideoSlot] = useState<HTMLDivElement | null>(null)
   if (view.status === 'playing') return null
   const won = view.status === 'won'
   // Un registro diario antiguo puede no traer youtubeId: se muestra la solucion y no el boton.
@@ -37,10 +41,22 @@ export function ResultPanel({ view, onOpenFullSong, showNextDayNote = true, volu
       <section aria-label="Resultado" aria-live="polite" className="flex flex-col gap-4">
         <DexScreen title="RESULTADO" label={statusLabel} labelClassName={won ? 'text-played' : 'text-lost-text'}>
           <div className="flex flex-col gap-3.5 pb-1">
-            <h2 className={`m-0 font-mono text-xs font-normal tracking-[2px] lg:text-sm lg:tracking-[3px] ${won ? 'text-played' : 'text-lost-text'}`}>
+            <h2
+              className={`m-0 font-mono text-xs font-normal tracking-[2px] lg:text-sm lg:tracking-[3px] ${won ? 'text-played' : 'text-lost-text'} ${videoOpen ? 'sr-only' : ''}`}
+            >
               {won ? `¡ACERTASTE EN EL INTENTO ${view.attempt}!` : '¡LA CANCIÓN SE ESCAPÓ!'}
             </h2>
-            {view.solution && (
+            {/* Con el video abierto, la solucion sigue a la vista en una linea (RQ 8) y el video ocupa el resto. */}
+            {view.solution && videoOpen && (
+              <div className="flex min-w-0 items-center gap-2.5">
+                <GameSwatch gameId={firstGameId} />
+                <span className="font-display truncate text-xl leading-tight text-white lg:text-2xl">{view.solution.title}</span>
+                <span className="truncate text-[13px] text-screen-dim lg:text-sm">{view.solution.games.map((game) => game.name).join(' · ')}</span>
+              </div>
+            )}
+            {/* El hueco existe desde el principio: si apareciera al abrir, el iframe se crearia dos veces. */}
+            <div ref={setVideoSlot} className={videoOpen ? 'mx-auto w-full lg:max-w-[360px]' : 'hidden'} />
+            {view.solution && !videoOpen && (
               <div className="flex flex-col gap-2">
                 {!won && <span className="text-[13px] text-screen-dim">Era…</span>}
                 <span className="font-display text-[34px] leading-[1.05] text-balance text-white lg:text-[52px]">{view.solution.title}</span>
@@ -50,7 +66,7 @@ export function ResultPanel({ view, onOpenFullSong, showNextDayNote = true, volu
                 </span>
               </div>
             )}
-            <div role="img" aria-label={marksDescription} className="mt-1 flex gap-2">
+            <div role="img" aria-label={marksDescription} className={`mt-1 flex gap-2 ${videoOpen ? 'hidden' : ''}`}>
               {Array.from({ length: MAX_ATTEMPTS }, (_, index) => {
                 const result = view.results[index]
                 return <span key={index} className={`h-3 w-10 rounded-md lg:w-14 ${result ? MARK_BAR_CLASS[result] : 'bg-track'}`} />
@@ -58,7 +74,19 @@ export function ResultPanel({ view, onOpenFullSong, showNextDayNote = true, volu
             </div>
           </div>
         </DexScreen>
-        {youtubeId && <FullSongEmbed key={youtubeId} youtubeId={youtubeId} onOpen={onOpenFullSong} volume={volume} onVolumeChange={onVolumeChange} />}
+        {youtubeId && (
+          <FullSongEmbed
+            key={youtubeId}
+            youtubeId={youtubeId}
+            onOpen={() => {
+              setVideoOpen(true)
+              onOpenFullSong?.()
+            }}
+            volume={volume}
+            onVolumeChange={onVolumeChange}
+            frameTarget={videoSlot}
+          />
+        )}
       </section>
       {showNextDayNote && view.mode === 'daily' && <NextDayCountdown />}
     </>

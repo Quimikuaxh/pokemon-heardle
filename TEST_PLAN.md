@@ -700,9 +700,47 @@ Prevalece sobre las filas anteriores con el mismo ID. Sin backend Node en produc
 | FE-DEX-04 [MOD] | unit | "Canciones en juego" con mayúscula inicial en la pantalla del modo libre | - | Cumple | DEC-59 | B |
 | FE-DEX-08 | unit | Alto estable: hueco fijo para el aviso de selección vacía; tras una partida, aviso y resumen en el mismo hueco; filas del historial de alto fijo (no crece al saltar); `min-height: min(860px, 100dvh - 24px)` en escritorio; métricas fijas de la fuente del logo | - | Cumple | DEC-59 | A |
 | E2E-61 [MOD] | e2e | Tras terminar una partida libre, la lista de juegos está plegada: se abre "Nueva partida" antes de cambiar el filtro | - | Cumple | DEC-59 | M |
+| FE-DEX-09 | unit | Al abrir la canción completa, el iframe está dentro de la pantalla del resultado, la solución sigue visible y el volumen sustituye al botón fuera de la pantalla | - | Cumple | DEC-59, DEC-41 | A |
 | FE-DEX-07 | unit | `index.html` enlaza `/favicon.svg` y el SVG existe en `public/` | - | Cumple | DEC-59 | B |
 
 **Verificación manual:** a 1895×911 y 1920×1080 la Pokédex entera cabe sin scroll con resultados de búsqueda a la vista; captura del favicon a 16, 32, 64 y 128 px.
+
+### 0.11 Diario de spin-offs (DEC-60)
+
+Prevalece sobre las filas anteriores con el mismo ID. Fuente: ARQUITECTURA DEC-60, REQUISITOS 3.1.
+
+**Modificados**
+
+| ID | Nivel | Descripción | Precondiciones | Resultado esperado | Cubre | P |
+|---|---|---|---|---|---|---|
+| SH-CON-01/02 [MOD] | unit | `CONSOLES` incluye `GC` entre `GBA` y `DS` (8 valores) | - | Cumple | DEC-60 | A |
+| BE-CAT-06 [MOD] | unit/int | Los juegos de `/catalog` llevan `{ id, name, series }` | - | Cumple | DEC-60 | A |
+| AD-CAT-01, AD-GAM-07 [MOD] | int | El admin devuelve `series` en cada juego | - | Cumple | DEC-60 | M |
+| AU-CON-01 [MOD] | unit | Una casilla por consola de `CONSOLES` (8, con GC) | - | Cumple | DEC-60 | M |
+
+**Nuevos**
+
+| ID | Nivel | Descripción | Precondiciones | Resultado esperado | Cubre | P |
+|---|---|---|---|---|---|---|
+| SH-CAT-40..43 | unit | `series` ausente/`main`/`spinoff` válida; otro valor, error que nombra juego; un grupo no mezcla series; `seriesOf` | - | Cumple | DEC-60 | A |
+| BE-DAY-23 | unit | Añadir spin-offs no cambia la canción del día principal (60 fechas) | - | Igual que sin spin-offs | DEC-60 | A |
+| BE-DAY-24 | unit | El diario spin-off solo elige spin-offs, con `daily-spinoff|v1|fecha` y grupos equiprobables | - | Coincide con el cálculo de referencia | DEC-60 | A |
+| BE-DAY-25 | unit | Sin spin-offs, el diario spin-off es `EMPTY_FILTER` | - | Cumple | DEC-60 | M |
+| BE-TOK-20 | unit | Token `m: 's'` con fecha va y vuelve; sin fecha o con otro modo, `TOKEN_INVALID` | - | Cumple | DEC-60 | A |
+| BE-SPO-01..07 | int | `POST /games { mode: daily, series: spinoff }`: vista con `series`, se juega y se resuelve; el principal no elige spin-offs; `/state` conserva la serie; serie no válida 400; sin spin-offs `EMPTY_FILTER`; `/catalog` con `series`; el libre admite cualquier serie | Catálogo R con D spin-off | Cumple | DEC-60 | A |
+| AD-SER-01..04 | int | Admin: serie efectiva en el listado; `PATCH { series }` (main quita el campo); valores no válidos 400; no se cambia la serie de un juego agrupado ni se agrupan series distintas | - | Cumple | DEC-60 | A |
+| AU-SER-01..03 | unit | Admin UI: desplegable "Serie" (Principal / Spin-off) que envía `PATCH { series }`; el grupo solo ofrece cabezas de la misma serie | - | Cumple | DEC-60 | M |
+| FE-SPO-01..10 | unit | `scopeCatalog`/`gamesOfSeries`/`hasSpinoffs`; controlador spin-off con `series` y registro `daily-spinoff:<fecha>`; el principal sigue con `{ mode: daily }`; la partida libre guarda y recupera sus juegos; `heardle:dailySeries`; filtro en dos secciones con "Todos" por sección; conmutador Principal / Spin-off que monta el diario spin-off al elegirlo; buscador por serie en cada diario y por juegos de la partida en el libre; sin spin-offs no hay conmutador | - | Cumple | DEC-60 | A |
+| E2E-18, E2E-26 (libre), E2E-100 [MOD] | e2e | El fallo de otro juego exige que ese juego esté en la partida (buscador del libre acotado): partida con dos juegos y objetivo identificado por el tono del clip | - | Cumple | DEC-60 | A |
+| E2E-90 (flechas), E2E-91 (reglas Z-A) [MOD] | e2e | Partida libre con los juegos de los fallos; se repite hasta que el objetivo es el del caso (`startUnlimitedFor`) | - | Cumple | DEC-60 | A |
+| E2E-21 [MOD] | e2e | Sustituye "catálogo completo": en el libre con {Charlie} no aparece nada de Bravo y sí Charlie; el diario sigue ofreciendo toda la serie principal | - | Cumple | DEC-60 | A |
+| E2E-87 [MOD] | e2e | La burbuja de Bravo se prueba con Bravo en la partida (filtro {Alpha, Bravo}) | - | Cumple | DEC-49, DEC-60 | M |
+| E2E-92 [MOD] | e2e | Las vistas del diario llevan además la clave `series` | - | Cumple | DEC-60 | A |
+| E2E-96 [MOD] | e2e | El admin muestra 8 casillas de consola (con GC) | - | Cumple | DEC-60 | M |
+| SC-UP-07 | unit | `upload --clips-only` sube los clips y no toca `catalog/catalog.json`; con `--prune` se rechaza sin subir ni borrar | Store falso | Cumple | DEC-60 | A |
+| E2E-102 | e2e | Catálogo S: diario principal y spin-off por separado, cada buscador con su serie, la serie se recuerda al recargar y cada diario conserva su resultado | Variante S | Cumple | DEC-60 | A |
+| E2E-103 | e2e | Filtro del libre con secciones "Principales" y "Spin-offs" (sin marcar); "Todos los spin-offs"; el buscador de la partida solo ofrece sus juegos | Variante S | Cumple | DEC-60 | A |
+| E2E-104 | e2e | Sin spin-offs en el catálogo no hay conmutador de serie | Variante R | Cumple | DEC-60 | M |
 
 ## 1. Alcance
 

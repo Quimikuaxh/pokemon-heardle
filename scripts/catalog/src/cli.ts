@@ -46,7 +46,7 @@ const USAGE = `Uso: npm run cli -- <subcomando> [--data-dir <ruta>]
   draft                 anade al catalogo los videos nuevos y mide la duracion de las fuentes
   build                 genera los 6 clips de cada cancion activa con ffmpeg
   validate              comprueba clips, duraciones, metadatos y tamanos
-  upload [--prune]      valida y sube clips y catalogo al bucket
+  upload [--prune | --clips-only]  valida y sube clips y catalogo al bucket (--clips-only: solo los clips)
   admin [--port 5180]   admin local del catalogo (servidor + UI en 127.0.0.1)
   similar <juegoId> [--threshold 0.8] [--all]
                         parejas de canciones del juego que suenan igual (duplicados y reversiones)
@@ -59,6 +59,7 @@ interface ParsedArgs {
   positional: string[]
   dataDir: string
   prune: boolean
+  clipsOnly: boolean
   port: number
   threshold: number
   all: boolean
@@ -68,12 +69,14 @@ function parseArgs(argv: string[]): ParsedArgs {
   const positional: string[] = []
   let dataDir = DEFAULT_DATA_DIR
   let prune = false
+  let clipsOnly = false
   let port = DEFAULT_ADMIN_PORT
   let threshold = DEFAULT_THRESHOLD
   let all = false
   for (let index = 0; index < argv.length; index++) {
     const arg = argv[index]
     if (arg === '--prune') prune = true
+    else if (arg === '--clips-only') clipsOnly = true
     else if (arg === '--all') all = true
     else if (arg === '--data-dir' || arg === '--port' || arg === '--threshold') {
       const value = argv[++index]
@@ -90,7 +93,7 @@ function parseArgs(argv: string[]): ParsedArgs {
     else positional.push(arg)
   }
   const [command, ...rest] = positional
-  return { command, positional: rest, dataDir, prune, port, threshold, all }
+  return { command, positional: rest, dataDir, prune, clipsOnly, port, threshold, all }
 }
 
 const dataPaths = (dataDir: string) => ({
@@ -366,7 +369,7 @@ async function validate(paths: DataPaths, run: Runner, io: Io): Promise<boolean>
   return result.ok
 }
 
-async function upload(paths: DataPaths, run: Runner, prune: boolean, io: Io): Promise<void> {
+async function upload(paths: DataPaths, run: Runner, prune: boolean, clipsOnly: boolean, io: Io): Promise<void> {
   const catalog = readCatalogForCommand(paths)
   const store = createS3ObjectStore(readS3Settings(process.env))
   const result = await runUpload({
@@ -374,13 +377,16 @@ async function upload(paths: DataPaths, run: Runner, prune: boolean, io: Io): Pr
     outDir: paths.clips,
     store,
     prune,
+    clipsOnly,
     validate: () => validateOutput({ catalog, outDir: paths.clips, probe: createFfprobeProbe(run) }),
   })
   io.log(`Subidos: ${result.uploaded.length}. Borrados: ${result.deleted.length}.`)
   io.log(
-    prune
-      ? 'Reinicia el backend en Render. Aviso: --prune ya ha borrado clips; hasta el reinicio el backend puede apuntar a clips borrados (conviene ejecutar --prune despues del reinicio).'
-      : 'Reinicia el backend en Render para que recargue el catalogo.',
+    clipsOnly
+      ? 'Solo clips: el catalogo publicado no cambia. Sube el catalogo con "upload" cuando toque.'
+      : prune
+        ? 'Vuelve a desplegar la funcion (npm run deploy:edge). Aviso: --prune ya ha borrado clips; hasta el despliegue la API puede apuntar a clips borrados (conviene ejecutar --prune despues).'
+        : 'Vuelve a desplegar la funcion (npm run deploy:edge) para que recargue el catalogo.',
   )
 }
 
@@ -467,7 +473,7 @@ export async function runCli(
       case 'validate':
         return (await validate(paths, run, io)) ? 0 : 1
       case 'upload':
-        await upload(paths, run, args.prune, io)
+        await upload(paths, run, args.prune, args.clipsOnly, io)
         return 0
       case 'admin':
         return await admin(args, deps, run, io)

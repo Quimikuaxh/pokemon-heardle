@@ -9,18 +9,18 @@ import type { ConsoleName } from '../rules'
 const ROOT = fileURLToPath(new URL('../../', import.meta.url))
 
 describe('shared/rules CONSOLES', () => {
-  it('SH-CON-01 CONSOLES es exactamente [GB, GBC, GBA, DS, 3DS, Switch, Switch 2] y en ese orden canonico', () => {
-    expect([...CONSOLES]).toEqual(['GB', 'GBC', 'GBA', 'DS', '3DS', 'Switch', 'Switch 2'])
+  it('SH-CON-01 CONSOLES es exactamente [GB, GBC, GBA, GC, DS, 3DS, Switch, Switch 2] y en ese orden canonico (GC: DEC-60)', () => {
+    expect([...CONSOLES]).toEqual(['GB', 'GBC', 'GBA', 'GC', 'DS', '3DS', 'Switch', 'Switch 2'])
   })
 
   it('SH-CON-01 sin repetidos', () => {
     expect(new Set(CONSOLES).size).toBe(CONSOLES.length)
   })
 
-  it('SH-CON-02 ConsoleName admite exactamente esos 7 valores', () => {
-    expectTypeOf<ConsoleName>().toEqualTypeOf<'GB' | 'GBC' | 'GBA' | 'DS' | '3DS' | 'Switch' | 'Switch 2'>()
+  it('SH-CON-02 ConsoleName admite exactamente esos 8 valores', () => {
+    expectTypeOf<ConsoleName>().toEqualTypeOf<'GB' | 'GBC' | 'GBA' | 'GC' | 'DS' | '3DS' | 'Switch' | 'Switch 2'>()
     const all: ConsoleName[] = [...CONSOLES]
-    expect(all.length).toBe(7)
+    expect(all.length).toBe(8)
   })
 })
 

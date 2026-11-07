@@ -93,7 +93,7 @@ describe('catalog/ indice y pool de ilimitado', () => {
   it('BE-CAT-06 publicCatalog incluye version y la lista de juegos con id y name', () => {
     const pub: any = idx().publicCatalog()
     expect(pub.version).toBe(1)
-    expect(pub.games[0]).toEqual({ id: 'A', name: 'Pokemon Game Alpha' })
+    expect(pub.games[0]).toEqual({ id: 'A', name: 'Pokemon Game Alpha', series: 'main' })
   })
 
   it('BE-CAT-06 [MOD] publicCatalog: cada cancion lleva UN solo juego y los juegos solo {id,name} (no se expone selectionGroup)', () => {
@@ -101,7 +101,8 @@ describe('catalog/ indice y pool de ilimitado', () => {
     c.games[1] = { ...c.games[1], selectionGroup: 'A' }
     const pub: any = indexCatalog(c).publicCatalog()
     for (const s of pub.songs) expect(s.games.length).toBe(1)
-    for (const g of pub.games) expect(Object.keys(g).sort()).toEqual(['id', 'name'])
+    // DEC-60: cada juego lleva tambien su serie efectiva.
+    for (const g of pub.games) expect(Object.keys(g).sort()).toEqual(['id', 'name', 'series'])
     expect(JSON.stringify(pub)).not.toContain('selectionGroup')
   })
 

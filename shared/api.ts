@@ -1,5 +1,5 @@
 // DTOs de la API (ARQUITECTURA 5).
-import type { ConsoleName } from './rules'
+import type { ConsoleName, Series } from './rules'
 
 export type ResultName = 'skip' | 'miss' | 'game' | 'hit'
 /**
@@ -13,6 +13,8 @@ export interface AttemptHint {
 export interface SolutionView { id: string; title: string; games: Array<{ id: string; name: string }>; youtubeId: string }
 export interface GameView {
   token: string; mode: 'daily' | 'unlimited'; date?: string; status: 'playing' | 'won' | 'lost'
+  /** Serie del diario (DEC-60); ausente en el modo libre. */
+  series?: Series
   attempt: number; maxAttempts: 6; clipSeconds: number[]; results: ResultName[]; guesses: string[]
   /** Alineado con `results`: null en skip y en acierto. */
   hints: Array<AttemptHint | null>
@@ -20,7 +22,8 @@ export interface GameView {
 }
 export interface PublicCatalog {
   version: number
-  games: Array<{ id: string; name: string }>
+  /** `series` (DEC-60): serie efectiva de cada juego, siempre presente. */
+  games: Array<{ id: string; name: string; series: Series }>
   songs: Array<{ id: string; title: string; games: string[] }>
 }
-export type CreateGameBody = { mode: 'daily' } | { mode: 'unlimited'; games: string[] }
+export type CreateGameBody = { mode: 'daily'; series?: Series } | { mode: 'unlimited'; games: string[] }

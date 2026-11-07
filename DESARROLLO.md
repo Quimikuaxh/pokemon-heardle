@@ -137,6 +137,8 @@ Empaqueta `backend/src/edge/main.ts` con esbuild en `supabase/functions/heardle/
 
 ### Publicar cambios de catálogo
 
+
+Si el catálogo usa algo que la función desplegada aún no conoce (una consola o un campo nuevos, como `GC` y `series` en DEC-60), primero se despliega la función (`npm run deploy:edge`) y después se sube el catálogo: la función vieja lo rechazaría y la web se quedaría sin catálogo. Los clips se pueden subir antes con `upload --clips-only` (la parte lenta); el catálogo, al final, con `upload`.
 `build` → `validate` → `upload` → `npm run deploy:edge` (las instancias guardan el catálogo en memoria; volver a desplegar las renueva) → opcional `upload --prune` para borrar del bucket los clips que ya no están activos. Publicar cerca de las 00:00 (Europe/Madrid): cambiar las canciones activas puede cambiar la canción del día y deja inválidas las partidas en curso cuya canción se desactive.
 
 ### Probar la función en local
@@ -163,7 +165,7 @@ Los motivos están en `ARQUITECTURA.md` (DEC-02 a DEC-04, DEC-22) y en `scripts/
 
 `npm run e2e` (raíz) ejecuta `e2e/`. Requisitos: `npm --prefix e2e install` y `npm --prefix e2e run browsers` (Chromium, Firefox, WebKit). WebKit en Linux necesita librerías del sistema (`sudo npx playwright install-deps`); sin ellas fallan solo los proyectos `webkit` y `webkit-iphone`, y `npm --prefix e2e run test:no-webkit` los omite.
 
-- `playwright.config.ts` levanta tres pares backend (driver `fs`, `NODE_ENV=test`) + Vite: **R** (catálogo R; 3101/5101), **M** (una canción; 3102/5102) y **RL** (catálogo R con `RATE_LIMIT_ACTION=3`, solo E2E-37; 3103/5103) y **X** (catálogo M con el clip corrupto en un offset intermedio, solo E2E-78; 3104/5104). Los frontends usan `e2e/vite.e2e.config.ts` para cambiar el destino del proxy de `/api`.
+- `playwright.config.ts` levanta un par backend (driver `fs`, `NODE_ENV=test`) + Vite: **R** (catálogo R; 3101/5101), **M** (una canción; 3102/5102) y **RL** (catálogo R con `RATE_LIMIT_ACTION=3`, solo E2E-37; 3103/5103) **X** (catálogo M con el clip corrupto en un offset intermedio, solo E2E-78; 3104/5104) y **S** (un juego principal y uno spin-off, DEC-60, E2E-102..103; 3105/5105). Los frontends usan `e2e/vite.e2e.config.ts` para cambiar el destino del proxy de `/api`.
 - Fixtures en `e2e/fixtures/{R,M,admin}` (catálogos + un MP3 de 16 s por canción en `clips/<clipKey>.mp3`, versionados; tono escalonado `base + 250 Hz × segundo`, tamaño y offsets de `shared/rules.ts`). Se regeneran sin ffmpeg con `npm --prefix e2e run fixtures` (encoder JS `lamejs`); las definiciones viven en `e2e/fixtures/catalogs.ts`.
 - El catálogo R (una canción = un juego, DEC-53; `consoles` en cada juego; Delta y Echo forman un grupo de selección) fija el objetivo del ilimitado con los juegos de una sola canción (`Charlie`, `Delta`, `Echo`, `Foxtrot` Switch, `Golf` Switch 2, `Zeta` Switch + Switch 2); en `Alpha`/`Bravo` el objetivo se identifica por el tono del clip (`identifyByTone`). El objetivo del diario se calcula en `e2e/support/oracle.ts` (HMAC `daily|v2|` con grupos equiprobables, sin importar código de producción).
 - Admin (E2E-62..72, `tests/admin/`): cada test copia `fixtures/admin` a un directorio temporal y arranca el servidor real del admin (`support/admin-launcher.ts`) contra él; nunca se usa `scripts/catalog/data/`. Sirve `scripts/catalog/admin-ui/dist` (se compila en el `globalSetup` si falta).

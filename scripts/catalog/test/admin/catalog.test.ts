@@ -9,13 +9,13 @@ import { catalogOf, song } from '../helpers/data'
 const byId = (r: any, id: string) => r.json.songs.find((s: any) => s.id === id)
 
 describe('AD-CAT catalogo del admin', () => {
-  it('AD-CAT-01 forma: games[{id,name,consoles,selectionGroup,missingConsoles,songCount}] y songs[AdminSong] con durationSec, tooShort, hasSource, errors', async () => {
+  it('AD-CAT-01 forma: games[{id,name,consoles,series,selectionGroup,missingConsoles,songCount}] y songs[AdminSong] con durationSec, tooShort, hasSource, errors', async () => {
     const f = await startFixture()
     const r = await f.req('GET', '/api/catalog')
     expect(r.status).toBe(200)
     expect(r.json.games.length).toBe(3)
     expect(r.json.songs.length).toBe(5)
-    for (const g of r.json.games) expect(Object.keys(g).sort()).toEqual(['consoles', 'id', 'missingConsoles', 'name', 'selectionGroup', 'songCount'])
+    for (const g of r.json.games) expect(Object.keys(g).sort()).toEqual(['consoles', 'id', 'missingConsoles', 'name', 'selectionGroup', 'series', 'songCount'])
     const s = byId(r, 'rse-littleroot-town')
     expect([typeof s.tooShort, typeof s.hasSource, Array.isArray(s.errors), s.durationSec]).toEqual(['boolean', 'boolean', true, 183.42])
     expect([s.id, s.title, s.games, s.enabled, s.reviewed, s.clipKey, s.startSec]).toEqual(['rse-littleroot-town', 'Littleroot Town', ['rse'], true, true, '1111111111111111', 0])
