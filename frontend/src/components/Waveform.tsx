@@ -13,7 +13,7 @@ const NEUTRAL_BAR_PERCENT = 20
 /** Forma de onda real del intento actual. Sin datos, barras planas: nunca se inventa una forma. */
 export function Waveform({ peaks, unlockedSec, positionSec }: WaveformProps) {
   return (
-    <div aria-hidden="true" data-waveform={peaks ? 'real' : 'neutral'} className="flex h-16 items-center gap-0.5 lg:h-[84px] lg:gap-[3px]">
+    <div aria-hidden="true" data-waveform={peaks ? 'real' : 'neutral'} className="flex h-20 items-center gap-0.5 lg:h-[120px] lg:gap-[3px]">
       {Array.from({ length: WAVEFORM_BARS }, (_, bar) => {
         const centerSec = ((bar + 0.5) * WAVEFORM_SCALE_SECONDS) / WAVEFORM_BARS
         const locked = centerSec > unlockedSec

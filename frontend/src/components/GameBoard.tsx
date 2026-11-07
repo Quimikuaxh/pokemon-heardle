@@ -10,12 +10,14 @@ import { useGameState } from '../hooks/useGameState'
 import { DEFAULT_SETTINGS, DEFAULT_VOLUME } from '../storage/store'
 import type { HintSettings, Store } from '../storage/store'
 import { AttemptList } from './AttemptList'
-import { FilterPanel } from './FilterPanel'
+import { FilterGames, FilterPanel, FilterStart } from './FilterPanel'
 import { NoticeBanner } from './NoticeBanner'
 import { ResultPanel } from './ResultPanel'
 import { SongSearch } from './SongSearch'
 import { Legend } from './Legend'
-import { NextDayNote } from './NextDayNote'
+import { NextDayCountdown } from './NextDayNote'
+import { DexLeftBody, DexPanel, DexRightBody, DexTop, DexVents } from './Pokedex'
+import { formatDayLabel } from '../game/format'
 import { Player } from './Player'
 import type { AudioStatus } from './Player'
 import { computePeaks } from '../audio/waveform'
@@ -118,23 +120,26 @@ export function GameBoard({ mode, controller, api, catalog, store, settings = DE
   const selectSong = useCallback((songId: string) => void controller.guess(songId), [controller])
   const togglePlay = () => (playback.playing ? player.pause() : player.play())
 
-  return (
-    <section
-      aria-label={mode === 'daily' ? 'Partida diaria' : 'Partida libre'}
-      className="mx-auto flex w-full max-w-[460px] flex-col gap-3.5 lg:grid lg:max-w-[1360px] lg:grid-cols-[minmax(0,460px)_minmax(0,1fr)] lg:items-start lg:justify-center lg:gap-8 xl:grid-cols-[200px_460px_minmax(0,1fr)] xl:gap-12"
-    >
-      <Legend />
+  const openDaily = useCallback(() => void controller.openDaily(), [controller])
+  const lens = view?.status === 'won' ? 'won' : view?.status === 'lost' ? 'lost' : 'playing'
+  const subtitle = mode === 'unlimited' ? 'MODO LIBRE' : `RETO DEL DÍA · ${formatDayLabel(view?.date ?? madridDate(Date.now()))}`
+  const filterProps = { games: catalog.games, songs: catalog.songs, selected: filter, onChange: changeFilter }
 
-      <div className="flex min-w-0 flex-col gap-3.5 lg:gap-[18px]">
+  // `contents`: la seccion no crea caja propia; sus hijos se colocan en las zonas de la Pokedex (DEC-58).
+  return (
+    <section aria-label={mode === 'daily' ? 'Partida diaria' : 'Partida libre'} className="contents">
+      <DexTop lens={lens} subtitle={subtitle} />
+
+      <DexLeftBody>
         <NoticeBanner notice={notice} />
         {store.writeFailed && (
-          <p role="status" className="m-0 text-sm font-medium text-amber-text">
+          <p role="status" className="m-0 rounded-[10px] border-[3px] border-edge bg-dex-yellow px-3.5 py-2.5 text-sm font-semibold text-ink">
             Este navegador no permite guardar datos: no se conservará tu progreso al recargar.
           </p>
         )}
 
         {phase === 'loading' && (
-          <p role="status" className="m-0 text-center text-muted">
+          <p role="status" className="m-0 text-center font-mono text-sm tracking-[1px] text-dex-text">
             Cargando partida...
           </p>
         )}
@@ -142,8 +147,8 @@ export function GameBoard({ mode, controller, api, catalog, store, settings = DE
         {phase === 'idle' && mode === 'daily' && (
           <button
             type="button"
-            className="min-h-11 rounded-full border-[3px] border-edge bg-lamp-red px-4 font-semibold text-white shadow-[0_4px_0_var(--edge)]"
-            onClick={() => void controller.openDaily()}
+            className="min-h-14 rounded-2xl border-4 border-edge bg-dex-blue px-4 text-[17px] font-bold text-white shadow-[0_6px_0_var(--edge)]"
+            onClick={openDaily}
           >
             Cargar la partida de hoy
           </button>
@@ -175,26 +180,29 @@ export function GameBoard({ mode, controller, api, catalog, store, settings = DE
         {phase === 'finished' && view && (
           <ResultPanel view={view} showNextDayNote={false} onOpenFullSong={() => player.stop()} volume={volume} onVolumeChange={onVolumeChange} />
         )}
+        {phase === 'finished' && view?.mode === 'daily' && <NextDayCountdown onExpire={openDaily} />}
 
-        {mode === 'unlimited' && phase !== 'loading' && !view && (
-          <FilterPanel games={catalog.games} songs={catalog.songs} selected={filter} onChange={changeFilter} onStart={startUnlimited} />
+        {mode === 'unlimited' && phase !== 'loading' && (!view || !isPlaying) && <FilterStart {...filterProps} onStart={startUnlimited} compact={view !== null} />}
+      </DexLeftBody>
+
+      <DexRightBody>
+        {view && (
+          <DexPanel title="ENTRADAS" label={`${view.results.length} / ${view.maxAttempts} USADAS`}>
+            <AttemptList view={view} catalog={catalog} settings={settings} />
+          </DexPanel>
         )}
+        {view && <Legend />}
+        {mode === 'unlimited' && phase !== 'loading' && !view && <FilterGames {...filterProps} />}
         {mode === 'unlimited' && phase !== 'loading' && view && (
-          <details open={!isPlaying} className="rounded-xl">
-            <summary className="min-h-11 cursor-pointer py-2.5 font-semibold">
+          <details open={!isPlaying} className="group">
+            <summary className="flex min-h-12 cursor-pointer items-center rounded-[10px] border-[3px] border-edge bg-dex-deep px-4 py-2.5 font-bold text-dex-text hover:brightness-125 group-open:mb-4">
               {isPlaying ? 'Filtro para la próxima partida' : 'Nueva partida'}
             </summary>
-            <FilterPanel games={catalog.games} songs={catalog.songs} selected={filter} onChange={changeFilter} onStart={startUnlimited} />
+            {isPlaying ? <FilterPanel {...filterProps} onStart={startUnlimited} /> : <FilterGames {...filterProps} />}
           </details>
         )}
-      </div>
-
-      {view && <AttemptList view={view} catalog={catalog} settings={settings} />}
-      {phase === 'finished' && view?.mode === 'daily' && (
-        <div className="lg:col-start-2">
-          <NextDayNote />
-        </div>
-      )}
+        <DexVents />
+      </DexRightBody>
     </section>
   )
 }

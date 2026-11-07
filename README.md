@@ -11,8 +11,9 @@ Adivina la canción de un juego de Pokémon a partir de fragmentos de 1/2/4/7/11
 | Carpeta | Contenido |
 |---|---|
 | `shared/` | TS puro compartido por ruta relativa: DTOs, validador de catálogo, reglas, fecha de Madrid |
-| `backend/` | Express 5 + TypeScript. Partida en token cifrado, audio solo vía ticket de un solo uso |
-| `frontend/` | React + Vite + Tailwind 4, en español, responsive, modo oscuro automático |
+| `backend/` | API en TypeScript con `Request`/`Response` estándar: la sirve Node en local y una Supabase Edge Function en producción (DEC-57). Partida en token cifrado, audio solo vía ticket de un solo uso |
+| `supabase/` | Migración del rate-limit y configuración de la Edge Function `heardle` |
+| `frontend/` | React + Vite + Tailwind 4, en español, responsive. Diseño de Pokédex abierta, igual en modo claro y oscuro (DEC-58). Publicado en GitHub Pages |
 | `scripts/catalog/` | CLI (yt-dlp + ffmpeg) para generar `catalog.json` y los clips |
 | `scripts/catalog/admin-ui/` | UI React del admin local del catálogo (no se despliega) |
 
@@ -22,10 +23,12 @@ Adivina la canción de un juego de Pokémon a partir de fragmentos de 1/2/4/7/11
 npm run install:all   # instala todos los paquetes (cada uno tiene .npmrc con legacy-peer-deps)
 npm run dev         # backend (3002) y frontend (5173) a la vez, con concurrently
 npm run admin       # admin local del catálogo en http://127.0.0.1:5180 (ver scripts/catalog/README.md)
-npm run e2e         # Playwright (carpeta e2e/, aun por crear)
+npm run e2e           # Playwright (carpeta e2e/)
 npm test              # shared + backend + scripts/catalog + frontend + admin-ui
 npm run typecheck     # tsc de shared, backend, scripts/catalog y admin-ui
-npm run build         # typecheck + build de producción del frontend y de admin-ui (dist/ de cada uno)
+npm run build         # typecheck + build de producción del frontend, de admin-ui y de la Edge Function
+npm run edge:local    # Edge Function en el Supabase local (ver DESARROLLO.md)
+npm run deploy:edge   # empaqueta y despliega la Edge Function (ver DESARROLLO.md)
 ```
 
 ## Tipografías

@@ -4,6 +4,8 @@ import tailwindcss from '@tailwindcss/vite'
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  // Rutas relativas: GitHub Pages sirve la web bajo /pokemon-heardle/ (DEC-57).
+  base: './',
   server: {
     // shared/ vive fuera de frontend/ y se importa por ruta relativa.
     fs: { allow: ['..'] },

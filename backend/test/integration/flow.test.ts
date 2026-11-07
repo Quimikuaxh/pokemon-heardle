@@ -509,6 +509,40 @@ describe('Catalogo cambiante y no disponible', () => {
     expect((await app.get('/api/health')).status).toBe(200)
   })
 
+  it('BE-CAT-12 con CATALOG_WAIT_MS una peticion que llega antes de cargar el catalogo lo espera (Edge Function, DEC-57)', async () => {
+    let release: () => void = () => {}
+    const gate = new Promise<void>((resolve) => (release = resolve))
+    const app = await startTestApp({
+      skipCatalogWait: true,
+      env: { CATALOG_WAIT_MS: '5000' },
+      wrapStore: (inner) => ({
+        getCatalog: async () => {
+          await gate
+          return inner.getCatalog()
+        },
+        getClip: (k: string) => inner.getClip(k),
+      }),
+    })
+    const pending = app.get('/api/health')
+    setTimeout(release, 50)
+    expect((await pending).status).toBe(200)
+  })
+
+  it('BE-CAT-12 con CATALOG_WAIT_MS, si no carga a tiempo -> 503 CATALOG_UNAVAILABLE', async () => {
+    const app = await startTestApp({
+      skipCatalogWait: true,
+      schedule: () => {},
+      env: { CATALOG_WAIT_MS: '50' },
+      wrapStore: (inner) => ({
+        getCatalog: async () => {
+          throw new Error('bucket caido')
+        },
+        getClip: (k: string) => inner.getClip(k),
+      }),
+    })
+    expect(codeOf(await app.get('/api/health'))).toBe('CATALOG_UNAVAILABLE')
+  })
+
   it('BE-CAT-09 /games con catalogo no cargado -> 503 CATALOG_UNAVAILABLE', async () => {
     const app = await startTestApp({
       skipCatalogWait: true,

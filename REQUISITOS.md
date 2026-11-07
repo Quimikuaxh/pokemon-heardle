@@ -42,8 +42,8 @@ Juego web estilo Heardle: adivinar la cancion de un juego de Pokemon a partir de
 
 ## 5. Stack y despliegue
 - Frontend: React + Vite + TypeScript. Backend: Node + TypeScript.
-- Hosting gratuito (CONFIRMADO), mismo esquema que claude-test: frontend en Vercel, backend en Render free, audio en bucket PRIVADO de Supabase Storage (1 GB), servido solo via backend.
-- Debe contemplarse el arranque en frio de Render free (indicador de carga, reintentos, posible ping de calentamiento al abrir la web).
+- Hosting gratuito (CONFIRMADO). Desde 2026-11-07 (decision del usuario, ARQUITECTURA DEC-57): frontend en GitHub Pages y API en una Supabase Edge Function del mismo proyecto, para no esperar al arranque en frio de Render; audio en bucket PRIVADO de Supabase Storage (1 GB), servido solo via la API. Antes: frontend en Vercel y backend en Render free.
+- Debe contemplarse un fallo o arranque lento de la API (indicador de carga y reintentos), sin ping periodico.
 - Proteccion contra abusos: rate-limit basico por IP y por token.
 
 ## 6. UI

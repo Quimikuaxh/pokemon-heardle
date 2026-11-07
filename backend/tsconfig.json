@@ -9,7 +9,8 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
-    "resolveJsonModule": true
+    "resolveJsonModule": true,
+    "types": ["node"]
   },
   "include": ["src/**/*", "test/**/*", "../shared/api.ts", "../shared/catalog.ts", "../shared/date.ts", "../shared/rules.ts"]
 }

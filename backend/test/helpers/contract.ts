@@ -63,7 +63,8 @@
  *
  * app.ts
  *   createApp({ config, store, now?: () => number, randomInt?: (max)=>number,
- *               schedule?: (fn, delayMs) => void }): Express
- *     app.locals.catalogReady: Promise<void>   (resuelve al cargar el catalogo; reintenta con backoff via `schedule`)
+ *               schedule?: (fn, delayMs) => void, limiter?: RateLimiter }): { handle, catalogReady }
+ *     handle(request: Request, clientIp): Promise<Response>   (http/handler.ts; lo sirve node/server.ts o la Edge Function, DEC-57)
+ *     catalogReady: Promise<void>   (resuelve al cargar el catalogo; reintenta con backoff via `schedule`)
  */
 export {}

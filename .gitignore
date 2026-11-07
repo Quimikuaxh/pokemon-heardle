@@ -19,3 +19,8 @@ e2e/playwright-report/
 
 # E2E: caches de Vite por instancia
 e2e/.vite-cache-*/
+
+# Supabase: bundle generado de la Edge Function (npm --prefix backend run build:edge) y estado local del CLI
+supabase/functions/heardle/index.js
+supabase/.temp/
+supabase/.branches/

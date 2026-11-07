@@ -5,9 +5,10 @@ import type { WebAudioLog } from '../support/webaudio.ts'
 import type { Page } from '@playwright/test'
 
 test.describe('Tema', () => {
+  // DEC-58: la Pokedex se ve igual en modo claro y oscuro (fondo oscuro con texto claro).
   for (const [scheme, background, color] of [
-    ['dark', 'rgb(20, 21, 24)', 'rgb(236, 234, 228)'],
-    ['light', 'rgb(236, 234, 228)', 'rgb(23, 24, 27)'],
+    ['dark', 'rgb(27, 29, 34)', 'rgb(233, 237, 230)'],
+    ['light', 'rgb(27, 29, 34)', 'rgb(233, 237, 230)'],
   ] as const) {
     test.describe(scheme, () => {
       test.use({ colorScheme: scheme })

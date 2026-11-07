@@ -108,4 +108,23 @@ describe('config: limites >= 1', () => {
       expect(() => loadConfig({ ...base, [name]: '1' })).not.toThrow()
     })
   }
+
+  it('BE-CFG-09 STORAGE_DRIVER=supabase exige SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY y STORAGE_BUCKET (DEC-57)', () => {
+    const supa = { STORAGE_DRIVER: 'supabase', SUPABASE_URL: 'https://ref.supabase.co', SUPABASE_SERVICE_ROLE_KEY: 'k', STORAGE_BUCKET: 'heardle-audio' }
+    expect(loadConfig(ok(supa)).storageDriver).toBe('supabase')
+    for (const name of ['SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY', 'STORAGE_BUCKET']) {
+      expect(thrown(() => loadConfig(ok({ ...supa, [name]: undefined }))).message).toContain(name)
+    }
+  })
+
+  it('BE-CFG-09 RATE_LIMIT_STORE: memory por defecto; postgres exige las credenciales de Supabase; otro valor lanza', () => {
+    expect(loadConfig(ok()).rateLimitStore).toBe('memory')
+    expect(() => loadConfig(ok({ RATE_LIMIT_STORE: 'postgres' }))).toThrow(/SUPABASE_URL/)
+    expect(() => loadConfig(ok({ RATE_LIMIT_STORE: 'redis' }))).toThrow(/RATE_LIMIT_STORE/)
+  })
+
+  it('BE-CFG-09 CATALOG_WAIT_MS: 0 por defecto', () => {
+    expect(loadConfig(ok()).catalogWaitMs).toBe(0)
+    expect(loadConfig(ok({ CATALOG_WAIT_MS: '8000' })).catalogWaitMs).toBe(8000)
+  })
 })

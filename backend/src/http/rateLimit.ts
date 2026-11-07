@@ -1,4 +1,3 @@
-import type { NextFunction, Request, Response } from 'express'
 import { errors } from './errors'
 
 const WINDOW_MS = 60_000
@@ -31,8 +30,7 @@ export class FixedWindowLimiter {
     }
     window.hits += 1
     if (window.hits > this.limit) {
-      const retryAfterSec = Math.max(1, Math.ceil((window.startedAt + WINDOW_MS - now) / 1000))
-      throw Object.assign(errors.rateLimited(), { retryAfterSec })
+      throw rateLimited(Math.max(1, Math.ceil((window.startedAt + WINDOW_MS - now) / 1000)))
     }
   }
 
@@ -44,13 +42,38 @@ export class FixedWindowLimiter {
   }
 }
 
-export function ipRateLimit(limiter: FixedWindowLimiter) {
-  return (req: Request, _res: Response, next: NextFunction) => {
-    try {
-      limiter.hit(req.ip ?? 'unknown')
-      next()
-    } catch (error) {
-      next(error)
+export const rateLimited = (retryAfterSec: number) => Object.assign(errors.rateLimited(), { retryAfterSec })
+
+/** Contador con nombre (global, createGame, action, clips, perGame) y la clave contada (IP o nonce de la partida). */
+export interface RateCheck {
+  bucket: string
+  key: string
+  limit: number
+}
+
+/**
+ * Cuenta las comprobaciones en orden y lanza RATE_LIMITED en la primera que supera su limite
+ * (las anteriores ya quedan contadas, como cuando eran middlewares encadenados).
+ */
+export interface RateLimiter {
+  check(checks: RateCheck[]): Promise<void>
+}
+
+/** Rate-limit en memoria: Node (desarrollo, e2e, Render). */
+export class MemoryRateLimiter implements RateLimiter {
+  private readonly limiters = new Map<string, FixedWindowLimiter>()
+
+  constructor(private readonly now: () => number) {}
+
+  async check(checks: RateCheck[]): Promise<void> {
+    for (const { bucket, key, limit } of checks) {
+      const id = `${bucket}:${limit}`
+      let limiter = this.limiters.get(id)
+      if (!limiter) {
+        limiter = new FixedWindowLimiter(limit, this.now)
+        this.limiters.set(id, limiter)
+      }
+      limiter.hit(key)
     }
   }
 }

@@ -164,7 +164,7 @@ describe('GameBoard: cambio de dia', () => {
 const mkCalls = (f: any) => f.mock.calls.length
 
 describe('App', () => {
-  it('muestra "Despertando el servidor" mientras /health falla y despues el juego', async () => {
+  it('muestra "Conectando con el servidor" mientras /health falla y despues el juego', async () => {
     vi.useFakeTimers()
     let healthCalls = 0
     globalThis.fetch = vi.fn(async (u: any) => {
@@ -177,7 +177,7 @@ describe('App', () => {
     }) as any
     render(<App />)
     await act(async () => void (await vi.advanceTimersByTimeAsync(0)))
-    expect(screen.getByText(/Despertando el servidor/)).toBeTruthy()
+    expect(screen.getByText(/Conectando con el servidor/)).toBeTruthy()
     await act(async () => void (await vi.advanceTimersByTimeAsync(2000)))
     vi.useRealTimers()
     await screen.findByRole('button', { name: /^Diario$/ })
@@ -225,13 +225,13 @@ describe('App: cabecera y tablero (DEC-46)', () => {
     expect(screen.getByRole('button', { name: 'Partida libre' }).getAttribute('aria-pressed')).toBe('true')
   })
 
-  it('FE-DSN-12 la leyenda (CLAVE) existe en el tablero, oculta por debajo de xl (1280 px) y visible desde xl', async () => {
+  it('FE-DSN-12 la leyenda (CLAVE) existe en el tablero, oculta en movil y visible desde lg en la hoja derecha (DEC-58)', async () => {
     route()
     render(<App />)
     await screen.findByRole('button', { name: /^Diario$/ })
     const legend = (await screen.findAllByRole('complementary', { hidden: true }))[0]
     expect(legend.className).toMatch(/\bhidden\b/)
-    expect(legend.className).toMatch(/xl:flex/)
+    expect(legend.className).toMatch(/lg:flex/)
     expect(legend.textContent).toContain('CLAVE')
   })
 })

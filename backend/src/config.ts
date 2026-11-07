@@ -12,13 +12,19 @@ export interface Config {
   allowedOrigin: string
   gameTokenSecret: string
   dailySeed: string
-  storageDriver: 'fs' | 's3'
+  storageDriver: 'fs' | 's3' | 'supabase'
   storageDir: string
   storageBucket?: string
   storageS3Endpoint?: string
   storageS3Region?: string
   storageS3AccessKeyId?: string
   storageS3SecretAccessKey?: string
+  /** Driver `supabase` (Edge Function, DEC-57): API REST de Storage y PostgREST con la clave service_role. */
+  supabaseUrl?: string
+  supabaseServiceRoleKey?: string
+  rateLimitStore: 'memory' | 'postgres'
+  /** Cuanto espera una peticion a que cargue el catalogo antes de responder 503 (0 = no espera). */
+  catalogWaitMs: number
   clipTicketTtlSec: number
   clipCacheMb: number
   trustProxy: number
@@ -52,9 +58,17 @@ export function loadConfig(env: Env): Config {
   const dailySeed = requireValue(env, 'DAILY_SEED')
 
   const storageDriver = env.STORAGE_DRIVER ?? 'fs'
-  if (storageDriver !== 'fs' && storageDriver !== 's3') {
-    throw new Error('STORAGE_DRIVER debe ser "fs" o "s3"')
+  if (storageDriver !== 'fs' && storageDriver !== 's3' && storageDriver !== 'supabase') {
+    throw new Error('STORAGE_DRIVER debe ser "fs", "s3" o "supabase"')
   }
+  const rateLimitStore = env.RATE_LIMIT_STORE || 'memory'
+  if (rateLimitStore !== 'memory' && rateLimitStore !== 'postgres') {
+    throw new Error('RATE_LIMIT_STORE debe ser "memory" o "postgres"')
+  }
+  if (storageDriver === 'supabase' || rateLimitStore === 'postgres') {
+    for (const name of ['SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY']) requireValue(env, name)
+  }
+  if (storageDriver === 'supabase') requireValue(env, 'STORAGE_BUCKET')
   if (storageDriver === 's3') {
     for (const name of [
       'STORAGE_BUCKET',
@@ -80,6 +94,10 @@ export function loadConfig(env: Env): Config {
     storageS3Region: env.STORAGE_S3_REGION,
     storageS3AccessKeyId: env.STORAGE_S3_ACCESS_KEY_ID,
     storageS3SecretAccessKey: env.STORAGE_S3_SECRET_ACCESS_KEY,
+    supabaseUrl: env.SUPABASE_URL,
+    supabaseServiceRoleKey: env.SUPABASE_SERVICE_ROLE_KEY,
+    rateLimitStore,
+    catalogWaitMs: readInt(env, 'CATALOG_WAIT_MS', 0),
     clipTicketTtlSec: readInt(env, 'CLIP_TICKET_TTL_SEC', 60),
     clipCacheMb: readInt(env, 'CLIP_CACHE_MB', 32),
     trustProxy: readInt(env, 'TRUST_PROXY', 1),

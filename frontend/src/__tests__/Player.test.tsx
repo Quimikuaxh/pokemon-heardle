@@ -28,10 +28,10 @@ describe('Player (reproductor tipo Pokedex)', () => {
     expect(container.textContent).toContain('1 · 2 · 4 · 7 · 11 · 16 s')
   })
 
-  it('FE-DSN-06 tiene lente y tres luces, la onda y la barra segmentada', () => {
+  it('FE-DSN-06 pantalla con "INTENTO n/m", la onda y la barra segmentada; la lente va en la cabecera de la Pokedex (DEC-58)', () => {
     const { container } = setup()
-    expect(container.querySelector('[data-lens]')).toBeTruthy()
-    expect(container.querySelectorAll('[data-lens] ~ span.rounded-full').length).toBe(3)
+    expect(screen.getByText('INTENTO 3/6')).toBeTruthy()
+    expect(container.querySelector('[data-lens]')).toBeNull()
     expect(container.querySelector('[data-waveform]')).toBeTruthy()
     expect(screen.getByRole('progressbar')).toBeTruthy()
   })

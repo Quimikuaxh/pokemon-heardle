@@ -7,7 +7,7 @@ const MAX_RETRY_DELAY_MS = 15_000
 const GIVE_UP_AFTER_MS = 90_000
 
 /**
- * Una llamada a /health al abrir y reintentos con backoff mientras Render despierta (hasta ~90 s).
+ * Una llamada a /health al abrir y reintentos con backoff si la API no responde (hasta ~90 s; DEC-14, DEC-57).
  * Sin pings periodicos tras estar listo (REQUISITOS 9: no keep-alive).
  */
 export function useBackendWarmup(api: { health(): Promise<unknown> }): { status: WarmupStatus; retry(): void } {

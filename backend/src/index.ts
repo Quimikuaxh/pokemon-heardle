@@ -1,6 +1,7 @@
 import 'dotenv/config'
 import { S3Client } from '@aws-sdk/client-s3'
 import { createApp } from './app'
+import { createNodeServer } from './node/server'
 import { loadConfig } from './config'
 import type { ClipStore } from './storage/ClipStore'
 import { CachedClipStore } from './storage/CachedClipStore'
@@ -29,6 +30,11 @@ const driverStore: ClipStore =
 
 const store = new CachedClipStore(driverStore, new LruCache(config.clipCacheMb * 1024 * 1024))
 
-createApp({ config, store }).listen(config.port, () => {
+if (config.storageDriver === 'supabase' || config.rateLimitStore === 'postgres') {
+  throw new Error('El servidor Node solo admite STORAGE_DRIVER fs/s3 y RATE_LIMIT_STORE memory; supabase/postgres son de la Edge Function')
+}
+
+const app = createApp({ config, store })
+createNodeServer(app.handle, config.trustProxy).listen(config.port, () => {
   console.log(`pokemon-heardle backend escuchando en el puerto ${config.port}`)
 })

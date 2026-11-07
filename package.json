@@ -6,12 +6,16 @@
     "install:all": "npm install && npm --prefix shared install && npm --prefix backend install && npm --prefix frontend install && npm --prefix scripts/catalog install && npm --prefix scripts/catalog/admin-ui install",
     "test": "npm --prefix shared test && npm --prefix backend test && npm --prefix scripts/catalog test && npm --prefix frontend test && npm --prefix scripts/catalog/admin-ui test",
     "typecheck": "npm --prefix shared run typecheck && npm --prefix backend run typecheck && npm --prefix scripts/catalog run typecheck && npm --prefix scripts/catalog/admin-ui run typecheck",
-    "build": "npm run typecheck && npm --prefix frontend run build && npm --prefix scripts/catalog/admin-ui run build",
+    "build": "npm run typecheck && npm --prefix frontend run build && npm --prefix scripts/catalog/admin-ui run build && npm run build:edge",
     "dev": "concurrently -n backend,frontend -c blue,green \"npm --prefix backend run dev\" \"npm --prefix frontend run dev\"",
     "e2e": "npm --prefix e2e test",
-    "admin": "npm --prefix scripts/catalog run cli -- admin"
+    "admin": "npm --prefix scripts/catalog run cli -- admin",
+    "build:edge": "npm --prefix backend run build:edge",
+    "deploy:edge": "npm --prefix backend run build:edge && supabase functions deploy heardle --project-ref xvkvzrdvtcnjnbhtydfn --use-api --no-verify-jwt --yes",
+    "edge:local": "npm --prefix backend run build:edge && supabase functions serve heardle --env-file supabase/functions/.env"
   },
   "devDependencies": {
-    "concurrently": "^9.2.1"
+    "concurrently": "^9.2.1",
+    "supabase": "^2.122.0"
   }
 }

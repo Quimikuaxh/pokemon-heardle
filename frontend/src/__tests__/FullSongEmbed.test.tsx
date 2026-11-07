@@ -143,10 +143,11 @@ describe('ResultPanel + FullSongEmbed', () => {
     expect(document.body.textContent).toContain('Pokémon Ruby / Sapphire / Emerald')
   })
 
-  it('FE-EMB-13 la solucion se muestra tambien antes de pulsar y el diario conserva su mensaje', () => {
+  it('FE-EMB-13 la solucion se muestra tambien antes de pulsar y el diario lleva la cuenta atras (DEC-58)', () => {
     render(<ResultPanel view={mkFinished({ mode: 'daily', date: TODAY })} />)
     expect(screen.getByText('Littleroot Town')).toBeTruthy()
-    expect(document.body.textContent).toMatch(/vuelve ma[ñn]ana/i)
+    expect(document.body.textContent).toMatch(/siguiente canci[óo]n/i)
+    expect(screen.getByRole('timer').textContent).toMatch(/^\d{2}:\d{2}:\d{2}$/)
   })
 })
 
@@ -161,20 +162,18 @@ describe('FullSongEmbed: foco', () => {
 })
 
 describe('ResultPanel: diseno acierto / derrota (DEC-46)', () => {
-  it('FE-DSN-09 acierto: "¡ACERTASTE EN EL INTENTO n!", titulo, juego con su nombre completo y estado REGISTRADA (diario)', () => {
+  it('FE-DSN-09 acierto: "¡ACERTASTE EN EL INTENTO n!", titulo, juego con su nombre completo y estado REGISTRADA (diario); la lente esta en DexTop (DEC-58)', () => {
     render(<ResultPanel view={mkFinished({ mode: 'daily', date: TODAY, attempt: 3 })} />)
     expect(screen.getByRole('heading', { name: '¡ACERTASTE EN EL INTENTO 3!' })).toBeTruthy()
     expect(screen.getByText('REGISTRADA')).toBeTruthy()
     expect(screen.getByText('Pokémon Ruby / Sapphire / Emerald')).toBeTruthy()
-    expect(document.querySelector('[data-lens="won"]')).toBeTruthy()
   })
 
-  it('FE-DSN-09 derrota: "¡LA CANCIÓN SE ESCAPÓ!", "Era…", SIN INTENTOS y lente roja', () => {
+  it('FE-DSN-09 derrota: "¡LA CANCIÓN SE ESCAPÓ!", "Era…", SIN INTENTOS', () => {
     render(<ResultPanel view={mkFinished({ status: 'lost', attempt: 6, results: ['miss', 'miss', 'miss', 'miss', 'miss', 'skip'] })} />)
     expect(screen.getByRole('heading', { name: '¡LA CANCIÓN SE ESCAPÓ!' })).toBeTruthy()
     expect(screen.getByText('Era…')).toBeTruthy()
     expect(screen.getByText('SIN INTENTOS')).toBeTruthy()
-    expect(document.querySelector('[data-lens="lost"]')).toBeTruthy()
   })
 
   it('FE-DSN-09 la fila de 6 marcas describe los resultados (sin revelar nada mas) y hay 6 marcas', () => {
@@ -183,15 +182,16 @@ describe('ResultPanel: diseno acierto / derrota (DEC-46)', () => {
     expect(marks.children.length).toBe(6)
   })
 
-  it('FE-DSN-09 el boton de la cancion completa es el rojo del diseno y sigue sin iframe hasta pulsarlo', () => {
+  it('FE-DSN-09 el boton de la cancion completa es azul y plano (DEC-58) y sigue sin iframe hasta pulsarlo', () => {
     render(<ResultPanel view={mkFinished()} />)
     const button = screen.getByRole('button', { name: BUTTON })
-    expect(button.className).toContain('bg-lamp-red')
+    expect(button.className).toContain('bg-dex-blue')
+    expect(button.className).not.toMatch(/gradient/)
     expect(iframes().length).toBe(0)
   })
 
   it('FE-DSN-09 con showNextDayNote=false el panel no pinta la nota del diario (la pinta el tablero)', () => {
     render(<ResultPanel view={mkFinished({ mode: 'daily', date: TODAY })} showNextDayNote={false} />)
-    expect(document.body.textContent).not.toMatch(/vuelve ma[ñn]ana/i)
+    expect(document.body.textContent).not.toMatch(/siguiente canci[óo]n/i)
   })
 })

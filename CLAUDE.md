@@ -25,3 +25,13 @@ Al añadir la playlist de un juego nuevo, en `scripts/catalog/data/catalog.json`
 - Nombra cada fichero de test por el módulo o la funcionalidad que prueba (`draftCli.test.ts`, `FullSongEmbed.test.tsx`), nunca por la ronda en que se escribió (`review2`, `hardening`). Motivo: el caso debe encontrarse junto al resto de casos de su módulo.
 - Un test que compare el contenido de un directorio usa un directorio padre propio, no el tmp del sistema: otros ficheros de test escriben ahí en paralelo y el resultado sería intermitente.
 - Si un test falla por un defecto del código, se arregla el código. Un test solo se cambia cuando contradice una decisión registrada en `REQUISITOS.md`/`ARQUITECTURA.md`, y se actualiza también su fila en `TEST_PLAN.md`.
+
+## Armonía visual
+
+Preferencias para revisar la interfaz (skill `armonia-visual`), fijadas por el usuario el 2026-11-07:
+
+- Centrado: exacto, o 1 px más abajo en vertical; nunca más arriba. En horizontal, 1 px a cualquier lado.
+- Tamaños de ventana: móvil 390×844 y escritorio 1920×1080.
+- Umbral: se informa de diferencias de 2 px o más.
+- Estados que mirar: carga, partida en curso (con intentos fallados, juego acertado y saltados), buscador abierto, victoria, derrota, panel de pistas y filtro del modo libre.
+- Antes de cambiar nada visual, se enseña la propuesta con capturas y se espera su aprobación.

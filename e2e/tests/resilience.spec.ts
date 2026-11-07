@@ -17,7 +17,7 @@ test.describe('Arranque en frio', () => {
       return route.continue()
     })
     await page.goto('/')
-    await expect(page.getByRole('status').filter({ hasText: 'Despertando el servidor...' })).toBeVisible()
+    await expect(page.getByRole('status').filter({ hasText: 'Conectando con el servidor…' })).toBeVisible()
     await expect(page.getByRole('region', { name: 'Partida diaria' })).toBeVisible({ timeout: 45_000 })
     expect(calls).toBe(5)
     await expect(page.getByRole('alert')).toHaveCount(0)
@@ -31,7 +31,7 @@ test.describe('Arranque en frio', () => {
     await page.clock.install()
     await page.route('**/api/health', (route) => route.fulfill(unavailable))
     await page.goto('/')
-    await expect(page.getByRole('status').filter({ hasText: 'Despertando el servidor...' })).toBeVisible()
+    await expect(page.getByRole('status').filter({ hasText: 'Conectando con el servidor…' })).toBeVisible()
     // El reloj simulado avanza por tramos; entre tramos se deja resolver la red real.
     for (let i = 0; i < 12; i++) {
       await page.clock.runFor(10_000)

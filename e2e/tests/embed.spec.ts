@@ -64,19 +64,11 @@ test.describe('Cancion completa - catalogo M', () => {
     // pageErrors (fixture) comprueba que la app no ha lanzado excepciones.
   })
 
-  test('E2E-59_should_allow_only_the_nocookie_embed_under_the_real_vercel_csp', async ({ app, page }) => {
-    const vercel = JSON.parse(readFileSync(join(E2E_DIR, '..', 'frontend', 'vercel.json'), 'utf8'))
-    const csp: string = vercel.headers[0].headers.find((h: { key: string }) => h.key === 'Content-Security-Policy').value
-    expect(csp).toBe('frame-src https://www.youtube-nocookie.com')
+  test('E2E-59_should_allow_only_the_nocookie_embed_under_the_real_csp', async ({ app, page }) => {
+    // GitHub Pages no admite cabeceras: la CSP real es la <meta> de frontend/index.html, que Vite sirve tal cual (DEC-57).
+    const html = readFileSync(join(E2E_DIR, '..', 'frontend', 'index.html'), 'utf8')
+    expect(html).toContain('<meta http-equiv="Content-Security-Policy" content="frame-src https://www.youtube-nocookie.com" />')
     const hits = await stubYoutube(page)
-    // Cabecera real de Vercel aplicada al documento (el servidor de desarrollo no lee vercel.json).
-    await page.route(
-      (url) => url.pathname === '/',
-      async (route) => {
-        const response = await route.fetch()
-        await route.fulfill({ response, headers: { ...response.headers(), 'content-security-policy': csp } })
-      },
-    )
     await page.addInitScript(() => {
       ;(window as any).__csp = []
       document.addEventListener('securitypolicyviolation', (e) => (window as any).__csp.push({ directive: e.violatedDirective, uri: e.blockedURI }))

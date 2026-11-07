@@ -32,7 +32,7 @@ Todos los subcomandos aceptan `--data-dir <ruta>` (por defecto `scripts/catalog/
 
 2. Frontend: copiar `frontend/.env.example` a `frontend/.env`. Dejar `VITE_API_URL=` vacío (Vite hace proxy de `/api` a `http://localhost:3002`).
 
-3. `npm run dev` (raíz) — arranca backend (puerto 3002) y frontend (puerto 5173) con concurrently.
+3. `npm run dev` (raíz) — arranca backend (puerto 3002) y frontend (puerto 5173) con concurrently. El backend local es el mismo manejador que la Edge Function, servido por Node (`backend/src/node/server.ts`, DEC-57).
 
 ### Compartir el entorno local con ngrok
 
@@ -59,19 +59,19 @@ Si el bucket y `data/out/` tienen aún el layout antiguo (`clips/<clipKey>/<n>.m
 
 ## Despliegue
 
-Reutiliza las cuentas del Team Builder (Supabase, Render y Vercel). No se crea ningún proyecto de Supabase nuevo: el audio va a un bucket privado del proyecto existente.
+Frontend en **GitHub Pages** y API en la **Edge Function `heardle`** de Supabase (DEC-57). Proyecto de Supabase compartido con claude-test y daily-pwt: ref `xvkvzrdvtcnjnbhtydfn`. Este repo solo usa el bucket `heardle-audio`, el esquema `heardle` y la función `public.heardle_rate_limit_hit`.
 
-Orden obligatorio: bucket y claves → subir clips y catálogo → backend en Render → frontend en Vercel → `ALLOWED_ORIGIN` → verificación. El backend lee el catálogo del bucket al arrancar: si arranca antes de que exista, `/health` responde 503 hasta reiniciarlo.
+Orden: bucket y clips → migración → secretos → función → GitHub Pages → verificación. Render (`render.yaml`) y Vercel (`frontend/vercel.json`) siguen en el repo hasta comprobar Pages en producción después del merge a `main`; luego se borran y se dan de baja.
 
-### 1. Bucket privado y claves S3 en Supabase
+### 1. Bucket privado y claves S3 (solo para `upload`)
 
-En el proyecto de Supabase del Team Builder:
+En el proyecto de Supabase:
 
 1. Storage → New bucket → nombre `heardle-audio`, **sin** marcar "Public bucket".
-2. Storage → S3 Connection: anotar el **endpoint** (`https://<ref>.supabase.co/storage/v1/s3`) y la **región** del proyecto (p. ej. `eu-west-1`). La región es obligatoria; el backend no arranca con ella vacía.
+2. Storage → S3 Connection: anotar el **endpoint** (`https://<ref>.supabase.co/storage/v1/s3`) y la **región** (p. ej. `eu-west-1`).
 3. Storage → S3 Access Keys → New access key. Anotar **Access key ID** y **Secret access key** (el secreto solo se muestra una vez).
 
-Usa estas claves S3, nunca la `service_role`: las claves S3 solo dan acceso a Storage; la `service_role` daría acceso a la base de datos del Team Builder.
+Las claves S3 solo las usa el script de catálogo en tu máquina. La función lee el bucket con la `service_role`, que Supabase le inyecta sola y nunca sale de su entorno.
 
 ### 2. Subir clips y catálogo
 
@@ -84,51 +84,64 @@ Usa estas claves S3, nunca la `service_role`: las claves S3 solo dan acceso a St
    `upload` valida antes de subir y sube solo lo nuevo o cambiado (por md5) y al final `catalog.json`.
 3. Comprobar en Supabase → Storage → `heardle-audio` que existen `catalog/catalog.json` y `clips/<clipKey>.mp3` (256.626 bytes cada uno).
 
-### 3. Backend en Render
+### 3. Migración del rate-limit
 
-1. Render → New → Web Service → repositorio `pokemon-heardle`, rama `main`, plan Free. `render.yaml` fija `rootDir: backend`, `npm ci` y `npm start` (alternativa: New → Blueprint, que lee `render.yaml`).
-2. Variables de entorno:
+`supabase/migrations/20261107000000_heardle_rate_limit.sql` (idempotente) crea `heardle.rate_limits` y `public.heardle_rate_limit_hit`, ejecutable solo por `service_role`. Se aplica con la Management API (token personal en `~/.config/daily-pwt/supabase.env`, el mismo proyecto):
 
-   | Variable | Valor |
-   |---|---|
-   | `NODE_ENV` | `production` |
-   | `STORAGE_DRIVER` | `s3` |
-   | `STORAGE_BUCKET` | `heardle-audio` |
-   | `STORAGE_S3_ENDPOINT` | endpoint del paso 1 |
-   | `STORAGE_S3_REGION` | región del paso 1 |
-   | `STORAGE_S3_ACCESS_KEY_ID` / `STORAGE_S3_SECRET_ACCESS_KEY` | claves del paso 1 |
-   | `GAME_TOKEN_SECRET` | nuevo, `openssl rand -base64 32` (no reutilizar el de local) |
-   | `DAILY_SEED` | nuevo, `openssl rand -hex 32` |
-   | `ALLOWED_ORIGIN` | URL de Vercel del paso 4, sin barra final (se rellena después) |
+```bash
+set -a; . ~/.config/daily-pwt/supabase.env; set +a
+jq -Rs '{query: .}' supabase/migrations/20261107000000_heardle_rate_limit.sql | curl -s -X POST \
+  "https://api.supabase.com/v1/projects/xvkvzrdvtcnjnbhtydfn/database/query" \
+  -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" -H 'Content-Type: application/json' -d @-
+```
 
-   `DAILY_SEED` no se cambia nunca una vez publicado: cambiarlo cambia la canción del día. Cambiar `GAME_TOKEN_SECRET` invalida las partidas en curso.
-3. Comprobar `https://<servicio>.onrender.com/api/health` → `{"ok":true,"catalog":true}`.
+Después, la auditoría de RLS y permisos de la skill `supabase`: la tabla tiene RLS y `anon`/`authenticated` no pueden ejecutar la función.
 
-Render free: 750 h/mes compartidas con el backend del Team Builder; cada servicio solo consume mientras está despierto (se duerme tras 15 min sin tráfico). No añadir health checks externos ni cron que lo mantengan despierto.
+### 4. Secretos de la función
 
-### 4. Frontend en Vercel
+Supabase → Edge Functions → Secrets (o `POST /v1/projects/<ref>/secrets`):
 
-1. Vercel → Add New → Project → importar `pokemon-heardle`.
-2. Root Directory: `frontend`; Framework: Vite; mantener activado "Include files outside the Root Directory in the Build Step" (el frontend importa `shared/`).
-3. Variable `VITE_API_URL` = URL de Render, sin `/api` ni barra final (p. ej. `https://pokemon-heardle-backend.onrender.com`). Se incrusta al compilar: si cambia, hay que redesplegar.
-4. Deploy. Production Branch: `main`.
+Los secretos son de todo el proyecto (los ven también las funciones de daily-pwt), así que los de esta función llevan el prefijo `HEARDLE_`; `backend/src/edge/main.ts` se lo quita al leerlos.
 
-### 5. Cerrar CORS
+| Secreto | Valor |
+|---|---|
+| `HEARDLE_GAME_TOKEN_SECRET` | el de Render si se quiere que sigan valiendo las partidas en curso; si no, nuevo con `openssl rand -base64 32` |
+| `HEARDLE_DAILY_SEED` | **el mismo de Render**: otro valor cambia la canción del día |
+| `HEARDLE_ALLOWED_ORIGIN` | `https://quimikuaxh.github.io` (origen de Pages, sin ruta ni barra final) |
 
-En Render, `ALLOWED_ORIGIN` = URL de producción de Vercel (p. ej. `https://pokemon-heardle.vercel.app`), sin barra final, y redesplegar el backend.
+`SUPABASE_URL` y `SUPABASE_SERVICE_ROLE_KEY` los pone Supabase y se leen sin prefijo. Cualquier otra variable de `backend/src/config.ts` se puede fijar igual, con el prefijo (p. ej. `HEARDLE_RATE_LIMIT_CLIPS`). El resto tiene valores por defecto en `backend/src/edge/main.ts` (bucket `heardle-audio`, rate-limit en Postgres, espera del catálogo de 8 s) y en `backend/src/config.ts` (límites de DEC-13).
 
-### 6. Verificación
+### 5. Desplegar la función
 
-1. Abrir la URL de Vercel: si el backend duerme, aparece "Despertando el servidor…" hasta ~1 min.
+```bash
+set -a; . ~/.config/daily-pwt/supabase.env; set +a
+npm run deploy:edge
+```
+
+Empaqueta `backend/src/edge/main.ts` con esbuild en `supabase/functions/heardle/index.js` (generado, no versionado) y lo despliega sin verificación de JWT: la función se protege con su token cifrado y sus tickets. Comprobar `https://xvkvzrdvtcnjnbhtydfn.supabase.co/functions/v1/heardle/api/health` → `{"ok":true,"catalog":true}`.
+
+### 6. GitHub Pages
+
+1. GitHub → Settings → Pages → Source = **GitHub Actions**.
+2. Cada push a `main` ejecuta `.github/workflows/deploy.yml`: tipos y tests de `shared`, `backend` y `frontend`, build del frontend con `VITE_API_URL` apuntando a la función, y publicación de `frontend/dist`. URL: `https://quimikuaxh.github.io/pokemon-heardle/`.
+3. La CSP del embed de YouTube va en una `<meta>` de `frontend/index.html`: Pages no deja poner cabeceras.
+
+### 7. Verificación
+
+1. Abrir la web: el juego aparece en menos de un segundo, sin "Conectando con el servidor…" salvo fallo.
 2. Jugar el diario y una partida libre. En DevTools → Network:
-   - `GET /api/clips/…` con `Content-Type: audio/mpeg`, `Cache-Control: no-store, private`, sin `ETag`, y `Content-Length` = 16300 en el intento 1.
+   - `GET …/heardle/api/clips/…` con `Content-Type: audio/mpeg`, `Cache-Control: no-store, private`, sin `ETag`, y `Content-Length` = 16300 en el intento 1. Repetir la misma URL da 410 (o, si cae en otra instancia, otra vez el mismo prefijo: aceptado en DEC-57).
    - Ninguna petición a Google Fonts ni a YouTube hasta pulsar "Escuchar la canción completa".
-3. Probar en un iPhone, también con el interruptor de silencio activado (DEC-45).
-4. Volver a ejecutar `upload` sin cambios: debe subir 0 clips. Si los vuelve a subir todos, el ETag de Supabase no coincide con el md5 local (DEC-23).
+3. Rate-limit: tras jugar, `select bucket, count(*) from heardle.rate_limits group by 1` tiene filas, y las claves son hashes. Comprobar también que mandar otra `X-Forwarded-For` no cambia la clave contada: si la cambia, la IP del cliente se toma de otra cabecera (`clientIp` en `backend/src/edge/main.ts`). Comprobado el 2026-11-07: el proxy la reescribe.
+4. Probar en un iPhone, también con el interruptor de silencio activado (DEC-45).
 
 ### Publicar cambios de catálogo
 
-`build` → `validate` → `upload` → reiniciar el backend en Render (Manual Deploy → Restart) → opcional `upload --prune` para borrar del bucket los clips que ya no están activos. Publicar cerca de las 00:00 (Europe/Madrid): cambiar las canciones activas puede cambiar la canción del día y deja inválidas las partidas en curso cuya canción se desactive.
+`build` → `validate` → `upload` → `npm run deploy:edge` (las instancias guardan el catálogo en memoria; volver a desplegar las renueva) → opcional `upload --prune` para borrar del bucket los clips que ya no están activos. Publicar cerca de las 00:00 (Europe/Madrid): cambiar las canciones activas puede cambiar la canción del día y deja inválidas las partidas en curso cuya canción se desactive.
+
+### Probar la función en local
+
+Con Docker: `npx supabase start` levanta un Supabase propio en los puertos 553xx (convive con el de daily-pwt) y aplica la migración. Crear el bucket `heardle-audio`, subir un catálogo y sus clips (p. ej. `e2e/fixtures/R`), escribir `supabase/functions/.env` con `HEARDLE_GAME_TOKEN_SECRET`, `HEARDLE_DAILY_SEED` y `HEARDLE_ALLOWED_ORIGIN` (ignorado por git) y `npm run edge:local`. La API queda en `http://127.0.0.1:55321/functions/v1/heardle/api/...`; el frontend apunta ahí compilando con `VITE_API_URL`. `npx supabase stop` lo para.
 
 ## Decisiones de implementación
 
@@ -136,15 +149,15 @@ Documentadas en `ARQUITECTURA.md` (secciones 3-7) y `REQUISITOS.md` (sección 9)
 - Token y ticket: AES-256-GCM, payload con padding fijo (DEC-02, DEC-03, DEC-04).
 - Clips: MP3 CBR 128 kbps, 6 por canción. Validador comprueba tamaño idéntico (DEC-06, DEC-23).
 - `.env.example` en cada paquete, no en raíz (DEC-34).
-- Rate-limit en memoria con ventana de 60 s, sin Redis (DEC-13).
+- Rate-limit con ventana de 60 s, sin Redis: en memoria en Node y en Postgres en la Edge Function (DEC-13, DEC-57).
 
 ## Reglas de implementación
 
 Los motivos están en `ARQUITECTURA.md` (DEC-02 a DEC-04, DEC-22) y en `scripts/catalog/README.md`; aquí solo lo operativo.
 
-- Ejecutar `upload --prune` después de reiniciar el backend.
+- Ejecutar `upload --prune` después de volver a desplegar la función.
 - No reactivar la cabecera Xing de los MP3 (es una huella por canción); `validate` ya tolera la diferencia de duración.
-- No añadir pings ni cron al backend en Render.
+- No añadir pings ni cron a la API.
 
 ## Tests E2E (Playwright)
 

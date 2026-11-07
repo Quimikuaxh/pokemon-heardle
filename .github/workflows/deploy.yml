@@ -1,0 +1,49 @@
+# Publica el frontend en GitHub Pages en cada push a main (o a mano desde Actions), solo si antes pasan
+# los tests y los tipos de shared, backend y frontend. Los e2e (Playwright) se lanzan en local.
+# La API es la Edge Function `heardle` de Supabase (DEC-57); se despliega aparte (DESARROLLO.md).
+# Requiere en el repo: Settings > Pages > Source = "GitHub Actions".
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+env:
+  # URL publica de la API (no es secreta). Proyecto Supabase compartido con claude-test y daily-pwt.
+  VITE_API_URL: https://xvkvzrdvtcnjnbhtydfn.supabase.co/functions/v1/heardle
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - run: npm --prefix shared ci && npm --prefix backend ci && npm --prefix frontend ci
+      - run: npm --prefix shared run typecheck && npm --prefix backend run typecheck
+      - run: npm --prefix shared test && npm --prefix backend test && npm --prefix frontend test
+      - run: npm --prefix frontend run build
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: frontend/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5

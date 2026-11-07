@@ -64,7 +64,7 @@ export function FullSongEmbed({ youtubeId, onOpen, volume = 1, onVolumeChange }:
   if (opened) {
     return (
       <div className="flex flex-col gap-2">
-        <div ref={frameBox} tabIndex={-1} className="aspect-video w-full overflow-hidden rounded-lg border-2 border-edge outline-none">
+        <div ref={frameBox} tabIndex={-1} className="aspect-video w-full overflow-hidden rounded-xl border-4 border-edge outline-none">
           <iframe
             ref={frame}
             src={`${EMBED_PREFIX}${youtubeId}${controlsVolume ? EMBED_QUERY : ''}`}
@@ -83,7 +83,7 @@ export function FullSongEmbed({ youtubeId, onOpen, volume = 1, onVolumeChange }:
   return (
     <button
       type="button"
-      className="flex min-h-[52px] items-center justify-center gap-2.5 rounded-[26px] border-[3px] border-edge bg-lamp-red px-4 text-base font-semibold text-white shadow-[0_4px_0_var(--edge)]"
+      className="flex min-h-14 items-center justify-center gap-3 rounded-2xl border-4 border-edge bg-dex-blue px-4 text-[17px] font-bold text-white hover:brightness-110 shadow-[0_6px_0_var(--edge)] lg:min-h-[68px] lg:text-xl"
       onClick={() => {
         setOpened(true)
         onOpen?.()

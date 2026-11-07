@@ -1,8 +1,8 @@
 import type { GameView, ResultName } from '../../../shared/api'
 import { FullSongEmbed } from './FullSongEmbed'
 import { GameSwatch } from './GameSwatch'
-import { Lamps, SHELL_CLASS } from './Lamps'
-import { NextDayNote } from './NextDayNote'
+import { DexScreen } from './Pokedex'
+import { NextDayCountdown } from './NextDayNote'
 import { MAX_ATTEMPTS } from '../../../shared/rules'
 import { resultLabel } from '../game/view'
 
@@ -34,33 +34,33 @@ export function ResultPanel({ view, onOpenFullSong, showNextDayNote = true, volu
 
   return (
     <>
-      <section aria-label="Resultado" aria-live="polite" className={SHELL_CLASS}>
-        <Lamps lens={won ? 'won' : 'lost'} label={statusLabel} />
-        <div className="flex flex-col gap-3.5 rounded-md border-2 border-edge bg-screen px-4 pb-4 pt-[18px] text-screen-ink">
-          <h2 className={`m-0 font-mono text-xs font-normal tracking-[1px] ${won ? 'text-played' : 'text-lost-text'}`}>
-            {won ? `¡ACERTASTE EN EL INTENTO ${view.attempt}!` : '¡LA CANCIÓN SE ESCAPÓ!'}
-          </h2>
-          {view.solution && (
-            <div className="flex flex-col gap-1.5">
-              {!won && <span className="text-[13px] text-screen-dim">Era…</span>}
-              <span className="font-display text-[34px] leading-[1.05]">{view.solution.title}</span>
-              <span className="inline-flex items-center gap-2 self-start rounded bg-track py-1 pl-2 pr-2.5 text-[13px]">
-                <GameSwatch gameId={firstGameId} />
-                {view.solution.games.map((game) => game.name).join(' · ')}
-              </span>
+      <section aria-label="Resultado" aria-live="polite" className="flex flex-col gap-4 lg:gap-[22px]">
+        <DexScreen title="RESULTADO" label={statusLabel} labelClassName={won ? 'text-played' : 'text-lost-text'}>
+          <div className="flex flex-col gap-3.5 pb-1">
+            <h2 className={`m-0 font-mono text-xs font-normal tracking-[2px] lg:text-sm lg:tracking-[3px] ${won ? 'text-played' : 'text-lost-text'}`}>
+              {won ? `¡ACERTASTE EN EL INTENTO ${view.attempt}!` : '¡LA CANCIÓN SE ESCAPÓ!'}
+            </h2>
+            {view.solution && (
+              <div className="flex flex-col gap-2">
+                {!won && <span className="text-[13px] text-screen-dim">Era…</span>}
+                <span className="font-display text-[34px] leading-[1.05] text-balance text-white lg:text-[52px]">{view.solution.title}</span>
+                <span className="mt-1 inline-flex items-center gap-2.5 self-start rounded-lg bg-track px-3.5 py-2 text-[13px] lg:text-[15px]">
+                  <GameSwatch gameId={firstGameId} />
+                  {view.solution.games.map((game) => game.name).join(' · ')}
+                </span>
+              </div>
+            )}
+            <div role="img" aria-label={marksDescription} className="mt-1 flex gap-2">
+              {Array.from({ length: MAX_ATTEMPTS }, (_, index) => {
+                const result = view.results[index]
+                return <span key={index} className={`h-3 w-10 rounded-md lg:w-14 ${result ? MARK_BAR_CLASS[result] : 'bg-track'}`} />
+              })}
             </div>
-          )}
-          <div role="img" aria-label={marksDescription} className="flex gap-1.5">
-            {Array.from({ length: MAX_ATTEMPTS }, (_, index) => {
-              const result = view.results[index]
-              return <span key={index} className={`h-2.5 w-9 rounded-sm ${result ? MARK_BAR_CLASS[result] : 'bg-track'}`} />
-            })}
           </div>
-        </div>
+        </DexScreen>
         {youtubeId && <FullSongEmbed key={youtubeId} youtubeId={youtubeId} onOpen={onOpenFullSong} volume={volume} onVolumeChange={onVolumeChange} />}
       </section>
-      {showNextDayNote && view.mode === 'daily' && <NextDayNote />}
+      {showNextDayNote && view.mode === 'daily' && <NextDayCountdown />}
     </>
   )
 }
-

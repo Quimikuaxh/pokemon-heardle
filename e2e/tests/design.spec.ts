@@ -135,7 +135,8 @@ const contrast = (a: string, b: string) => {
   return (hi + 0.05) / (lo + 0.05)
 }
 
-test('E2E-82_should_switch_to_dark_mode_with_readable_contrast', async ({ app, page }) => {
+test('E2E-82_should_look_the_same_in_light_and_dark_mode_with_readable_contrast', async ({ app, page }) => {
+  // DEC-58: la Pokedex no cambia con prefers-color-scheme; el contraste debe ser legible igualmente.
   const d = app.daily
   await page.emulateMedia({ colorScheme: 'light' })
   await app.goto()
@@ -144,13 +145,13 @@ test('E2E-82_should_switch_to_dark_mode_with_readable_contrast', async ({ app, p
     page.evaluate(() => {
       const css = (el: Element) => getComputedStyle(el)
       const body = css(document.body)
-      const shell = css(document.querySelector('section[aria-label="Reproductor"]')!)
       const skip = Array.from(document.querySelectorAll('button')).find((b) => /^Saltar/.test(b.textContent ?? ''))!
+      const play = document.querySelector('section[aria-label="Reproductor"] button[aria-label^="Reproducir"], section[aria-label="Reproductor"] button[aria-label^="Cargando"]')!
       const search = document.querySelector('input[role="combobox"]') as HTMLInputElement
       return {
         body: { bg: body.backgroundColor, fg: body.color },
-        shell: shell.backgroundColor,
         skip: { bg: css(skip).backgroundColor, fg: css(skip).color },
+        play: { bg: css(play).backgroundColor, fg: css(play).color },
         field: { bg: css(search.parentElement!).backgroundColor, fg: css(search).color },
       }
     })
@@ -158,14 +159,12 @@ test('E2E-82_should_switch_to_dark_mode_with_readable_contrast', async ({ app, p
   await page.emulateMedia({ colorScheme: 'dark' })
   const dark = await read()
 
-  expect(dark.body.bg, 'fondo oscuro').toBe('rgb(20, 21, 24)')
-  expect(light.body.bg, 'fondo claro').toBe('rgb(236, 234, 228)')
-  expect(dark.shell).not.toBe(light.shell)
-  for (const [name, theme] of [['claro', light], ['oscuro', dark]] as const) {
-    expect(contrast(theme.body.bg, theme.body.fg), `contraste del texto (${name})`).toBeGreaterThanOrEqual(4.5)
-    expect(contrast(theme.skip.bg, theme.skip.fg), `contraste del boton Saltar (${name})`).toBeGreaterThanOrEqual(4.5)
-    expect(contrast(theme.field.bg, theme.field.fg), `contraste del buscador (${name})`).toBeGreaterThanOrEqual(4.5)
-  }
+  expect(dark, 'mismo aspecto en claro y oscuro').toEqual(light)
+  expect(light.body.bg, 'fondo oscuro de la Pokedex').toBe('rgb(27, 29, 34)')
+  expect(contrast(light.body.bg, light.body.fg), 'contraste del texto').toBeGreaterThanOrEqual(4.5)
+  expect(contrast(light.skip.bg, light.skip.fg), 'contraste del boton Saltar').toBeGreaterThanOrEqual(4.5)
+  expect(contrast(light.play.bg, light.play.fg), 'contraste del boton de reproducir').toBeGreaterThanOrEqual(4.5)
+  expect(contrast(light.field.bg, light.field.fg), 'contraste del buscador').toBeGreaterThanOrEqual(4.5)
   await expect(page.getByRole('heading', { name: 'Pokémon Heardle', level: 1 })).toBeVisible()
 })
 

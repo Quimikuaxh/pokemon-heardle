@@ -1,26 +1,29 @@
 # Pokemon Heardle - Arquitectura
 
-Estado: version inicial implementada (main). Iteracion `feature/admin-catalogo` (DEC-36 a DEC-43, seccion 6.1; DEC-27 retirada) definida. Cambio "un solo clip por cancion" (DEC-44) y fundido en el navegador (DEC-45) definidos. Iteracion `feature/pistas-y-filtro-juego` (DEC-49 a DEC-53) definida; sin preguntas abiertas. Control de volumen comun (DEC-55) implementado. Requisitos en `REQUISITOS.md` (las decisiones de su seccion 9 no se reabren aqui).
+Estado: version inicial implementada (main). Iteracion `feature/admin-catalogo` (DEC-36 a DEC-43, seccion 6.1; DEC-27 retirada) definida. Cambio "un solo clip por cancion" (DEC-44) y fundido en el navegador (DEC-45) definidos. Iteracion `feature/pistas-y-filtro-juego` (DEC-49 a DEC-53) definida; sin preguntas abiertas. Control de volumen comun (DEC-55) implementado. Migracion a GitHub Pages + Edge Function (DEC-57) en `feature/github-pages`. Requisitos en `REQUISITOS.md` (las decisiones de su seccion 9 no se reabren aqui).
 Las preguntas de la version inicial (credencial del bucket; buscador y "juego acertado") se confirmaron el 2026-10-03.
 
 ## 1. Vision general
 
 ```
- Navegador (Vercel)                 Backend (Render free)                    Supabase (proyecto de claude-test)
- React + Vite + TS                  Node + TS + Express 5                    Storage, bucket PRIVADO `heardle-audio`
- ┌──────────────────┐  HTTPS/JSON   ┌─────────────────────────────┐  S3 API  ┌──────────────────────────────┐
+ Navegador (GitHub Pages)           Edge Function `heardle` (Deno)           Supabase (proyecto compartido)
+ React + Vite + TS                  manejador Request/Response (DEC-57)     Storage, bucket PRIVADO `heardle-audio`
+ ┌──────────────────┐  HTTPS/JSON   ┌─────────────────────────────┐  REST    ┌──────────────────────────────┐
  │ UI juego         │ ────────────▶ │ /api/games  (token cifrado) │ ───────▶ │ catalog/catalog.json         │
  │ localStorage:    │               │ /api/clips/:ticket (audio)  │          │ clips/<clipKey>.mp3          │
- │ filtro, token,   │ ◀──────────── │ catalogo en memoria         │          └──────────────────────────────┘
- │ partida diaria   │  audio/mpeg   │ cache LRU de clips          │                         ▲
- └──────────────────┘               └─────────────────────────────┘                         │ upload
+ │ filtro, token,   │ ◀──────────── │ catalogo y LRU por instancia│ ───────▶ │ Postgres: heardle.rate_limits│
+ │ partida diaria   │  audio/mpeg   │ tickets usados por instancia│  RPC     └──────────────────────────────┘
+ └──────────────────┘               └─────────────────────────────┘                         ▲
+                                                                                            │ upload (S3)
                                                                        scripts/catalog (maquina del usuario)
                                                                        yt-dlp + ffmpeg -> clips + catalog.json
 ```
 
-- Sin base de datos. El estado de cada partida viaja en un **token cifrado y autenticado** (AES-256-GCM) que solo el servidor puede leer.
+En local y en e2e el mismo manejador lo sirve Node (`backend/src/node/server.ts`) con driver `fs` y rate-limit en memoria.
+
+- Sin base de datos para las partidas (Postgres solo guarda contadores de rate-limit, DEC-57). El estado de cada partida viaja en un **token cifrado y autenticado** (AES-256-GCM) que solo el servidor puede leer.
 - El audio se precorta offline (un clip de 16 s por cancion, servido por prefijos, DEC-44) y se sirve solo a traves del backend, con URL de un solo uso.
-- El backend carga `catalog.json` del bucket al arrancar y lo mantiene en memoria.
+- La API carga `catalog.json` del bucket al arrancar cada instancia y lo mantiene en memoria.
 
 ## 2. Estructura del repositorio (monorepo, sin workspaces, como claude-test)
 
@@ -36,13 +39,18 @@ pokemon-heardle/
   backend/
     package.json tsconfig.json vitest.config.ts Dockerfile (opcional, portabilidad)
     src/
-      index.ts                arranque: config, carga de catalogo, listen
-      app.ts                  createApp(deps) -> Express (inyectable en tests)
+      index.ts                arranque Node: config, carga de catalogo, listen (local, e2e, Render hasta su retirada)
+      app.ts                  createApp(deps) -> { handle, catalogReady } (inyectable en tests)
+      node/server.ts          servidor node:http para el manejador estandar (IP con la regla de TRUST_PROXY)
+      edge/main.ts            entrada de la Edge Function (Deno), empaquetada con esbuild (DEC-57)
       config.ts               lectura y validacion de env (falla al arrancar si falta un secreto)
       catalog/                carga, indice por id, pool del filtro (solo ilimitado)
       game/                   daily.ts (seleccion), token.ts (cifrado), tickets.ts (clips), engine.ts (reglas)
-      storage/                ClipStore (interfaz), FsClipStore, S3ClipStore, LruCache
-      http/                   routes.ts, errors.ts, rateLimit.ts, validate.ts
+      storage/                ClipStore (interfaz), FsClipStore, S3ClipStore, SupabaseClipStore, LruCache
+      http/                   handler.ts (rutas con Request/Response), errors.ts, rateLimit.ts (memoria), postgresRateLimiter.ts, validate.ts
+    scripts/build-edge.mjs    bundle de la Edge Function -> supabase/functions/heardle/index.js (ignorado)
+  supabase/                   config.toml (funcion `heardle`, Supabase local en 553xx), migrations/ (rate-limit, DEC-57)
+  .github/workflows/deploy.yml  tests + build del frontend + GitHub Pages
   frontend/
     package.json vite.config.ts vercel.json index.html
     src/ api/ (cliente + reintentos), game/ (estado), storage/ (localStorage), components/, hooks/
@@ -109,7 +117,7 @@ Justificacion: el formato del catalogo lo producen el script y lo consume el bac
 DEC-13: **Rate-limit en memoria con limitador propio de ventana fija de 60 s y reloj inyectable**, por IP (global, creacion de partida, acciones guess+skip, clips) y por partida (clave = nonce del token). Por partida cuentan `state`, `guess` y `skip`, incluidos los rechazos `ALREADY_GUESSED`; crear partida y `/clips` no cuentan por partida. Sin Redis: una sola instancia y perder contadores al reiniciar es aceptable.
 Alternativa descartada: `express-rate-limit`, porque usa temporizadores reales y no se pueden probar las ventanas con reloj simulado.
 
-DEC-14: **Arranque en frio sin keep-alive**. Al abrir la web el frontend llama una vez a `GET /api/health` (trafico real, permitido) y muestra "Despertando el servidor..." con reintentos con backoff hasta ~90 s. Prohibido cualquier ping periodico (REQUISITOS 9).
+DEC-14: **Arranque en frio sin keep-alive**. Al abrir la web el frontend llama una vez a `GET /api/health` (trafico real, permitido) y muestra "Despertando el servidor..." con reintentos con backoff hasta ~90 s. Prohibido cualquier ping periodico (REQUISITOS 9). Desde DEC-57 (Edge Function, arranque de ~0,2-1 s) el aviso dice "Conectando con el servidor..." y los reintentos solo cubren fallos de red o del servicio.
 
 DEC-15: **Validacion de entrada manual** en `http/validate.ts` (como claude-test, sin zod): payloads pequenos y fijos.
 
@@ -351,6 +359,26 @@ Alternativas descartadas: dos deslizadores independientes (decision del usuario)
 DEC-56: **Duplicados entre fuentes por similitud de cromagrama** (subcomando `similar <juegoId>`, `scripts/catalog/src/similar.ts`). Cuando un juego mezcla playlists, la misma pista llega con titulos distintos y solo se detecta por audio. Se decodifican 90 s de cada fuente desde su `startSec` (ffmpeg, mono, 11.025 Hz). Se calcula la energia por clase de tono (12 semitonos, 60-4000 Hz, ventanas de 2048 muestras con salto de 1024, log, centrado y norma 1). Dos canciones puntuan la maxima media del coseno por ventana sobre todos los desfases con solape de 20 s, o del 70 % de la mas corta, y nunca menos de 3 s; la correlacion se hace con FFT. Umbral por defecto 0,8, calibrado con Sun/Moon y Legends Arceus: misma pista 0,82-0,98 (resubidas de otro canal, reversiones de otra duracion); pistas distintas del mismo juego, 0,79 como mucho. Solo informa, no cambia el catalogo.
 Alternativas descartadas: script Python con numpy (anadia una dependencia fuera del proyecto TS y sin tests en vitest); `fpcalc`/Chromaprint (no esta instalado y su huella exige el mismo punto de inicio, y aqui cambia segun el canal); comparar titulos (los canales nombran distinto la misma pista).
 
+DEC-57: **Frontend en GitHub Pages y API en una Supabase Edge Function (`heardle`) del mismo proyecto; Render y Vercel se retiran** (rama `feature/github-pages`, decision del usuario 2026-11-07). Motivo: el arranque en frio de Render free (hasta ~90 s, DEC-14) obligaba a esperar; una Edge Function arranca en ~0,2-1 s y GitHub Pages sirve la web sin espera.
+- Se mantiene el antitrampas: token cifrado, ticket de clip de un solo uso, prefijo por intento, catalogo publico sin `clipKey`. Descartado: web 100 % estatica (catalogo, cancion del dia y clips publicos), porque la respuesta y los 16 s completos quedarian a la vista en las herramientas del navegador.
+- Un solo manejador HTTP con `Request`/`Response` estandar (`backend/src/http/handler.ts`), con dos anfitriones: Node (`backend/src/index.ts`, desarrollo local, e2e y Render hasta su retirada) y Deno (`backend/src/edge/main.ts`, empaquetado con esbuild en `supabase/functions/heardle/`). Express se elimina. Descartado: reescribir la API para Deno aparte, porque duplicaria la logica y los tests.
+- Tickets usados: en la memoria de cada instancia, como hoy (decision del usuario). Efecto aceptado: si una peticion cae en otra instancia, un ticket se puede canjear otra vez durante su TTL de 60 s; sigue dando solo el prefijo de ese intento.
+- Rate-limit (DEC-13): en la Edge Function, en Postgres (tabla `heardle.rate_limits` y funcion `public.heardle_rate_limit_hit`, solo para `service_role`, llamada por PostgREST). Motivo: en memoria cada instancia cuenta por su lado y se recicla a menudo, asi que el limite no frenaria nada. En Node sigue en memoria. Una llamada por peticion con todas las comprobaciones (las claves, IP y nonce, van como hash: la tabla no guarda IP). Si la RPC falla, la peticion sigue (se registra el error): un fallo del contador no debe tumbar el juego. La limpieza de ventanas caducadas la hace la propia funcion de vez en cuando (1 %), sin `pg_cron`.
+- Catalogo y clips: la funcion los lee de Storage (`heardle-audio`, sigue privado) con la API REST y la clave `service_role`, sin SDK de S3. Catalogo y cache LRU viven en la memoria de la instancia; una peticion que llega con el catalogo sin cargar lo espera (hasta 8 s) en lugar de responder 503.
+- Medido en produccion (2026-11-07, desde Espana; funcion en eu-west-3, base de datos en eu-west-1): arranque en frio ~1,4 s en la primera peticion; en caliente ~150-200 ms de red mas ~30-150 ms de la RPC del rate-limit; primer clip ~1 s (lectura de Storage, despues queda en la cache de la instancia). IP del cliente: el proxy de Supabase reescribe `X-Forwarded-For`, asi que su primera entrada es fiable (una cabecera falsa no cambia la clave contada).
+- Fin de Render y Vercel: `render.yaml`, `frontend/vercel.json` y el driver S3 se borran despues de mergear a `main` y comprobar la web en GitHub Pages (decision del usuario).
+- Despues de la migracion, en la misma rama, se repasa la interfaz partiendo del estilo actual (DEC-46). La propuesta se ensena al usuario antes de implementarla.
+- Orden de puesta en produccion (decision del usuario): primero el rediseno, despues el despliegue completo (secretos `HEARDLE_*` puestos por el usuario, funcion, Pages y merge). Estado a 2026-11-07: migracion del rate-limit aplicada y funcion desplegada sin secretos (responde 500, nadie la usa); queda un secreto `ALLOWED_ORIGIN` sin prefijo que no usa nadie, pendiente de borrar con confirmacion.
+
+DEC-58: **Rediseno "Pokedex completa"** (rama `feature/github-pages`, decision del usuario 2026-11-07, sustituye la composicion de DEC-46 y mantiene sus tokens y su comportamiento). Motivo: con DEC-46 la pantalla se veia vacia y los elementos demasiado simples, sobre todo en escritorio.
+- Escritorio: el juego es una Pokedex roja abierta que ocupa la pantalla. Hoja izquierda: lente, luces, logo y fecha; pantalla oscura del reproductor dentro de un marco claro; "Saltar", boton de reproducir azul, volumen y buscador. Bisagra en el centro. Hoja derecha: "Pistas" y Diario/Libre arriba; historial como pantalla de "entradas"; leyenda como teclas. Fondo oscuro con puntos.
+- Movil: las dos hojas se apilan (bisagra horizontal); se ocultan los adornos que no caben (cruceta, rejilla del altavoz, leyenda).
+- Descartadas (maquetas ensenadas al usuario): estilo de los menus de daily-pwt (placas con esquinas cortadas, fuente de pixel) y consola portatil apaisada (cruceta y botones A/B).
+- Estados aprobados por el usuario sobre maqueta (2026-11-07): carga (pantallas "Conectando..." y controles apagados), buscador y desplegable como pantalla LCD verde (la de la maqueta de consola); el texto que se escribe usa la misma fuente que los titulos del desplegable (Rubik en negrita, decision del usuario), victoria/derrota con la lente en verde/rojo y el resultado en la pantalla, panel de pistas como mini-Pokedex, y modo libre con el numero de canciones en juego a la izquierda y los juegos en la pantalla derecha.
+- El boton "Escuchar la cancion completa" es azul plano, sin degradado ni brillo (decision del usuario).
+- El diario terminado muestra una cuenta atras hasta la siguiente cancion del dia (medianoche de Europe/Madrid), en lugar del texto "Vuelve manana..." (decision del usuario).
+- El aspecto es el mismo en modo claro y oscuro: la Pokedex ya es roja sobre fondo oscuro (decision del usuario). Los tokens claros/oscuros de DEC-46 dejan de cambiar la pagina del juego.
+
 ## 4. Modelo de partida
 
 Payload del token (JSON compacto, padding a 384 bytes, `v` para versionar):
@@ -582,14 +610,17 @@ Backend:
 
 | Variable | Ejemplo / defecto | Uso |
 |---|---|---|
-| `PORT` | 3002 | puerto (Render lo inyecta) |
+| `PORT` | 3002 | puerto del servidor Node |
 | `NODE_ENV` | production | |
-| `ALLOWED_ORIGIN` | https://pokemon-heardle.vercel.app | CORS |
+| `ALLOWED_ORIGIN` | https://quimikuaxh.github.io | CORS |
 | `GAME_TOKEN_SECRET` | 32+ bytes base64 | clave maestra de tokens y tickets |
 | `DAILY_SEED` | cadena aleatoria larga | semilla de la cancion diaria; cambiarla cambia todas las canciones del dia |
-| `STORAGE_DRIVER` | `s3` (prod) / `fs` (local, tests) | |
+| `STORAGE_DRIVER` | `supabase` (Edge Function) / `s3` (Render) / `fs` (local, tests) | |
 | `STORAGE_DIR` | ../scripts/catalog/data/out | raiz local con `catalog/` y `clips/` (driver fs) |
-| `STORAGE_BUCKET` | heardle-audio | driver s3 |
+| `STORAGE_BUCKET` | heardle-audio | drivers s3 y supabase |
+| `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` | los inyecta Supabase en la funcion | driver supabase y rate-limit postgres (DEC-57) |
+| `RATE_LIMIT_STORE` | `memory` (Node) / `postgres` (Edge Function) | DEC-13, DEC-57 |
+| `CATALOG_WAIT_MS` | 0 (Node) / 8000 (Edge Function) | espera del catalogo antes de responder 503 |
 | `STORAGE_S3_ENDPOINT` | https://<ref>.supabase.co/storage/v1/s3 | driver s3 |
 | `STORAGE_S3_REGION` | region del proyecto | driver s3 |
 | `STORAGE_S3_ACCESS_KEY_ID` / `STORAGE_S3_SECRET_ACCESS_KEY` | | driver s3; se generan en Storage -> S3 Access Keys (DEC-08) |
@@ -602,7 +633,8 @@ Backend:
 | `RATE_LIMIT_CLIPS` | 30 | por IP, `/clips` |
 | `RATE_LIMIT_PER_GAME` | 12 | por partida (nonce), acciones |
 
-Frontend: `VITE_API_URL` (URL del backend en Render; en local Vite proxifica `/api`, como claude-test).
+Frontend: `VITE_API_URL` (URL de la Edge Function, `https://<ref>.supabase.co/functions/v1/heardle`; en local Vite proxifica `/api`, como claude-test).
+Edge Function: los valores por defecto de `STORAGE_DRIVER`, `RATE_LIMIT_STORE`, `STORAGE_BUCKET` y `CATALOG_WAIT_MS` estan en `backend/src/edge/main.ts`; los secretos son `HEARDLE_GAME_TOKEN_SECRET`, `HEARDLE_DAILY_SEED` y `HEARDLE_ALLOWED_ORIGIN`: los secretos de Edge Functions son de todo el proyecto, compartido con daily-pwt, y el prefijo evita choques; `edge/main.ts` lo quita y solo lee sin prefijo `SUPABASE_URL` y `SUPABASE_SERVICE_ROLE_KEY`.
 Script: mismas `STORAGE_*` que el backend (en `scripts/catalog/.env`, ignorado).
 
 ## 11. Estrategia de tests
@@ -660,6 +692,7 @@ E2E (Playwright en `e2e/`, backend con driver `fs` y fixtures de tonos senoidale
 ## 12. Despliegue
 
 - Repo GitHub privado (cerrado). `.gitignore`: `node_modules`, `dist`, `.env*` (salvo `.env.example`), `scripts/catalog/data/`, `e2e/test-results`, `*.mp3` fuera de `e2e/fixtures`.
+- Desde DEC-57: frontend en GitHub Pages (`.github/workflows/deploy.yml`) y API en la Edge Function `heardle` (`npm run deploy:edge`); pasos en `DESARROLLO.md`. Lo que sigue de Render y Vercel vale hasta su retirada.
 - Backend: `render.yaml` en la raiz (servicio `pokemon-heardle-backend`, `rootDir: backend`, `npm ci` (DEC-35), `npm start` con `tsx` como claude-test), plan free, sin health-check periodico propio ni cron. `Dockerfile` opcional para migrar.
 - Frontend: Vercel con raiz `frontend`, `vercel.json` con rewrite a `index.html`, `VITE_API_URL`.
 - Storage: crear bucket privado `heardle-audio` en el proyecto Supabase de claude-test y claves en Storage -> S3 Access Keys (DEC-08).

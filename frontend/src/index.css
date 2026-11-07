@@ -7,9 +7,10 @@
   font-display: swap;
 }
 
-/* Tokens del tema (DEC-46). Claro por defecto; oscuro con prefers-color-scheme, como antes. */
+/* Tokens del tema (DEC-46). Desde DEC-58 la pagina es la Pokedex roja sobre fondo oscuro, igual en modo claro y
+   oscuro (decision del usuario): los tokens ya no cambian con prefers-color-scheme. */
 :root {
-  color-scheme: light dark;
+  color-scheme: dark;
   --paper: #eceae4;
   --ink: #17181b;
   --edge: #17181b;
@@ -20,23 +21,7 @@
   --dim: #65666d;
   --skipbg: #d3d0c8;
   --amber-text: #8a5a0b;
-  --placeholder: #6e6f76;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --paper: #141518;
-    --ink: #eceae4;
-    --edge: #050506;
-    --muted: #a3a5ac;
-    --shell: #2b2d33;
-    --field: #1e2026;
-    --chip: #2b2d33;
-    --dim: #8a8c93;
-    --skipbg: #3a3d44;
-    --amber-text: #f0b754;
-    --placeholder: #9a9ca3;
-  }
+  --placeholder: #4f6331;
 }
 
 @theme inline {
@@ -72,6 +57,21 @@
   --color-skip-bar: #5a606c;
   --color-lost-text: #f0a096;
 
+  /* Pokedex (DEC-58) */
+  --color-night: #1b1d22;
+  --color-night-dot: #2a2d34;
+  --color-dex: #d7301f;
+  --color-dex-dark: #a91f14;
+  --color-dex-deep: #7d150d;
+  --color-dex-text: #ffe6e2;
+  --color-dex-blue: #2a75bb;
+  --color-dex-yellow: #ffcb05;
+  --color-bezel: #e6e3dc;
+  --color-lcd: #9fb36a;
+  --color-lcd-edge: #8ba35a;
+  --color-lcd-ink: #26331a;
+  --color-lcd-dim: #4f6331;
+
   --font-sans: 'Rubik', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   --font-mono: 'Space Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
   --font-display: 'Lilita One', 'Rubik', system-ui, sans-serif;
@@ -80,9 +80,36 @@
 
 body {
   margin: 0;
-  background-color: var(--paper);
-  color: var(--ink);
+  background-color: var(--color-night);
+  background-image: radial-gradient(circle at 1px 1px, var(--color-night-dot) 1px, transparent 1.5px);
+  background-size: 14px 14px;
+  /* Texto claro por defecto: el fondo es oscuro (los componentes fijan su propio color sobre el rojo y las pantallas). */
+  color: var(--color-screen-ink);
   font-family: var(--font-sans);
+}
+
+/* Hojas de la Pokedex: carcasa roja con borde negro (DEC-58). */
+.dex-page {
+  background: linear-gradient(160deg, var(--color-dex) 0%, var(--color-dex-dark) 100%);
+  border: 4px solid var(--edge);
+}
+
+/* Pantalla oscura con lineas de barrido suaves. */
+.dex-screen {
+  position: relative;
+  background-color: var(--color-screen);
+  background-image: repeating-linear-gradient(0deg, rgb(255 255 255 / 0.035) 0 1px, transparent 1px 3px);
+}
+
+/* Pantalla LCD verde del buscador (DEC-58): borde interior mas oscuro. */
+.dex-lcd {
+  background-color: var(--color-lcd);
+  box-shadow: inset 0 0 0 4px var(--color-lcd-edge);
+}
+
+/* Lente grande: brillo de cristal sobre el color de estado. */
+.dex-lens {
+  background-image: radial-gradient(circle at 35% 30%, rgb(255 255 255 / 0.75) 0 12%, transparent 40%);
 }
 
 input::placeholder {
@@ -99,8 +126,53 @@ input::placeholder {
 }
 
 @layer base {
+  /* Sin el retardo del doble toque para hacer zoom en los controles. */
+  button,
+  summary,
+  label,
+  input {
+    touch-action: manipulation;
+  }
+
   :focus-visible {
     outline: 3px solid #2a75bb;
     outline-offset: 2px;
+  }
+}
+
+/*
+ * Armazon de la Pokedex (DEC-58). Rejilla con zonas: arriba-izquierda (lente y logo), arriba-derecha (pistas y modo),
+ * cuerpo izquierdo (reproductor, buscador, resultado), cuerpo derecho (historial, juegos). Las hojas rojas y la bisagra
+ * son capas de fondo colocadas en la misma rejilla; el contenido va encima. En movil todo se apila en una columna:
+ * la hoja izquierda abarca logo, controles y cuerpo izquierdo; la bisagra separa la hoja derecha.
+ */
+.dex {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas: 'ltop' 'rtop' 'lbody' 'hinge' 'rbody';
+}
+.dex-bg-left { grid-area: 1 / 1 / 4 / 2; border-radius: 22px 22px 6px 6px; }
+.dex-bg-hinge { grid-area: hinge; height: 26px; margin: 0 40px; border-inline: 4px solid var(--edge); background: linear-gradient(0deg, #7d150d, #c42b1c 40%, #7d150d); }
+.dex-bg-right { grid-area: rbody; border-radius: 6px 6px 22px 22px; }
+.dex-ltop { grid-area: ltop; }
+.dex-rtop { grid-area: rtop; }
+.dex-lbody { grid-area: lbody; }
+.dex-rbody { grid-area: rbody; }
+/* La hoja izquierda va por encima de la derecha: el desplegable del buscador puede bajar sobre ella (en movil, la hoja
+   derecha esta debajo). */
+.dex-ltop, .dex-rtop, .dex-lbody, .dex-rbody { position: relative; z-index: 1; min-width: 0; }
+.dex-lbody { z-index: 2; }
+
+@media (min-width: 1024px) {
+  .dex {
+    grid-template-columns: minmax(0, 1fr) 34px minmax(0, 1fr);
+    grid-template-rows: auto 1fr;
+    grid-template-areas: 'ltop hinge rtop' 'lbody hinge rbody';
+  }
+  .dex-bg-left { grid-area: 1 / 1 / 3 / 2; border-radius: 28px 6px 6px 28px; }
+  .dex-bg-right { grid-area: 1 / 3 / 3 / 4; border-radius: 6px 28px 28px 6px; }
+  .dex-bg-hinge {
+    grid-area: hinge; height: auto; margin: 60px 0; border-inline: 0; border-block: 4px solid var(--edge);
+    background: linear-gradient(90deg, #7d150d, #c42b1c 40%, #7d150d);
   }
 }

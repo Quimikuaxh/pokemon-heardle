@@ -23,7 +23,7 @@ interface BubbleGame {
 type Selectable = { key: string; kind: 'game'; game: BubbleGame } | { key: string; kind: 'song'; songId: string }
 
 const IME_KEY_CODE = 229
-const groupHeaderClass = 'px-2.5 pb-1 pt-2 text-xs font-semibold uppercase tracking-[0.5px] text-muted'
+const groupHeaderClass = 'px-1.5 pb-1 pt-2.5 font-mono text-[11px] font-bold tracking-[3px] text-lcd-dim uppercase'
 
 /** Combobox ARIA 1.2 con grupos Juegos / Canciones y una burbuja de juego que acota las canciones (DEC-49). */
 export const SongSearch = memo(function SongSearch({ catalog, guesses, disabled = false, readOnly = false, onSelect }: SongSearchProps) {
@@ -116,19 +116,23 @@ export const SongSearch = memo(function SongSearch({ catalog, guesses, disabled 
   }
 
   const optionClass = (key: string, isAttempted: boolean) =>
-    `flex min-h-11 items-center gap-2.5 rounded px-2.5 py-1.5 ${
-      isAttempted ? 'cursor-not-allowed text-dim line-through' : 'cursor-pointer hover:bg-chip'
-    } ${key === activeKey ? 'bg-chip' : ''}`
+    `flex min-h-11 items-center gap-3 border-b-2 border-dotted border-lcd-dim px-1.5 py-2 last:border-b-0 ${
+      isAttempted ? 'cursor-not-allowed text-lcd-dim line-through' : 'cursor-pointer hover:bg-lcd-edge'
+    } ${key === activeKey ? 'bg-lcd-ink text-lcd hover:bg-lcd-ink' : ''}`
 
   return (
     <div className="relative">
-      <label htmlFor={inputId} className="mb-1.5 block text-xs font-semibold tracking-[0.5px] lg:text-[13px]">
+      <label htmlFor={inputId} className="mb-2 block text-sm font-bold tracking-[0.5px] text-white lg:text-base">
         ¿Qué canción es?
       </label>
-      <div className="flex min-h-[52px] items-center gap-2 rounded-lg border-2 border-edge bg-field px-3 py-1 focus-within:outline-[3px] focus-within:outline-offset-2 focus-within:outline-[#2a75bb]">
-        <SearchIcon className="flex-none text-ink" />
+      <div
+        className={`dex-lcd flex min-h-14 items-center gap-3 border-4 border-edge px-4 py-1 text-lcd-ink focus-within:outline-[3px] focus-within:outline-offset-2 focus-within:outline-[#ffcb05] lg:min-h-[62px] ${
+          isOpen ? 'rounded-t-[10px]' : 'rounded-[10px]'
+        }`}
+      >
+        <SearchIcon className="flex-none text-lcd-ink" />
         {bubble && (
-          <span className="inline-flex min-w-0 max-w-[45%] flex-none items-center gap-1 rounded-full border-2 border-edge bg-chip py-0.5 pl-2.5 pr-0.5 text-xs font-semibold text-ink">
+          <span className="inline-flex min-w-0 max-w-[45%] flex-none items-center gap-1 rounded-full bg-lcd-ink py-0.5 pl-2.5 pr-0.5 font-mono text-xs font-bold text-lcd">
             <span title={bubble.name} className="min-w-0 truncate">
               {bubble.name}
             </span>
@@ -138,7 +142,7 @@ export const SongSearch = memo(function SongSearch({ catalog, guesses, disabled 
               disabled={disabled}
               onClick={removeBubble}
               // El ::before amplia el area tactil a 44 px sin cambiar el aspecto de la burbuja.
-              className="relative flex size-6 flex-none items-center justify-center rounded-full bg-ink text-paper before:absolute before:left-1/2 before:top-1/2 before:size-11 before:-translate-x-1/2 before:-translate-y-1/2 before:content-[''] disabled:opacity-50"
+              className="relative flex size-6 flex-none items-center justify-center rounded-full bg-lcd text-lcd-ink before:absolute before:left-1/2 before:top-1/2 before:size-11 before:-translate-x-1/2 before:-translate-y-1/2 before:content-[''] disabled:opacity-50"
             >
               <CrossIcon size={10} strokeWidth={2.75} />
             </button>
@@ -164,7 +168,7 @@ export const SongSearch = memo(function SongSearch({ catalog, guesses, disabled 
             setListOpen(true)
           }}
           onKeyDown={onKeyDown}
-          className="min-h-12 min-w-0 flex-1 border-0 bg-transparent text-base font-medium text-ink outline-none focus-visible:outline-none disabled:opacity-50"
+          className="min-h-12 min-w-0 flex-1 border-0 bg-transparent text-base font-bold text-lcd-ink outline-none focus-visible:outline-none disabled:opacity-50 lg:text-[17px]"
         />
       </div>
       {bubble && (
@@ -182,9 +186,9 @@ export const SongSearch = memo(function SongSearch({ catalog, guesses, disabled 
           aria-label="Sugerencias"
           // Mantiene el foco en el input al pulsar una opcion con el raton.
           onMouseDown={(event) => event.preventDefault()}
-          className="absolute z-10 mt-1.5 max-h-72 w-full overflow-y-auto rounded-lg border-2 border-edge bg-field p-1"
+          className="dex-lcd absolute z-10 max-h-80 w-full overflow-y-auto rounded-b-[12px] border-4 border-t-2 border-edge border-t-lcd-dim px-3 pb-2 text-lcd-ink shadow-[0_10px_0_rgba(0,0,0,0.25)]"
         >
-          {resultCount === 0 && <div className="px-3 py-3 text-sm text-muted">Sin resultados</div>}
+          {resultCount === 0 && <div className="px-1.5 py-3 font-mono text-sm text-lcd-dim">Sin resultados</div>}
           {games.length > 0 && (
             <div role="group" aria-labelledby={gamesHeaderId}>
               <div id={gamesHeaderId} role="presentation" className={groupHeaderClass}>
@@ -200,7 +204,7 @@ export const SongSearch = memo(function SongSearch({ catalog, guesses, disabled 
                   className={optionClass(`g-${game.id}`, false)}
                 >
                   <GameSwatch gameId={game.id} />
-                  <span className="text-[15px] font-semibold">{game.name}</span>
+                  <span className="text-[15px] font-bold lg:text-base">{game.name}</span>
                 </div>
               ))}
             </div>
@@ -225,8 +229,8 @@ export const SongSearch = memo(function SongSearch({ catalog, guesses, disabled 
                   >
                     <GameSwatch gameId={song.games[0]?.id ?? ''} />
                     <span className="flex min-w-0 flex-col">
-                      <span className="text-[15px] font-semibold">{song.title}</span>
-                      <span className="text-xs text-muted">
+                      <span className="text-[15px] font-bold lg:text-base">{song.title}</span>
+                      <span className="font-mono text-xs opacity-80">
                         {song.games.map((game) => shortGameName(game.name)).join(' · ')}
                         {isAttempted && ' — ya intentada'}
                       </span>

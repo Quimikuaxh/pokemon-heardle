@@ -626,6 +626,56 @@ Prevalece sobre las filas anteriores con el mismo ID. Fuentes: ARQUITECTURA DEC-
 
 **Riesgos:** en iOS `audio.volume` es de solo lectura (solo cuenta la ruta Web Audio) y YouTube puede ignorar `setVolume`; el volumen del sistema sigue mandando. El protocolo `postMessage` del iframe no es API pública documentada (es el que usa el script de la IFrame API): si YouTube lo cambia, el deslizador deja de afectar al vídeo sin romper nada más. Pasada manual en navegador real.
 
+### 0.7 GitHub Pages y Edge Function (DEC-57)
+
+Prevalece sobre las filas anteriores con el mismo ID. Fuente: ARQUITECTURA DEC-57. Express se sustituye por un manejador `Request`/`Response` (`backend/src/http/handler.ts`) servido por Node en los tests: los casos de integración BE-* existentes se mantienen sin cambios y prueban ese manejador.
+
+**Modificados**
+
+| ID | Nivel | Descripción | Precondiciones | Resultado esperado | Cubre | P |
+|---|---|---|---|---|---|---|
+| E2E-33 [MOD] | e2e | Arranque lento: el aviso es "Conectando con el servidor…" | `/health` retrasado y 503 x3 | Aviso y recuperación | DEC-14, DEC-57 | A |
+| FE (components) [MOD] | unit | Mientras `/health` falla se ve "Conectando con el servidor" | - | Texto nuevo | DEC-14, DEC-57 | M |
+
+**Nuevos — backend**
+
+| ID | Nivel | Descripción | Precondiciones | Resultado esperado | Cubre | P |
+|---|---|---|---|---|---|---|
+| BE-CAT-12 | unit (int) | Con `CATALOG_WAIT_MS`, una petición que llega con el catálogo cargando lo espera; si no carga a tiempo, 503 | Store lento / caído | 200 / `CATALOG_UNAVAILABLE` | DEC-57 | A |
+| BE-CFG-09 | unit | `STORAGE_DRIVER=supabase` y `RATE_LIMIT_STORE=postgres` exigen `SUPABASE_URL` y `SUPABASE_SERVICE_ROLE_KEY` (y bucket); `CATALOG_WAIT_MS` 0 por defecto | - | Lanza nombrando la variable | DEC-57 | M |
+| BE-SQL-01..06 | unit (PGlite) | `heardle_rate_limit_hit`: límite y segundos de espera, claves independientes, cuenta en orden y para en la primera que se pasa, ventana de 60 s, sin permisos para `anon`/`authenticated`, migración reaplicable (`rateLimitSql.test.ts`) | Migración real | Correcto | DEC-13, DEC-57 | A |
+| BE-SUP-01..04 | unit | `SupabaseClipStore`: rutas y cabecera `service_role`, catálogo, `clipKey` inválido sin petición, errores → `STORAGE_ERROR` (`supabaseEdge.test.ts`) | `fetch` falso | Correcto | DEC-57 | A |
+| BE-SUP-05..07 | unit | `PostgresRateLimiter`: una RPC por petición con las claves en hash, `RATE_LIMITED` con los segundos devueltos, y deja pasar si la base de datos falla | `fetch` falso | Correcto | DEC-57 | A |
+
+**Verificación manual:** la función se prueba en el Supabase local (`npm run edge:local`, DESARROLLO.md) con el frontend compilado contra ella; en producción, los pasos de verificación de DESARROLLO.md (incluida la cabecera de la IP del cliente).
+
+### 0.8 Rediseño "Pokédex completa" (DEC-58)
+
+Prevalece sobre las filas anteriores con el mismo ID. Fuente: ARQUITECTURA DEC-58. El comportamiento, los nombres accesibles y los textos de los controles no cambian; cambian la composición y los colores.
+
+**Modificados**
+
+| ID | Nivel | Descripción | Precondiciones | Resultado esperado | Cubre | P |
+|---|---|---|---|---|---|---|
+| FE-DSN-06 [MOD] | unit | Player: pantalla con "INTENTO n/m", onda y barra; la lente y las luces ya no están en el reproductor (van en `DexTop`, FE-DEX-01) | - | Cumple | DEC-58 | A |
+| FE-DSN-09 [MOD] | unit | Resultado: textos y estados como antes; la lente pasa a `DexTop`; el botón de la canción completa es azul y plano (`bg-dex-blue`, sin degradado) | - | Cumple | DEC-58, DEC-41 | A |
+| FE-DSN-12 [MOD] | unit | Leyenda "CLAVE" como teclas de la hoja derecha: oculta en móvil y visible desde `lg` | `App` renderizada | `hidden lg:flex` | DEC-58 | M |
+| FE-EMB-13 [MOD] | unit | El diario terminado muestra la cuenta atrás (`role="timer"`, `HH:MM:SS`) en lugar de "Vuelve mañana…"; con `showNextDayNote=false` no la pinta el panel | - | Cumple | DEC-58 | A |
+| E2E-39 [MOD] | e2e | Mismos colores de página en claro y oscuro: fondo `rgb(27,29,34)`, texto `rgb(233,237,230)` | `colorScheme` dark/light | Iguales | DEC-58 | A |
+| E2E-53 [MOD] | e2e | Barra en móvil oscuro: fondo de página `rgb(27,29,34)` | iPhone, dark | Cumple | DEC-58 | M |
+| E2E-82 [MOD] | e2e | Mismo aspecto en claro y oscuro (`emulateMedia` en caliente) y contraste ≥ 4,5:1 en texto, "Saltar", botón de reproducir y buscador | - | Iguales y legibles | DEC-58, RQ §6 | A |
+
+**Nuevos — frontend** (`frontend/src/__tests__/Pokedex.test.tsx`)
+
+| ID | Nivel | Descripción | Precondiciones | Resultado esperado | Cubre | P |
+|---|---|---|---|---|---|---|
+| FE-DEX-01 | unit | `DexTop`: logo h1, subtítulo, lente y tres luces; lente azul en juego, verde al acertar y roja al perder | - | Cumple | DEC-58 | A |
+| FE-DEX-02 | unit | `msUntilNextMadridDay`: día normal, segundo en curso, días de 23 y 25 h del cambio de hora; `formatCountdown` `HH:MM:SS`, nunca negativo | Instantes fijos | Cumple | DEC-58 | A |
+| FE-DEX-03 | unit | `NextDayCountdown`: descuenta cada segundo y llama a `onExpire` una sola vez al pasar la medianoche | Reloj falso | Cumple | DEC-58 | A |
+| FE-DEX-04 | unit | `FilterStart`: sin partida, pantalla con canciones en juego y "Empezar partida"; tras una partida (`compact`), solo botón y resumen; selección vacía: deshabilitado y aviso | - | Cumple | DEC-58 | M |
+
+**Verificación manual:** capturas en 390×844 y 1920×1080 de carga, partida con pistas, buscador abierto, panel de pistas, victoria, derrota y modo libre (antes y después de jugar), y repaso con `armonia-visual`.
+
 ## 1. Alcance
 
 Dentro:
@@ -1385,7 +1435,7 @@ Entorno del admin: proceso `npm run cli -- admin --port <libre> --data-dir <tmp>
 | E2E-30 | e2e | Fuga | Blob del intento N = `CLIP_SECONDS[N]` | - | 1 petición por intento | CA-2 | A |
 | E2E-31 [MOD] | e2e | Fuga | Tras terminar aparece la solución (título y juegos) y el botón "Escuchar la canción completa" | - | Visibles; sin iframe todavía | CA-7, DEC-41 | A |
 | E2E-32 | e2e | Fuga | Snapshots antes/después | - | La solución solo tras el fin | CA-1 | M |
-| E2E-33 | e2e | Arranque en frío | `/health` retrasado y 503 x3 | `page.route` | "Despertando el servidor..." y se recupera | CA-8 | A |
+| E2E-33 | e2e | Arranque en frío | `/health` retrasado y 503 x3 | `page.route` | "Conectando con el servidor…" y se recupera (texto de DEC-57) | CA-8 | A |
 | E2E-34 | e2e | Arranque en frío | 503 permanente | Reloj acelerado | Error con reintento | CA-8 | M |
 | E2E-35 | e2e | Arranque en frío | Sin pings periódicos | `fastForward` 2 min | 1 petición a `/health` | RQ §9 | A |
 | E2E-36 | e2e | Red | Fallo transitorio en `guess` | Abort una vez | Mensaje, sin perder intento | CA-8 | M |

@@ -2,6 +2,7 @@ import type { AddressInfo } from 'node:net'
 import type { Server } from 'node:http'
 import { rmSync } from 'node:fs'
 import { createApp } from '../../src/app'
+import { createNodeServer } from '../../src/node/server'
 import { loadConfig } from '../../src/config'
 import { FsClipStore } from '../../src/storage/FsClipStore'
 import { catalogR, writeStore, T, type CatalogFixture } from './fixtures'
@@ -87,9 +88,9 @@ export async function startTestApp(opts: StartOptions = {}): Promise<TestApp> {
     randomInt: opts.randomInt,
     schedule: opts.schedule,
   })
-  if (!opts.skipCatalogWait) await app.locals.catalogReady
+  if (!opts.skipCatalogWait) await app.catalogReady
   const server: Server = await new Promise((resolve) => {
-    const s = app.listen(0, '127.0.0.1', () => resolve(s))
+    const s = createNodeServer(app.handle, config.trustProxy).listen(0, '127.0.0.1', () => resolve(s))
   })
   const baseUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`
 
@@ -126,7 +127,7 @@ export async function startTestApp(opts: StartOptions = {}): Promise<TestApp> {
     guess: (token, songId, h) => call('POST', '/api/games/guess', { token, songId }, h),
     skip: (token, h) => call('POST', '/api/games/skip', { token }, h),
     clip: (clipUrl, h) => call('GET', clipUrl, undefined, h),
-    ready: () => app.locals.catalogReady,
+    ready: () => app.catalogReady,
     close: async () => {
       await new Promise<void>((r) => server.close(() => r()))
       rmSync(dir, { recursive: true, force: true })
