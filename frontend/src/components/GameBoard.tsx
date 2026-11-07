@@ -179,7 +179,7 @@ export function GameBoard({ mode, controller, api, catalog, store, settings = DE
         )}
         {phase === 'finished' && view?.mode === 'daily' && <NextDayCountdown onExpire={openDaily} />}
 
-        {mode === 'unlimited' && phase !== 'loading' && (!view || !isPlaying) && <FilterStart {...filterProps} onStart={startUnlimited} compact={view !== null} />}
+        {mode === 'unlimited' && phase !== 'loading' && !view && <FilterStart {...filterProps} onStart={startUnlimited} />}
         {view && <Legend />}
       </DexLeftBody>
 
@@ -191,8 +191,11 @@ export function GameBoard({ mode, controller, api, catalog, store, settings = DE
         )}
         {isPlaying && view && <SongSearch key={gameSeq} catalog={catalog} guesses={view.guesses} readOnly={busy} onSelect={selectSong} />}
         {mode === 'unlimited' && phase !== 'loading' && !view && <FilterGames {...filterProps} />}
+        {mode === 'unlimited' && phase === 'finished' && view && <FilterStart {...filterProps} onStart={startUnlimited} compact />}
+        {/* Plegado por defecto: al terminar, "Empezar partida" ya esta en la hoja izquierda y la lista abierta
+            estiraba la Pokedex (DEC-59). */}
         {mode === 'unlimited' && phase !== 'loading' && view && (
-          <details open={!isPlaying} className="group">
+          <details className="group">
             <summary className="flex min-h-12 cursor-pointer items-center rounded-[10px] border-[3px] border-edge bg-dex-deep px-4 py-2.5 font-bold text-dex-text hover:brightness-125 group-open:mb-4">
               {isPlaying ? 'Filtro para la próxima partida' : 'Nueva partida'}
             </summary>

@@ -211,6 +211,8 @@ test.describe('Cancion completa - catalogo R', () => {
 
     // Nueva partida con otro filtro: el siguiente objetivo es ONLY_D.
     net.clear()
+    // DEC-59: tras terminar, la lista de juegos esta plegada bajo "Nueva partida".
+    await u.root.getByText('Nueva partida', { exact: true }).click()
     await u.setFilter(['Pokemon Game Delta'])
     await Promise.all([
       page.waitForResponse((r) => r.url().endsWith('/api/games') && r.request().method() === 'POST'),

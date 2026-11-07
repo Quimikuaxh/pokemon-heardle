@@ -96,7 +96,7 @@ describe('FilterStart: hoja izquierda del modo libre (DEC-58)', () => {
     const onStart = vi.fn()
     render(<FilterStart games={GAMES} songs={songs} selected={['rse', 'dp']} onChange={vi.fn()} onStart={onStart} />)
     expect(screen.getByText('3')).toBeTruthy()
-    expect(document.body.textContent).toContain('canciones en juego · 2 de 3 juegos')
+    expect(document.body.textContent).toContain('Canciones en juego · 2 de 3 juegos')
     fireEvent.click(screen.getByRole('button', { name: 'Empezar partida' }))
     expect(onStart).toHaveBeenCalledTimes(1)
   })
@@ -139,5 +139,33 @@ describe('Favicon (DEC-59)', () => {
     const svg = readFileSync(join(root, 'public', 'favicon.svg'), 'utf8')
     expect(existsSync(join(root, 'public', 'favicon.svg'))).toBe(true)
     expect(svg).toMatch(/^<svg[^>]+viewBox="0 0 64 64"/)
+  })
+})
+
+describe('Alto estable de la Pokedex (DEC-59)', () => {
+  it('FE-DEX-08 el aviso de seleccion vacia ocupa un hueco fijo, este o no (sin pantalla: elegir juegos no cambia el alto)', () => {
+    const songs = [{ games: ['rse'] }]
+    const { container, rerender } = render(<FilterStart games={GAMES} songs={songs} selected={[]} onChange={vi.fn()} onStart={vi.fn()} />)
+    const slot = () => container.querySelector('.min-h-12')
+    expect(slot()!.querySelector('[role="alert"]')).toBeTruthy()
+    rerender(<FilterStart games={GAMES} songs={songs} selected={['rse']} onChange={vi.fn()} onStart={vi.fn()} />)
+    expect(slot()).toBeTruthy()
+    expect(slot()!.querySelector('[role="alert"]')).toBeNull()
+  })
+
+  it('FE-DEX-08 tras una partida el aviso y el resumen comparten hueco', () => {
+    const songs = [{ games: ['rse'] }]
+    const { rerender } = render(<FilterStart compact games={GAMES} songs={songs} selected={[]} onChange={vi.fn()} onStart={vi.fn()} />)
+    expect(screen.getByRole('alert')).toBeTruthy()
+    expect(document.body.textContent).not.toContain('canciones en juego')
+    rerender(<FilterStart compact games={GAMES} songs={songs} selected={['rse']} onChange={vi.fn()} onStart={vi.fn()} />)
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(document.body.textContent).toContain('1 canciones en juego')
+  })
+
+  it('FE-DEX-08 alto minimo comun en escritorio y metricas fijas de la fuente del logo', () => {
+    const css = readFileSync(join(__dirname, '..', 'index.css'), 'utf8')
+    expect(css).toMatch(/\.dex \{[^}]*min-height: 880px/)
+    expect(css).toMatch(/font-family: 'Pokemon Solid';[^}]*ascent-override: 100%;[^}]*descent-override: 40%;[^}]*line-gap-override: 0%/)
   })
 })

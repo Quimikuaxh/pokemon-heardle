@@ -5,6 +5,12 @@
   font-family: 'Pokemon Solid';
   src: url('./assets/fonts/PokemonSolid.ttf') format('truetype');
   font-display: swap;
+  /* La TTF declara en OS/2 winAscent/winDescent 4194/1677 (sobre 2048) frente a hhea 2048/-819. Windows usa los win
+     y bajaba el logo ~0,3 em hasta pisar la fecha; con estos valores (los de hhea) se coloca igual en todos los
+     sistemas. Al cambiar de fuente, revisar estas metricas. */
+  ascent-override: 100%;
+  descent-override: 40%;
+  line-gap-override: 0%;
 }
 
 /* Tokens del tema (DEC-46). Desde DEC-58 la pagina es la Pokedex roja sobre fondo oscuro, igual en modo claro y
@@ -194,6 +200,9 @@ input::placeholder {
 
 @media (min-width: 1024px) {
   .dex {
+    /* Alto minimo comun a modos y estados: la Pokedex no cambia de tamano al pasar de Diario a Libre ni al elegir
+       juegos (DEC-59). La lista del buscador se estira para llenar la hoja derecha. */
+    min-height: 880px;
     grid-template-columns: minmax(0, 1fr) 34px minmax(0, 1fr);
     grid-template-rows: auto auto 1fr;
     grid-template-areas: 'ltop hinge rbody' 'rtop hinge rbody' 'lbody hinge rbody';

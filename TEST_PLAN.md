@@ -697,6 +697,9 @@ Prevalece sobre las filas anteriores con el mismo ID. Sin backend Node en produc
 | FE-DEX-06 | unit | Pantalla del buscador: sin texto, aviso en el hueco de resultados; al escribir, la lista está dentro de la pantalla, con scroll propio y sin posición absoluta | - | Cumple | DEC-59 | A |
 | E2E-82 [MOD] | e2e | El contraste del buscador se mide contra el primer fondo pintado detrás del texto (la pantalla LCD), no contra el contenedor inmediato | - | ≥ 4,5:1 | DEC-59 | A |
 | E2E-39, E2E-53, E2E-82 [MOD] | e2e | Fondo de la página negro puro `rgb(0,0,0)` en claro y oscuro | - | Cumple | DEC-59 | A |
+| FE-DEX-04 [MOD] | unit | "Canciones en juego" con mayúscula inicial en la pantalla del modo libre | - | Cumple | DEC-59 | B |
+| FE-DEX-08 | unit | Alto estable: hueco fijo para el aviso de selección vacía; tras una partida, aviso y resumen en el mismo hueco; `min-height: 880px` en escritorio; métricas fijas de la fuente del logo | - | Cumple | DEC-59 | A |
+| E2E-61 [MOD] | e2e | Tras terminar una partida libre, la lista de juegos está plegada: se abre "Nueva partida" antes de cambiar el filtro | - | Cumple | DEC-59 | M |
 | FE-DEX-07 | unit | `index.html` enlaza `/favicon.svg` y el SVG existe en `public/` | - | Cumple | DEC-59 | B |
 
 **Verificación manual:** a 1895×911 y 1920×1080 la Pokédex entera cabe sin scroll con resultados de búsqueda a la vista; captura del favicon a 16, 32, 64 y 128 px.

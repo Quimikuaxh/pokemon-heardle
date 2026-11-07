@@ -28,10 +28,18 @@ const pillClass =
 const startClass =
   'flex min-h-14 items-center justify-center gap-3 rounded-2xl border-4 border-edge bg-lamp-red px-4 text-[17px] font-bold text-white shadow-[0_6px_0_var(--edge)] hover:enabled:brightness-110 disabled:cursor-not-allowed disabled:opacity-50 lg:min-h-[68px] lg:text-xl'
 
-const emptyAlert = (
-  <p role="alert" className="m-0 rounded-[10px] border-[3px] border-edge bg-dex-yellow px-3.5 py-2.5 text-sm font-bold text-ink">
-    Elige al menos un juego para poder empezar.
-  </p>
+/**
+ * Aviso de seleccion vacia en un hueco de alto fijo, este o no: si apareciera y desapareciera, la Pokedex cambiaria
+ * de alto al marcar o desmarcar juegos (DEC-59).
+ */
+const emptyAlert = (isEmpty: boolean) => (
+  <div className="min-h-12">
+    {isEmpty && (
+      <p role="alert" className="m-0 rounded-[10px] border-[3px] border-edge bg-dex-yellow px-3.5 py-2.5 text-sm font-bold text-ink">
+        Elige al menos un juego para poder empezar.
+      </p>
+    )}
+  </div>
 )
 
 /** Pantalla de juegos de la hoja derecha (DEC-58): casillas con color y contador, y "Todos" / "Ninguno". */
@@ -71,7 +79,7 @@ export function FilterGames({ games, selected, onChange, songs }: FilterGamesPro
 
 /**
  * Hoja izquierda del modo libre sin partida en curso (DEC-58): canciones en juego y "Empezar partida". Tras una
- * partida (`compact`) va bajo el resultado y sin pantalla propia: dos pantallas seguidas recargaban la hoja.
+ * partida (`compact`) va en la hoja derecha, sin pantalla propia, encima del desplegable de juegos (DEC-59).
  */
 export function FilterStart({ games, selected, songs, onStart, compact = false }: FilterPanelProps & { compact?: boolean }) {
   const isEmpty = selected.length === 0
@@ -80,12 +88,12 @@ export function FilterStart({ games, selected, songs, onStart, compact = false }
   if (compact) {
     return (
       <section aria-label="Nueva partida libre" className="flex flex-col gap-4">
-        {isEmpty && emptyAlert}
         <button type="button" disabled={isEmpty} onClick={() => !isEmpty && onStart()} className={startClass}>
           <PlayIcon size={20} />
           Empezar partida
         </button>
-        {!isEmpty && <DexNote>{summary}</DexNote>}
+        {/* Aviso o resumen en el mismo hueco: elegir juegos no cambia el alto. */}
+        {isEmpty ? emptyAlert(true) : <DexNote>{summary}</DexNote>}
       </section>
     )
   }
@@ -96,12 +104,12 @@ export function FilterStart({ games, selected, songs, onStart, compact = false }
           <div>
             <div className="font-display text-5xl text-white lg:text-[64px]">{isEmpty ? '—' : (total ?? selected.length)}</div>
             <div className="text-sm text-screen-dim lg:text-base">
-              {total !== null ? 'canciones en juego' : 'juegos elegidos'} · {selected.length} de {games.length} juegos
+              {total !== null ? 'Canciones en juego' : 'Juegos elegidos'} · {selected.length} de {games.length} juegos
             </div>
           </div>
         </div>
       </DexScreen>
-      {isEmpty && emptyAlert}
+      {emptyAlert(isEmpty)}
       <button type="button" disabled={isEmpty} onClick={() => !isEmpty && onStart()} className={startClass}>
         <PlayIcon size={20} />
         Empezar partida
@@ -118,7 +126,7 @@ export function FilterPanel({ games, selected, onChange, onStart, songs }: Filte
   return (
     <div className="flex flex-col gap-4">
       <FilterGames games={games} selected={selected} onChange={onChange} songs={songs} />
-      {isEmpty && emptyAlert}
+      {emptyAlert(isEmpty)}
       <button type="button" disabled={isEmpty} onClick={() => !isEmpty && onStart()} className={startClass}>
         <PlayIcon size={20} />
         Empezar partida

@@ -123,7 +123,7 @@ export const SongSearch = memo(function SongSearch({ catalog, guesses, disabled 
   return (
     // Pantalla LCD de la hoja derecha (DEC-59): caja arriba y resultados debajo, en un hueco de alto fijo con scroll
     // propio, para no tener que desplazar la pagina para verlos.
-    <section aria-label="Buscador" className="dex-lcd rounded-[12px] border-4 border-edge p-3 text-lcd-ink lg:p-4">
+    <section aria-label="Buscador" className="dex-lcd rounded-[12px] border-4 border-edge p-3 text-lcd-ink lg:flex lg:min-h-0 lg:flex-1 lg:flex-col lg:p-4">
       <label htmlFor={inputId} className="mb-2 block px-0.5 font-mono text-xs font-bold uppercase tracking-[2px] lg:text-[13px]">
         ¿Qué canción es?
       </label>
@@ -178,7 +178,7 @@ export const SongSearch = memo(function SongSearch({ catalog, guesses, disabled 
         {[bubbleNotice, isOpen ? `${resultCount} ${resultCount === 1 ? 'resultado' : 'resultados'}` : ''].filter(Boolean).join('. ')}
       </div>
       {!isOpen && (
-        <p className="m-0 mt-3 grid h-48 place-items-center border-t-2 border-dotted border-lcd-dim px-4 text-center font-mono text-sm text-lcd-dim lg:h-[220px]">
+        <p className="m-0 mt-3 grid h-48 place-items-center border-t-2 border-dotted border-lcd-dim px-4 text-center font-mono text-sm text-lcd-dim lg:h-auto lg:min-h-[140px] lg:flex-1">
           Escribe el nombre de una canción o de un juego.
         </p>
       )}
@@ -189,7 +189,7 @@ export const SongSearch = memo(function SongSearch({ catalog, guesses, disabled 
           aria-label="Sugerencias"
           // Mantiene el foco en el input al pulsar una opcion con el raton.
           onMouseDown={(event) => event.preventDefault()}
-          className="dex-lcd-scroll mt-3 h-48 overflow-y-auto overscroll-contain border-t-2 border-dotted border-lcd-dim pr-1 lg:h-[220px]"
+          className="dex-lcd-scroll mt-3 h-48 overflow-y-auto overscroll-contain border-t-2 border-dotted border-lcd-dim pr-1 lg:h-auto lg:min-h-[140px] lg:flex-1 lg:basis-0"
         >
           {resultCount === 0 && <div className="px-1.5 py-3 font-mono text-sm text-lcd-dim">Sin resultados</div>}
           {games.length > 0 && (
