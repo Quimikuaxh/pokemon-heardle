@@ -107,6 +107,15 @@ body {
   box-shadow: inset 0 0 0 4px var(--color-lcd-edge);
 }
 
+/* Barra de scroll de la lista del buscador con los colores de la pantalla LCD (DEC-59). */
+.dex-lcd-scroll {
+  scrollbar-color: var(--color-lcd-dim) var(--color-lcd-edge);
+  scrollbar-width: thin;
+}
+.dex-lcd-scroll::-webkit-scrollbar { width: 10px; }
+.dex-lcd-scroll::-webkit-scrollbar-track { background: var(--color-lcd-edge); border-radius: 5px; }
+.dex-lcd-scroll::-webkit-scrollbar-thumb { background: var(--color-lcd-dim); border-radius: 5px; border: 2px solid var(--color-lcd-edge); }
+
 /* Destello de la lente mientras suena el clip (DEC-59). Sin animacion si se pide reducir el movimiento. */
 @keyframes dex-lens-blink {
   0%, 100% { opacity: 0.15; }

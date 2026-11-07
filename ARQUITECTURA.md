@@ -381,7 +381,7 @@ DEC-58: **Rediseno "Pokedex completa"** (rama `feature/github-pages`, decision d
 
 DEC-59: **Reparto de la Pokedex: buscador en la hoja derecha, sin desplazar la pagina** (decision del usuario 2026-11-07, ajusta DEC-58). Motivo: en escritorio el desplegable del buscador quedaba bajo el borde inferior de la ventana y habia que hacer scroll para ver los resultados.
 - Hoja izquierda: cabecera (lente, logo, fecha), controles (Pistas y Diario/Libre), reproductor o resultado, y la leyenda. Hoja derecha: historial arriba y, debajo, la pantalla LCD del buscador.
-- La pantalla del buscador tiene un hueco de resultados de alto fijo (192 px en movil, 220 px en escritorio) con scroll propio; sin texto muestra "Escribe el nombre de una cancion o de un juego.". La lista no flota sobre la pagina. Descartado: lista que crece con los resultados (volveria a empujar la pagina).
+- La pantalla del buscador tiene un hueco de resultados de alto fijo (192 px en movil, 220 px en escritorio) con scroll propio; sin texto muestra "Escribe el nombre de una cancion o de un juego.". La lista no flota sobre la pagina. Su barra de scroll usa los colores de la pantalla (`.dex-lcd-scroll`: `scrollbar-color` y los pseudoelementos `::-webkit-scrollbar` para Safari). Descartado: lista que crece con los resultados (volveria a empujar la pagina).
 - Movil: mismo orden que escritorio, apilado (decision del usuario).
 - La lente parpadea mientras suena el clip (solo cambia la opacidad de una capa; sin animacion con `prefers-reduced-motion`).
 - Favicon SVG (`frontend/public/favicon.svg`): Pokeball con una corchea amarilla, con contorno negro para leerse a 16 px sobre pestanas claras y oscuras.

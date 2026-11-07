@@ -126,6 +126,7 @@ describe('Pantalla del buscador (DEC-59)', () => {
     const list = screen.getByRole('listbox')
     expect(screenRegion.contains(list)).toBe(true)
     expect(list.className).toMatch(/overflow-y-auto/)
+    expect(list.className, 'barra de scroll con los colores de la pantalla').toContain('dex-lcd-scroll')
     expect(list.className).not.toMatch(/\babsolute\b/)
     expect(screenRegion.textContent).not.toContain('Escribe el nombre')
   })

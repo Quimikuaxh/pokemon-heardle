@@ -189,7 +189,7 @@ export const SongSearch = memo(function SongSearch({ catalog, guesses, disabled 
           aria-label="Sugerencias"
           // Mantiene el foco en el input al pulsar una opcion con el raton.
           onMouseDown={(event) => event.preventDefault()}
-          className="mt-3 h-48 overflow-y-auto overscroll-contain border-t-2 border-dotted border-lcd-dim pr-1 lg:h-[220px]"
+          className="dex-lcd-scroll mt-3 h-48 overflow-y-auto overscroll-contain border-t-2 border-dotted border-lcd-dim pr-1 lg:h-[220px]"
         >
           {resultCount === 0 && <div className="px-1.5 py-3 font-mono text-sm text-lcd-dim">Sin resultados</div>}
           {games.length > 0 && (
