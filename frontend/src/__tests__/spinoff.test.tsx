@@ -174,3 +174,37 @@ describe('App con spin-offs (DEC-60)', () => {
     expect(screen.queryByRole('group', { name: 'Serie del diario' })).toBeNull()
   })
 })
+
+describe('Filtro para la proxima partida sobre el historial (DEC-59)', () => {
+  it('FE-SPO-12 al abrirlo oculta el historial y el buscador y muestra el selector; al cerrarlo vuelven; se cierra solo al empezar otra partida', async () => {
+    globalThis.fetch = vi.fn(async (u: any, init?: any) => {
+      const url = String(u)
+      const json = (b: any) => new Response(JSON.stringify(b), { status: 200 })
+      if (url.endsWith('/health')) return json({ ok: true })
+      if (url.endsWith('/catalog')) return json(catalog())
+      if (url.endsWith('/games')) return json(JSON.parse(init.body).mode === 'unlimited' ? mkView({ token: 'u-1' }) : mkView({ mode: 'daily', date: TODAY, series: 'main' }))
+      return new Response(new Uint8Array(2))
+    }) as any
+    render(<App />)
+    await screen.findByRole('combobox')
+    fireEvent.click(screen.getByRole('button', { name: 'Partida libre' }))
+    const board = screen.getByRole('region', { name: 'Partida libre' })
+    fireEvent.click(within(board).getByRole('checkbox', { name: /Ruby/ }))
+    fireEvent.click(within(board).getByRole('button', { name: 'Empezar partida' }))
+    await within(board).findByRole('combobox')
+    const toggle = within(board).getByRole('button', { name: 'Filtro para la próxima partida' })
+    expect(toggle.getAttribute('aria-expanded')).toBe('false')
+    expect(within(board).queryByRole('region', { name: 'Elegir juegos' })).toBeNull()
+
+    fireEvent.click(toggle)
+    expect(toggle.getAttribute('aria-expanded')).toBe('true')
+    expect(within(board).getByRole('region', { name: 'Elegir juegos' })).toBeTruthy()
+    expect(within(board).queryByRole('list', { name: 'Intentos' })).toBeNull()
+    expect(within(board).queryByRole('combobox')).toBeNull()
+
+    fireEvent.click(toggle)
+    expect(within(board).getByRole('list', { name: 'Intentos' })).toBeTruthy()
+    expect(within(board).getByRole('combobox')).toBeTruthy()
+    expect(within(board).queryByRole('region', { name: 'Elegir juegos' })).toBeNull()
+  })
+})

@@ -137,6 +137,10 @@ export function GameBoard({ mode, series = 'main', controller, api, catalog, sto
     [catalog, mode, series, poolKey, gameSeq],
   )
   const filterProps = { games: catalog.games, songs: catalog.songs, selected: filter, onChange: changeFilter }
+  // Selector de juegos abierto sobre el historial (modo libre con partida, DEC-59); se cierra al empezar otra partida.
+  const [filterOpen, setFilterOpen] = useState(false)
+  useEffect(() => setFilterOpen(false), [gameSeq])
+  const showFilter = mode === 'unlimited' && view !== null && filterOpen
 
   // `contents`: la seccion no crea caja propia; sus hijos se colocan en las zonas de la Pokedex (DEC-58).
   return (
@@ -197,23 +201,31 @@ export function GameBoard({ mode, series = 'main', controller, api, catalog, sto
       </DexLeftBody>
 
       <DexRightBody>
+        {/* Con el filtro abierto (modo libre con partida), el selector de juegos ocupa el sitio del historial y del
+            buscador, que se ocultan sin desmontarse; al cerrarlo vuelven (DEC-59): abierto debajo estiraba la Pokedex. */}
         {view && (
-          <DexPanel title="ENTRADAS" label={`${view.results.length} / ${view.maxAttempts} USADAS`}>
-            <AttemptList view={view} catalog={catalog} settings={settings} />
-          </DexPanel>
+          <div hidden={showFilter} className="contents">
+            <DexPanel title="ENTRADAS" label={`${view.results.length} / ${view.maxAttempts} USADAS`}>
+              <AttemptList view={view} catalog={catalog} settings={settings} />
+            </DexPanel>
+            {isPlaying && <SongSearch key={gameSeq} catalog={searchScope} guesses={view.guesses} readOnly={busy} onSelect={selectSong} />}
+            {mode === 'unlimited' && phase === 'finished' && <FilterStart {...filterProps} onStart={startUnlimited} compact />}
+          </div>
         )}
-        {isPlaying && view && <SongSearch key={gameSeq} catalog={searchScope} guesses={view.guesses} readOnly={busy} onSelect={selectSong} />}
         {mode === 'unlimited' && phase !== 'loading' && !view && <FilterGames {...filterProps} />}
-        {mode === 'unlimited' && phase === 'finished' && view && <FilterStart {...filterProps} onStart={startUnlimited} compact />}
-        {/* Plegado por defecto: al terminar, "Empezar partida" ya esta en la hoja izquierda y la lista abierta
-            estiraba la Pokedex (DEC-59). */}
+        {showFilter && <FilterPanel {...filterProps} onStart={startUnlimited} />}
         {mode === 'unlimited' && phase !== 'loading' && view && (
-          <details className="group">
-            <summary className="flex min-h-12 cursor-pointer items-center rounded-[10px] border-[3px] border-edge bg-dex-deep px-4 py-2.5 font-bold text-dex-text hover:brightness-125 group-open:mb-4">
-              {isPlaying ? 'Filtro para la próxima partida' : 'Nueva partida'}
-            </summary>
-            {isPlaying ? <FilterPanel {...filterProps} onStart={startUnlimited} /> : <FilterGames {...filterProps} />}
-          </details>
+          <button
+            type="button"
+            aria-expanded={filterOpen}
+            onClick={() => setFilterOpen((open) => !open)}
+            className="flex min-h-12 items-center justify-between gap-3 rounded-[10px] border-[3px] border-edge bg-dex-deep px-4 py-2.5 text-left font-bold text-dex-text hover:brightness-125"
+          >
+            <span>{isPlaying ? 'Filtro para la próxima partida' : 'Nueva partida'}</span>
+            <span aria-hidden="true" className={`text-sm transition-transform motion-reduce:transition-none ${filterOpen ? 'rotate-180' : ''}`}>
+              ▲
+            </span>
+          </button>
         )}
         <DexVents />
       </DexRightBody>

@@ -118,6 +118,8 @@ describe('GameBoard: partida libre', () => {
     await act(async () => controller.resumeUnlimited())
     await screen.findByRole('button', { name: /reproducir/i })
     const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    // DEC-59: el selector de juegos con "Empezar partida" se abre sobre el historial.
+    fireEvent.click(screen.getByRole('button', { name: 'Filtro para la próxima partida' }))
     fireEvent.click(screen.getByRole('button', { name: /empezar partida/i }))
     expect(confirm).toHaveBeenCalledTimes(1)
     expect(createGame).not.toHaveBeenCalled()

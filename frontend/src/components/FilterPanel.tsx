@@ -156,7 +156,7 @@ export function FilterPanel({ games, selected, onChange, onStart, songs }: Filte
   const isEmpty = selected.length === 0
   const total = songsInPlay(selected, songs)
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-4 lg:min-h-0 lg:flex-1">
       <FilterGames games={games} selected={selected} onChange={onChange} songs={songs} />
       {emptyAlert(isEmpty)}
       <button type="button" disabled={isEmpty} onClick={() => !isEmpty && onStart()} className={startClass}>

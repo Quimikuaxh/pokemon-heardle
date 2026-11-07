@@ -48,6 +48,8 @@ describe('burbuja de juego en el tablero', () => {
     await pickGame('ruby')
     expect(bubble()).not.toBeNull()
     vi.spyOn(window, 'confirm').mockReturnValue(true)
+    // DEC-59: el selector de juegos con "Empezar partida" se abre sobre el historial.
+    fireEvent.click(screen.getByRole('button', { name: 'Filtro para la próxima partida' }))
     fireEvent.click(await screen.findByRole('button', { name: /empezar partida/i }))
     await waitFor(() => expect(createGame).toHaveBeenCalledTimes(1))
     await waitFor(() => expect(bubble()).toBeNull())
