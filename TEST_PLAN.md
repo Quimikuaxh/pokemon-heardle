@@ -738,6 +738,7 @@ Prevalece sobre las filas anteriores con el mismo ID. Fuente: ARQUITECTURA DEC-6
 | E2E-92 [MOD] | e2e | Las vistas del diario llevan además la clave `series` | - | Cumple | DEC-60 | A |
 | E2E-96 [MOD] | e2e | El admin muestra 8 casillas de consola (con GC) | - | Cumple | DEC-60 | M |
 | SC-UP-07 | unit | `upload --clips-only` sube los clips y no toca `catalog/catalog.json`; con `--prune` se rechaza sin subir ni borrar | Store falso | Cumple | DEC-60 | A |
+| FE-SPO-11 | unit | La lista de juegos del libre hace scroll dentro de su pantalla en escritorio (con 27 juegos estiraba la Pokédex y volvía el scroll del navegador) | - | Cumple | DEC-59, DEC-60 | A |
 | E2E-102 | e2e | Catálogo S: diario principal y spin-off por separado, cada buscador con su serie, la serie se recuerda al recargar y cada diario conserva su resultado | Variante S | Cumple | DEC-60 | A |
 | E2E-103 | e2e | Filtro del libre con secciones "Principales" y "Spin-offs" (sin marcar); "Todos los spin-offs"; el buscador de la partida solo ofrece sus juegos | Variante S | Cumple | DEC-60 | A |
 | E2E-104 | e2e | Sin spin-offs en el catálogo no hay conmutador de serie | Variante R | Cumple | DEC-60 | M |

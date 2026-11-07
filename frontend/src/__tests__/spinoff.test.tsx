@@ -93,6 +93,16 @@ describe('FilterGames con spin-offs (DEC-60)', () => {
   })
 })
 
+describe('FilterGames: lista con scroll propio (DEC-59)', () => {
+  it('FE-SPO-11 en escritorio la lista ocupa el hueco y hace scroll dentro de su pantalla (con muchos juegos no estira la Pokedex)', () => {
+    render(<FilterGames games={GAMES as any} selected={[]} onChange={vi.fn()} />)
+    const list = screen.getByRole('group', { name: 'Principales' }).parentElement!
+    expect(list.className).toMatch(/lg:overflow-y-auto/)
+    expect(list.className).toMatch(/lg:flex-1/)
+    expect(list.className).toContain('dex-screen-scroll')
+  })
+})
+
 describe('App con spin-offs (DEC-60)', () => {
   const route = (createGame = vi.fn(async (body: any) => mkView({ mode: 'daily', date: TODAY, series: body.series ?? 'main', token: `t-${body.series ?? 'main'}` }))) => {
     globalThis.fetch = vi.fn(async (u: any, init?: any) => {

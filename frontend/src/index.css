@@ -216,3 +216,12 @@ input::placeholder {
     background: linear-gradient(90deg, #7d150d, #c42b1c 40%, #7d150d);
   }
 }
+
+/* Barra de scroll de las pantallas oscuras (lista de juegos del modo libre, DEC-59). */
+.dex-screen-scroll {
+  scrollbar-color: var(--color-screen-dim) var(--color-track);
+  scrollbar-width: thin;
+}
+.dex-screen-scroll::-webkit-scrollbar { width: 10px; }
+.dex-screen-scroll::-webkit-scrollbar-track { background: var(--color-track); }
+.dex-screen-scroll::-webkit-scrollbar-thumb { background: var(--color-screen-dim); border-radius: 5px; border: 2px solid var(--color-track); }

@@ -60,8 +60,11 @@ export function FilterGames({ games, selected, onChange, songs }: FilterGamesPro
   const selectAll = (ids: string[]) => onChange([...new Set([...selected, ...ids])])
 
   return (
-    <section aria-label="Elegir juegos" className="flex flex-col gap-4">
-      <DexPanel title="JUEGOS" label={`${selected.length} DE ${games.length} JUEGOS`}>
+    // En escritorio la lista ocupa el hueco de la hoja derecha y hace scroll dentro de su pantalla: con muchos juegos
+    // estiraba la Pokedex (DEC-59).
+    <section aria-label="Elegir juegos" className="flex flex-col gap-4 lg:min-h-0 lg:flex-1">
+      <DexPanel title="JUEGOS" label={`${selected.length} DE ${games.length} JUEGOS`} className="lg:flex lg:min-h-0 lg:flex-1 lg:flex-col">
+        <div className="dex-screen-scroll lg:min-h-[160px] lg:flex-1 lg:basis-0 lg:overflow-y-auto lg:overscroll-contain">
         {sections.map((section) => (
           <div key={section.title ?? 'todos'} role={section.title ? 'group' : undefined} aria-label={section.title ?? undefined}>
             {section.title && (
@@ -92,6 +95,7 @@ export function FilterGames({ games, selected, onChange, songs }: FilterGamesPro
             </div>
           </div>
         ))}
+        </div>
       </DexPanel>
       <div className="flex gap-2.5">
         <button type="button" className={pillClass} onClick={() => onChange(games.map((game) => game.id))}>

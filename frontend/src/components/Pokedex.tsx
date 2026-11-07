@@ -82,9 +82,9 @@ export function DexScreen({ title, label, labelClassName = 'text-played', childr
 }
 
 /** Pantalla de la hoja derecha: cabecera en franja (titulo y contador) y contenido. */
-export function DexPanel({ title, label, children }: { title: string; label: ReactNode; children: ReactNode }) {
+export function DexPanel({ title, label, children, className = '' }: { title: string; label: ReactNode; children: ReactNode; className?: string }) {
   return (
-    <div className="dex-screen overflow-hidden rounded-[10px] border-4 border-edge text-screen-ink">
+    <div className={`dex-screen overflow-hidden rounded-[10px] border-4 border-edge text-screen-ink ${className}`}>
       <div className="flex justify-between gap-3 bg-track px-4 py-3 font-mono text-[11px] font-bold tracking-[3px] text-played lg:px-[18px] lg:text-[13px]">
         <span>{title}</span>
         <span>{label}</span>
