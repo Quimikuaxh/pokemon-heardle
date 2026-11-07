@@ -36,7 +36,7 @@ export function Player(props: PlayerProps) {
     audioStatus === 'loading' ? 'Cargando audio...' : playing ? 'Pausar' : isPausedMidClip ? 'Reanudar' : `Reproducir ${unlockedSec} s`
 
   return (
-    <section aria-label="Reproductor" className="flex flex-col gap-4 lg:gap-[22px]">
+    <section aria-label="Reproductor" className="flex flex-col gap-4">
       <DexScreen title="REPRODUCTOR" label={`INTENTO ${props.attempt + 1}/${props.maxAttempts}`}>
         <Waveform peaks={props.peaks} unlockedSec={unlockedSec} positionSec={props.positionSec} />
         <ClipProgressBar clipSeconds={props.clipSeconds} unlockedSec={unlockedSec} positionSec={props.positionSec} playing={playing} />

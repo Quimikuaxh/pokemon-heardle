@@ -34,7 +34,7 @@ export function ResultPanel({ view, onOpenFullSong, showNextDayNote = true, volu
 
   return (
     <>
-      <section aria-label="Resultado" aria-live="polite" className="flex flex-col gap-4 lg:gap-[22px]">
+      <section aria-label="Resultado" aria-live="polite" className="flex flex-col gap-4">
         <DexScreen title="RESULTADO" label={statusLabel} labelClassName={won ? 'text-played' : 'text-lost-text'}>
           <div className="flex flex-col gap-3.5 pb-1">
             <h2 className={`m-0 font-mono text-xs font-normal tracking-[2px] lg:text-sm lg:tracking-[3px] ${won ? 'text-played' : 'text-lost-text'}`}>

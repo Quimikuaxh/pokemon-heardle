@@ -3,6 +3,7 @@ import { readFileSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { SongSearch } from '../components/SongSearch'
+import { AttemptList } from '../components/AttemptList'
 import { FilterStart } from '../components/FilterPanel'
 import { NextDayCountdown } from '../components/NextDayNote'
 import { DexTop } from '../components/Pokedex'
@@ -163,9 +164,17 @@ describe('Alto estable de la Pokedex (DEC-59)', () => {
     expect(document.body.textContent).toContain('1 canciones en juego')
   })
 
+  it('FE-DEX-08 todas las filas del historial miden lo mismo, jugadas o pendientes (no crece al saltar)', () => {
+    const view = { mode: 'unlimited', status: 'playing', attempt: 2, maxAttempts: 6, clipSeconds: [1, 2, 4, 7, 11, 16], results: ['skip', 'skip'], guesses: [], hints: [] } as any
+    render(<AttemptList view={view} catalog={mkCatalog()} />)
+    const rows = screen.getAllByRole('listitem')
+    expect(rows.length).toBe(6)
+    for (const row of rows) expect(row.className).toMatch(/lg:h-\[60px\]/)
+  })
+
   it('FE-DEX-08 alto minimo comun en escritorio y metricas fijas de la fuente del logo', () => {
     const css = readFileSync(join(__dirname, '..', 'index.css'), 'utf8')
-    expect(css).toMatch(/\.dex \{[^}]*min-height: 880px/)
+    expect(css).toMatch(/\.dex \{[^}]*min-height: min\(860px, calc\(100dvh - 24px\)\)/)
     expect(css).toMatch(/font-family: 'Pokemon Solid';[^}]*ascent-override: 100%;[^}]*descent-override: 40%;[^}]*line-gap-override: 0%/)
   })
 })

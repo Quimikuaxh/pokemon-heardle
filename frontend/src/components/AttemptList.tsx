@@ -53,8 +53,9 @@ function DateArrow({ order }: { order: AttemptHint['order'] }) {
 }
 
 // Columnas: numero, marca, texto y (en escritorio) pistas; en movil las pistas bajan a una segunda linea bajo el texto.
+// Todas las filas miden lo mismo (60 px en escritorio), jugadas o pendientes: el historial no crece al saltar (DEC-59).
 const rowBase =
-  'grid grid-cols-[26px_26px_minmax(0,1fr)] items-center gap-x-3 gap-y-2 border-t-2 border-track px-3 first:border-t-0 lg:grid-cols-[34px_30px_minmax(0,1fr)_auto] lg:px-[18px]'
+  'grid min-h-14 grid-cols-[26px_26px_minmax(0,1fr)] items-center gap-x-3 gap-y-2 border-t-2 border-track px-3 first:border-t-0 lg:h-[60px] lg:grid-cols-[34px_30px_minmax(0,1fr)_auto] lg:px-[18px] lg:py-0'
 const numberClass = 'font-mono text-[13px] font-bold text-screen-dim lg:text-[15px]'
 
 /** Historial 01-06: icono por resultado, titulo y juego; los intentos pendientes muestran su duracion. */
@@ -76,7 +77,7 @@ export const AttemptList = memo(function AttemptList({ view, catalog, settings =
           const hint: Partial<AttemptHint> | null | undefined = result === 'skip' || result === 'hit' ? null : view.hints?.[index]
           const gameLabel = song?.games.map((id) => gameNames.get(id) ?? id).join(' · ')
           return (
-            <li key={index} className={`${rowBase} min-h-14 py-3 lg:min-h-16 lg:py-3.5`}>
+            <li key={index} className={`${rowBase} py-3`}>
               <span className={numberClass}>{number}</span>
               <ResultMark result={result} />
               {result === 'skip' ? (
@@ -105,13 +106,13 @@ export const AttemptList = memo(function AttemptList({ view, catalog, settings =
         }
         const isCurrent = playing && index === view.attempt
         return isCurrent ? (
-          <li key={index} className={`${rowBase} min-h-14 lg:min-h-16`}>
+          <li key={index} className={rowBase}>
             <span className={`${numberClass} text-played`}>{number}</span>
             <span aria-hidden="true" className="size-[26px] flex-none rounded-md border-[3px] border-dashed border-played lg:size-[30px]" />
             <span className="text-sm text-played lg:text-base">Escuchando {view.clipSeconds[index]} s…</span>
           </li>
         ) : (
-          <li key={index} className={`${rowBase} min-h-12 text-[#8a8c93] lg:min-h-[54px]`}>
+          <li key={index} className={`${rowBase} text-[#8a8c93]`}>
             <span className="font-mono text-[13px] lg:text-[15px]">{number}</span>
             <span aria-hidden="true" />
             <span className="text-[13px] lg:text-[15px]">{view.clipSeconds[index]} s</span>

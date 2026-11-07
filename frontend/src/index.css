@@ -202,7 +202,9 @@ input::placeholder {
   .dex {
     /* Alto minimo comun a modos y estados: la Pokedex no cambia de tamano al pasar de Diario a Libre ni al elegir
        juegos (DEC-59). La lista del buscador se estira para llenar la hoja derecha. */
-    min-height: 880px;
+    /* 860 px o el alto de la ventana menos el margen, lo que sea menor: sin scroll del navegador a partir de ~890 px
+       de alto. */
+    min-height: min(860px, calc(100dvh - 24px));
     grid-template-columns: minmax(0, 1fr) 34px minmax(0, 1fr);
     grid-template-rows: auto auto 1fr;
     grid-template-areas: 'ltop hinge rbody' 'rtop hinge rbody' 'lbody hinge rbody';

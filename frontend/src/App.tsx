@@ -97,7 +97,7 @@ export default function App() {
 
   const statusText = 'm-0 font-mono text-sm tracking-[1px]'
   return (
-    <div className="flex min-h-dvh flex-col px-3 py-3 lg:justify-center lg:px-12 lg:py-6">
+    <div className="flex min-h-dvh flex-col px-3 py-3 lg:justify-center lg:px-12">
       <main>
         <PokedexShell>
           {ready ? (
