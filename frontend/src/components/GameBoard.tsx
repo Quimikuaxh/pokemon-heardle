@@ -46,6 +46,7 @@ export function GameBoard({ mode, series = 'main', controller, api, catalog, sto
   const [filter, setFilter] = useState(() => controller.getFilter())
   const [audio, setAudio] = useState<{ key: string; status: AudioStatus } | null>(null)
   const [audioRetry, setAudioRetry] = useState(0)
+  const [fullSongPlaying, setFullSongPlaying] = useState(false)
   const [playback, setPlayback] = useState({ playing: false, positionSec: 0 })
   const [decoded, setDecoded] = useState<{ attemptKey: string; buffer: AudioBufferLike | null } | null>(null)
 
@@ -145,7 +146,7 @@ export function GameBoard({ mode, series = 'main', controller, api, catalog, sto
   // `contents`: la seccion no crea caja propia; sus hijos se colocan en las zonas de la Pokedex (DEC-58).
   return (
     <section aria-label={mode === 'unlimited' ? 'Partida libre' : series === 'spinoff' ? 'Partida diaria spin-off' : 'Partida diaria'} className="contents">
-      <DexTop lens={lens} subtitle={subtitle} blinking={isPlaying && playback.playing} />
+      <DexTop lens={lens} subtitle={subtitle} blinking={(isPlaying && playback.playing) || (lens === 'won' && fullSongPlaying)} />
 
       <DexLeftBody>
         <NoticeBanner notice={notice} />
@@ -192,7 +193,14 @@ export function GameBoard({ mode, series = 'main', controller, api, catalog, sto
         )}
 
         {phase === 'finished' && view && (
-          <ResultPanel view={view} showNextDayNote={false} onOpenFullSong={() => player.stop()} volume={volume} onVolumeChange={onVolumeChange} />
+          <ResultPanel
+            view={view}
+            showNextDayNote={false}
+            onOpenFullSong={() => player.stop()}
+            onFullSongPlaybackChange={setFullSongPlaying}
+            volume={volume}
+            onVolumeChange={onVolumeChange}
+          />
         )}
         {phase === 'finished' && view?.mode === 'daily' && <NextDayCountdown onExpire={openDaily} />}
 

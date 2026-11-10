@@ -8,10 +8,12 @@ const EMBED_ORIGIN = 'https://www.youtube-nocookie.com'
 const EMBED_PREFIX = `${EMBED_ORIGIN}/embed/`
 /** `enablejsapi=1` permite fijar el volumen del video con postMessage, sin cargar el script de la IFrame API (DEC-55). */
 const EMBED_QUERY = '?enablejsapi=1'
+const YOUTUBE_PLAYING = 1
 
 interface FullSongEmbedProps {
   youtubeId: string
   onOpen?: () => void
+  onPlaybackChange?(playing: boolean): void
   /** Volumen comun (DEC-55), de 0 a 1; sin `onVolumeChange` no se pinta el deslizador ni se toca el volumen del video. */
   volume?: number
   onVolumeChange?(volume: number): void
@@ -26,11 +28,13 @@ interface FullSongEmbedProps {
  * Cancion completa de YouTube (DEC-41). El iframe NO existe hasta pulsar el boton: asi no hay peticiones a
  * YouTube al terminar ni al reabrir un diario terminado. El id se valida antes de construir la URL.
  */
-export function FullSongEmbed({ youtubeId, onOpen, volume = 1, onVolumeChange, frameTarget }: FullSongEmbedProps) {
+export function FullSongEmbed({ youtubeId, onOpen, onPlaybackChange, volume = 1, onVolumeChange, frameTarget }: FullSongEmbedProps) {
   const [opened, setOpened] = useState(false)
   const frameBox = useRef<HTMLDivElement>(null)
   const frame = useRef<HTMLIFrameElement>(null)
   const controlsVolume = onVolumeChange !== undefined
+  const usesPlayerApi = controlsVolume || onPlaybackChange !== undefined
+  const ready = useRef(false)
   const volumeRef = useRef(volume)
   volumeRef.current = volume
   // El boton desaparece al pulsarlo: se lleva el foco al contenedor para no perderlo (teclado y lectores).
@@ -47,21 +51,46 @@ export function FullSongEmbed({ youtubeId, onOpen, volume = 1, onVolumeChange, f
   // El reproductor de YouTube ignora las ordenes hasta estar listo: se repite el volumen con cada mensaje suyo
   // (el primero llega al terminar de cargar) hasta que confirma estar listo.
   useEffect(() => {
-    if (!opened || !controlsVolume) return
-    let ready = false
+    if (!opened || !usesPlayerApi) return
     const onMessage = (event: MessageEvent) => {
-      if (ready || event.origin !== EMBED_ORIGIN || event.source !== frame.current?.contentWindow) return
-      if (typeof event.data === 'string' && event.data.includes('"onReady"')) ready = true
-      sendVolume()
+      if (event.origin !== EMBED_ORIGIN || event.source !== frame.current?.contentWindow || typeof event.data !== 'string') return
+      let message: { event?: string; data?: unknown; info?: { playerState?: unknown } } | null
+      try {
+        message = JSON.parse(event.data)
+      } catch {
+        return
+      }
+      if (!message || typeof message !== 'object') return
+      if (!ready.current) {
+        ready.current = message.event === 'onReady'
+        sendVolume()
+      }
+      // El iframe también incluye el estado en las actualizaciones que envía tras "listening".
+      const state = message.event === 'onStateChange' ? message.data
+        : message.event === 'infoDelivery' || message.event === 'initialDelivery' ? message.info?.playerState
+        : undefined
+      if (typeof state === 'number') onPlaybackChange?.(state === YOUTUBE_PLAYING)
+      if (message.event === 'onError') onPlaybackChange?.(false)
     }
     window.addEventListener('message', onMessage)
-    return () => window.removeEventListener('message', onMessage)
+    return () => {
+      window.removeEventListener('message', onMessage)
+      onPlaybackChange?.(false)
+    }
     // sendVolume lee el volumen de volumeRef: no hace falta volver a suscribirse al cambiarlo
-  }, [opened, controlsVolume])
+  }, [opened, usesPlayerApi, controlsVolume, onPlaybackChange])
   // Sin este aviso el reproductor no manda eventos al padre.
   const startListening = () => {
-    if (!controlsVolume) return
+    if (!usesPlayerApi) return
+    ready.current = false
+    onPlaybackChange?.(false)
     frame.current?.contentWindow?.postMessage(JSON.stringify({ event: 'listening' }), EMBED_ORIGIN)
+    if (onPlaybackChange) {
+      for (const event of ['onStateChange', 'onError']) {
+        const message = { event: 'command', func: 'addEventListener', args: [event] }
+        frame.current?.contentWindow?.postMessage(JSON.stringify(message), EMBED_ORIGIN)
+      }
+    }
     sendVolume()
   }
 
@@ -76,7 +105,7 @@ export function FullSongEmbed({ youtubeId, onOpen, volume = 1, onVolumeChange, f
         >
           <iframe
             ref={frame}
-            src={`${EMBED_PREFIX}${youtubeId}${controlsVolume ? EMBED_QUERY : ''}`}
+            src={`${EMBED_PREFIX}${youtubeId}${usesPlayerApi ? EMBED_QUERY : ''}`}
             title="Canción completa en YouTube"
             className="h-full w-full"
             referrerPolicy="strict-origin-when-cross-origin"

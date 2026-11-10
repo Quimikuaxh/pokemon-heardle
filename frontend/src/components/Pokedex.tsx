@@ -32,7 +32,7 @@ export function DexTop({ lens = 'playing', subtitle, blinking = false }: { lens?
           data-blinking={blinking || undefined}
           className={`dex-lens relative size-[34px] rounded-full border-[3px] border-edge lg:size-[62px] lg:border-4 ${LENS_CLASS[lens]}`}
         >
-          {/* Mientras suena el clip la lente cambia de color (DEC-59): solo cambia la opacidad de esta capa. */}
+          {/* Durante la reproducción la lente cambia de color (DEC-59): solo cambia la opacidad de esta capa. */}
           {blinking && <span className="dex-lens-glow absolute inset-0 rounded-full" />}
         </span>
       </span>

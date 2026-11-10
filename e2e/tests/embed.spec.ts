@@ -29,6 +29,38 @@ test.describe('Cancion completa - catalogo M', () => {
     expect(hits, 'peticiones a YouTube antes de pulsar').toEqual([])
   })
 
+  test('E2E-105_should_blink_the_lens_only_during_victory_video_playback', async ({ app, page }) => {
+    await stubYoutube(page)
+    const d = app.daily
+    await app.goto()
+    await d.ready()
+    await d.guess(M_SONG.title)
+    const lens = d.root.locator('[data-lens="won"]')
+    const glow = lens.locator('.dex-lens-glow')
+    await d.root.getByRole('button', { name: BUTTON }).click()
+    const iframe = await page.locator('iframe').elementHandle()
+    const frame = (await iframe?.contentFrame())!
+    await frame.waitForLoadState()
+    const send = (message: object) => frame.evaluate((data) => parent.postMessage(JSON.stringify(data), '*'), message)
+
+    await expect(glow).toHaveCount(0)
+    await send({ event: 'onReady' })
+    await send({ event: 'infoDelivery', info: { playerState: 1 } })
+    await expect(glow).toHaveCount(1)
+    await page.emulateMedia({ reducedMotion: 'reduce' })
+    await expect(glow).toHaveCSS('animation-name', 'none')
+
+    for (const state of [2, 3, 0]) {
+      await send({ event: 'onStateChange', data: state })
+      await expect(glow).toHaveCount(0)
+      await send({ event: 'onStateChange', data: 1 })
+      await expect(glow).toHaveCount(1)
+    }
+
+    await send({ event: 'onError', data: 100 })
+    await expect(glow).toHaveCount(0)
+  })
+
   test('E2E-57_should_reopen_a_finished_daily_with_button_but_no_iframe_nor_api_calls', async ({ app, page, net }) => {
     const hits = await stubYoutube(page)
     const d = app.daily

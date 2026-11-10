@@ -17,6 +17,7 @@ const MARK_BAR_CLASS: Record<ResultName, string> = {
 interface ResultPanelProps {
   view: GameView
   onOpenFullSong?: () => void
+  onFullSongPlaybackChange?(playing: boolean): void
   /** El tablero pinta la nota del diario al final de la pagina; sueltos (tests, otros usos) la lleva el panel. */
   showNextDayNote?: boolean
   /** Volumen comun (DEC-55) para el video de la cancion completa. */
@@ -24,7 +25,7 @@ interface ResultPanelProps {
   onVolumeChange?(volume: number): void
 }
 
-export function ResultPanel({ view, onOpenFullSong, showNextDayNote = true, volume, onVolumeChange }: ResultPanelProps) {
+export function ResultPanel({ view, onOpenFullSong, onFullSongPlaybackChange, showNextDayNote = true, volume, onVolumeChange }: ResultPanelProps) {
   // Video abierto (DEC-59): va dentro de la pantalla, en el sitio del titulo grande; asi la Pokedex no crece.
   const [videoOpen, setVideoOpen] = useState(false)
   const [videoSlot, setVideoSlot] = useState<HTMLDivElement | null>(null)
@@ -82,6 +83,7 @@ export function ResultPanel({ view, onOpenFullSong, showNextDayNote = true, volu
               setVideoOpen(true)
               onOpenFullSong?.()
             }}
+            onPlaybackChange={won ? onFullSongPlaybackChange : undefined}
             volume={volume}
             onVolumeChange={onVolumeChange}
             frameTarget={videoSlot}

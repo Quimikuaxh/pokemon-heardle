@@ -693,6 +693,7 @@ Prevalece sobre las filas anteriores con el mismo ID. Sin backend Node en produc
 | ID | Nivel | Descripción | Precondiciones | Resultado esperado | Cubre | P |
 |---|---|---|---|---|---|---|
 | FE-DEX-01 [MOD] | unit | Además: la lente parpadea solo con `blinking` (capa `.dex-lens-glow`) y la animación se desactiva con `prefers-reduced-motion` | - | Cumple | DEC-59 | M |
+| E2E-105 | e2e | Tras ganar, el vídeo activa el LED solo en reproducción. Pausa, carga, fin y error detienen el parpadeo. Se respeta el movimiento reducido. | Victoria con iframe de prueba | Cumple | DEC-59 | M |
 | FE-DEX-05 | unit | Controles en la zona `dex-rtop`; reproductor y leyenda en la hoja izquierda; historial y, después, el buscador en la hoja derecha | `App` renderizada | Cumple | DEC-59 | A |
 | FE-DEX-06 | unit | Pantalla del buscador: sin texto, aviso en el hueco de resultados; al escribir, la lista está dentro de la pantalla, con scroll propio y sin posición absoluta | - | Cumple | DEC-59 | A |
 | E2E-82 [MOD] | e2e | El contraste del buscador se mide contra el primer fondo pintado detrás del texto (la pantalla LCD), no contra el contenedor inmediato | - | ≥ 4,5:1 | DEC-59 | A |
